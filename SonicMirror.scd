@@ -2,33 +2,29 @@
 
 An open-ended audio software (and hardware) instrument designed for autonomous embedded audio recording, generative sound, and musical performance.
 
-
 Project details and documentation online:  http://scott-tooby.com/sonic-mirror.html
 
 =============
-LAUNCH INSTRUCTIONS:
-
-0. Configure (uncomment / comment) your audio hardware settings from the options in the "INITIALIZE - #1" braces below.  (Default settings are configured to run using your computer's default built-in soundcard at 44.1 kHz sampling rate.)
-
-1. Execute chunk "INITIALIZE - #1"
-
-2. Execute chunk "CREATE SYNTHDEFS AND BUSSES - #2"
-
-3. Execute chunk "LAUNCH GUI AND RUN - #3"
-
+LAUNCH INSTRUCTIONS:  Evaluate the lines and bracketed blocks of code below in order from #1 - 3.
 
 =============
 OPERATING INSTRUCTIONS:
 
-1.
+• Press the 'REC' button to begin recording audio input to the buffer
 
-2.
+• Press the 'PLAY' button to begin playing audio back from the buffer
 
-3.
+• Press the "REV" button to play audio in reverse
+
+• Enabling the "!", "!!", or "!!!" buttons will trigger various autonomous playback behaviors.  Parameters like: rate, pitch, pitch shift mix, output volume, reverse, and playhead position will be randomly modulated over time.
+
+• Pro tip: arranging your microphone and speaker(s) so they feed back on themselves can create some fantastic sounds when the Sonic Mirror's autonomous behavior buttons are enabled, or during manual control of various playback parameters.  Watch out for runaway feedback!
+
+(The "^v" button is intended to trigger automatic recording and audio file playback, but is not fully functional yet. See "TODO" below).
 
 =============
 
-This will be a work in progress for the foreseeable future.
+This is a work in progress...
 
 Feel free to use, experiment, and contribute:  https://github.com/stooby/sonic-mirror
 
@@ -37,13 +33,46 @@ st, 2016
 
 
 
-
 -----TODO-----:
 
+- Enable playback of saved audio samples w/ "PLAY FILE" button
+- Complete ~soundRoutine_autoRec and add to "^v" ~buttonRandAutoRecPlayFiles button
 
+- Integrate machine listening classes to render continuous state of detected events in audio buffer:
+      • Loudness  (and amplitude for RMS?)
+      • DetectSilence
+      • Pitch
+      • MFCC
+      • SpecCentroid
+      • Onsets
+      • BeatTrack2
+      • KeyTrack?
+- Revisit and refine sample auto-save/playback routine (use machine listening classes to more accurately discern discrete sound events)
+- Automatic classification and labeling of sampled audio based on ML audio feature extraction
 
+- GUI Plotter visualization of waveform of entire buffer.
 
-*/
+- Setup OSC transmission to/from Wekinator??? (for machine learning classification of sound events and behavior triggering)
+- Sound scene monitoring (long-term audio event analysis based on polling ML classes at different time scales)
+
+- Develop more interactive performance behaviors:
+      • Autoharmonize
+      • Slicer/Looper
+      • Rhythmic scrubber
+      • Sync Sample
+- Streamline creation process of performance behaviors ("behavior template" ... routines enclosed w/in function(s)?)
+
+- Debug delay time offset slider & num box input
+- Implement digital audio feedback control???
+- Preset saving
+
+- Implement real-time (seconds) AND beat-based (BPM) scheduling of events
+- Test and minimize system audio latency
+- REFACTOR, REFACTOR, REFACTOR !!!
+– GUI cleanup and refactor.  (Implement GridLayout and possibly FlowLayout for responsive GUI.)
+
+-----------------*/
+
 (
 //INITIALIZE #1 - DEFAULT ============================
 //run this chunk of code first to use your system's built-in soundcard at default 44.1k sampling rate
@@ -52,13 +81,18 @@ s.options.sampleRate = 44100;
 s.options.inDevice = "Built-in Microph";
 s.options.outDevice = "Built-in Output";
 s.boot;
-//if the SC server crashes and fails to start after executing, repeat this operation until it works....it's sometimes stubborn...alternatively, you can delete the brackets around this chunk of code and execute each line individually...this seems to be more agreeable to the SC server
+
+//if the SC server crashes and fails to start after executing, try evaluating again....the server's sometimes stubborn...alternatively, you can delete the brackets around this chunk of code and execute each line individually...this seems to be more agreeable to the SC server
 )
 
+ServerOptions.devices;  //execute this command to view your system's available input/output options
+
 (//INITIALIZE #1 - CUSTOM
+//OR, if you'd like to configure the SC server for your unique audio system, you can do so by editing or commenting/uncommenting lines here.
+
 //alternatively, edit and run this chunk of code first if you'd like to use configure the SC server with custom audio settings
 s = Server.local;
-s.options.sampleRate= 48000; //run before launching server if using Apogee USB mic input
+s.options.sampleRate= 48000;
 s.options.inDevice = "MiC";
 //s.options.device = "iConnectAudio4+";
 s.boot;
@@ -127,16 +161,7 @@ SynthDef.new(\pitchShifter, {
 	Out.ar(outBus, sigOut);
 }).add;
 
-/*SynthDef.new(\XFade, {
-	|in1, in2, out, amountControlBus|
-	var inArray, mixSignal;
-	inArray = [In.ar(in1), In.ar(in2)];
-	//inArray = [InFeedback.ar(in1), InFeedback.ar(in2)];
-	mixSignal = SelectX.ar(amountControlBus, inArray);
-	Out.ar(out, mixSignal);
-} ).add;  */
-
-SynthDef.new(\XFade, { //<---NEW MOD VERSION
+SynthDef.new(\XFade, { //newer version w/ global amp control
 	|in1, in2, out, amountControlBus, amp = 1|
 	var inArray, mixSignal, sig;
 	inArray = [In.ar(in1), In.ar(in2)];
@@ -145,6 +170,15 @@ SynthDef.new(\XFade, { //<---NEW MOD VERSION
 	sig = mixSignal * amp;
 	Out.ar(out, sig);
 } ).add;
+
+/*SynthDef.new(\XFade, {
+	|in1, in2, out, amountControlBus|
+	var inArray, mixSignal;
+	inArray = [In.ar(in1), In.ar(in2)];
+	//inArray = [InFeedback.ar(in1), InFeedback.ar(in2)];
+	mixSignal = SelectX.ar(amountControlBus, inArray);
+	Out.ar(out, mixSignal);
+} ).add;  */
 
 SynthDef(\LinInterp_pitch, {
 	arg startVal, stopVal, duration, out;
@@ -219,7 +253,7 @@ SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out; //<----NEW MOD VERS w/ a
 }).add; */
 
 
-//BUSSES
+//-----BUSSES-----
 ~recInPosBus = Bus.control(s, 1);
 ~recOutPosBus = Bus.control(s, 1);
 ~playInPosBus = Bus.control(s, 1);
@@ -256,7 +290,7 @@ SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out; //<----NEW MOD VERS w/ a
 
 ////GLOBAL VARIABLES
 ~bufferSize = 60.0;
-~buffer = Buffer.alloc(s, s.sampleRate * ~bufferSize, 1); //<---newly moved
+~buffer = Buffer.alloc(s, s.sampleRate * ~bufferSize, 1);
 ~delayTime = 1.23;
 ~play2recOffset; //displacement of playhead pos from rec pos (in frames/samples)
 ~lastPlayPhasePos = 0; //for resume functionality - stores last pos (frame) of play head before playback disabled
@@ -451,12 +485,14 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		} );
 } );
 
+/*
 ~labelPlayFile = StaticText(w, Rect(130, 373, 135, 20) ) //<------NEW
 .string_("FILENAMEFILENAME...")
 .font_(Font("Monaco", 12) )
 .align_(\left);
+*/
 
-~buttonPlayFile = Button(w, Rect(62, 372, 65, 20) ) //<------NEW
+~buttonPlayFile = Button(w, Rect(62, 372, 65, 20) ) //<------TODO!!!!
 .states_( [
 	["PLAY FILE", Color.black, Color(0.0, 0.5, 0.5, 0.3)] ,
 	["PLAY FILE", Color.white, Color(0.0, 0.5, 0.5)]
@@ -595,7 +631,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .value_(0);
 
 /////ROUTINES/////
-~soundRoutine_autoRec = Routine.new( {
+~soundRoutine_autoRec = Routine.new( { //<---TODO!!!!!!, model after autoPlay below until machine listening functionality is implemented
 	if (~recSound_input == true,
 		{
 
@@ -619,9 +655,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			~playSound = false;
 			~buttonPlayFile.value = 0; //update GUI button
 
-			~playSoundBuf.close; //<----IS THIS REALLY NECESSARY IF GOING TO REASSIGN LATER, SHOULD I ONLY DO THIS DURING FINAL CLEANUP????
-			~playSoundBuf.free; //<----IS THIS REALLY NECESSARY HERE????
-			~playSoundBuf = Buffer.alloc(s, 65536, 1);  //<----IS THIS REALLY NECESSARY HERE????
+			~playSoundBuf.close; //<----IS THIS NECESSARY IF GOING TO REASSIGN LATER, SHOULD I ONLY DO THIS DURING FINAL CLEANUP????
+			~playSoundBuf.free; //<----IS THIS NECESSARY HERE????
+			~playSoundBuf = Buffer.alloc(s, 65536, 1);  //<----IS THIS NECESSARY HERE????
 			time2yield = rrand(12, 35); //<-----TIME RANGE - TRIGGER RATE (IN SEC).....
 			("---time2nextSoundPlay=" ++ time2yield ++ "sec").postln;
 			time2yield.yieldAndReset;
@@ -631,8 +667,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				{
 					if (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback, //if min # of files have been written
 						{
-							//INSERT CONDITIONAL HERE TO DETERMINE WHETHER OR NOT TO PLAY AUDIO FILE-----
-
 							//PLAYBACK AUDIO FILE FROM DISK
 							var readDiskSynth, interpSynth, readFileFunc, randFilePick, duration;
 
@@ -652,18 +686,18 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								//duration = soundFile.duration;
 								//("soundFileDur=" + duration).postln;
 								soundFile.close;
-								readDiskSynth.addToHeadMsg(nil, [\buf, buf, \sampleDur, duration, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]) //<---!!!!!Now w/ amp control
+								readDiskSynth.addToHeadMsg(nil, [\buf, buf, \sampleDur, duration, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]) //<---now w/ amp control
 							};
 
-							interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.25 sec (++++\startVal should probs = variable storing current value of inputStreamLevel++++)
+							interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.2 sec (***startVal should probs = variable storing current value of inputStreamLevel***
 							~sliderInStreamLevel.value = 0;  //update GUI
 							~numBoxInStreamLevel.value = 0; //update GUI
 
-							0.2.yield;  //<----is this necessary??????
+							0.2.yield;  //<---routine fails w/out this sometimes, is there a better way to do this w/out adding latency?
 
 							~playSoundBuf = Buffer.cueSoundFile(s, (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath, 0, 1, completionMessage: readFileFunc);  //PLAY SOUND FILE from disk
 
-							(duration + 0.2).yieldAndReset; //<-----can shorten to +0.1 or less?
+							(duration + 0.2).yieldAndReset; //<-------might not be necessary to add 0.2 sec, experiment
 						},
 						{15.yieldAndReset;} //<------------ wait if not enough files have been written yet
 					);
@@ -989,7 +1023,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		~pitchShiftMix_prev = val;
 	} );
 
-	//!!!!!CONSIDER ALSO GETTING CURRENT pitchShift value....if == 0 make mixVal = 0 !!!!!!!!!!!!!
+	//!!!!!CONSIDER ALSO GETTING CURRENT pitchShift value....if == 0 make mixVal = 0 !!!!!!!
 
 	0.1.yield; //<<<<<works, but not sure if ideal way...
 
@@ -1079,7 +1113,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			//("---prevPitch=" + ~pitchShiftValPrev_rate).postln;
 	} );
 
-	0.1.yield; //<<<<<works, but not sure if ideal way...
+	0.1.yield; //<<<<<works, but not ideal b/c of added latency...  HOW CAN I ENABLE THIS ROUTINE TO FUNCTION W/OUT SLIGHT TIME YIELD HERE?
 
 	randNum4transp = rrand(1, 10); //based on random # from 1-10, determine type of pitch transposition
 	//"randNum4transp= ".post; randNum4transp.postln;
@@ -1377,7 +1411,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~buttonRandAutoRecPlayFiles = Button(w, Rect(215, 349, 25, 25))
+~buttonRandAutoRecPlayFiles = Button(w, Rect(215, 349, 25, 25)) //<---still working on this, need to complete and add ~soundRoutine_autoRec
 .states_( [
 	["^v", Color.black, Color(0.6, 0.9, 0.4, 0.3)] ,
 	["^v", Color.white, Color(0.8, 1.0, 0.4)]
