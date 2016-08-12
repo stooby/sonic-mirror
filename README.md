@@ -13,7 +13,7 @@ super alpha!  (work in progress!)
 * SuperCollider: http://supercollider.github.io/
 
 ### how do I turn this thing on?
-* Open the "sonic-mirror.scd" file with SuperCollider. Evaluate the lines and bracketed blocks of code in order from #1 - 3.
+* Open the "SonicMirror.scd" file with SuperCollider. Evaluate the lines and bracketed blocks of code in order from #1 - 3.
 
 ### how do I run this thing?
 * Press the 'REC' button to begin recording audio input to the buffer
