@@ -7,8 +7,13 @@ super alpha!  (work in progress!)
 
 * Programmed with the SuperCollider language.  Project details and documentation online:  http://scott-tooby.com/sonic-mirror.html
 
+### what do I need?
+* At least a modern computer with a built-in soundcard, microphone, and speakers. (In practice, any computer with an audio interface and connected microphone and speaker system will do.)
+
+* SuperCollider: http://supercollider.github.io/
+
 ### how do I turn this thing on?
-* Evaluate the lines and bracketed blocks of code in order from #1 - 3.
+* Open the "sonic-mirror.scd" file with SuperCollider. Evaluate the lines and bracketed blocks of code in order from #1 - 3.
 
 ### how do I run this thing?
 * Press the 'REC' button to begin recording audio input to the buffer
