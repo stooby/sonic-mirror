@@ -1,290 +1,18 @@
-/**********SONIC MIRROR**********
+//Sonic Mirror - 00_Main:
 
-An open-ended audio software (and hardware) instrument designed for autonomous embedded audio recording, generative sound, and musical performance.
+//== Main Performance Doc ==
 
-Project details and documentation online:  http://scott-tooby.com/sonic-mirror.html
+//---- refactor in progress ----
 
-=============
-LAUNCH INSTRUCTIONS:  Evaluate the lines and bracketed blocks of code below in order from #1 - 3.
+~dir = "/Users/Scott/Dropbox/DocSync/Project Docs/DigitalArt/SonicMirror/sonic-mirror_SC_git/dev/";
 
-=============
-OPERATING INSTRUCTIONS:
-
-• Press the 'REC' button to begin recording audio input to the buffer
-
-• Press the 'PLAY' button to begin playing audio back from the buffer
-
-• Press the "REV" button to play audio in reverse
-
-• Enabling the "!", "!!", or "!!!" buttons will trigger various autonomous playback behaviors.  Parameters like: rate, pitch, pitch shift mix, output volume, reverse, and playhead position will be randomly modulated over time.
-
-• Pro tip: arranging your microphone and speaker(s) so they feed back on themselves can create some fantastic sounds when the Sonic Mirror's autonomous behavior buttons are enabled, or during manual control of various playback parameters.  Watch out for runaway feedback!
-
-(The "^v" button is intended to trigger automatic recording and audio file playback, but is not fully functional yet. See "TODO" below).
-
-=============
-
-This is a work in progress...
-
-Feel free to use, experiment, and contribute:  https://github.com/stooby/sonic-mirror
-
-st, 2016
-
-
-
-
------TODO-----:
-
-- Enable playback of saved audio samples w/ "PLAY FILE" button
-- Complete ~soundRoutine_autoRec and add to "^v" ~buttonRandAutoRecPlayFiles button
-
-- Integrate machine listening classes to render continuous state of detected events in audio buffer:
-      • Loudness  (and amplitude for RMS?)
-      • DetectSilence
-      • Pitch
-      • MFCC
-      • SpecCentroid
-      • Onsets
-      • BeatTrack2
-      • KeyTrack?
-- Revisit and refine sample auto-save/playback routine (use machine listening classes to more accurately discern discrete sound events)
-- Automatic classification and labeling of sampled audio based on ML audio feature extraction
-
-- GUI Plotter visualization of waveform of entire buffer.
-
-- Setup OSC transmission to/from Wekinator??? (for machine learning classification of sound events and behavior triggering)
-- Sound scene monitoring (long-term audio event analysis based on polling ML classes at different time scales)
-
-- Develop more interactive performance behaviors:
-      • Autoharmonize
-      • Slicer/Looper
-      • Rhythmic scrubber
-      • Sync Sample
-- Streamline creation process of performance behaviors ("behavior template" ... routines enclosed w/in function(s)?)
-
-- Debug delay time offset slider & num box input
-- Implement digital audio feedback control???
-- Preset saving
-
-- Implement real-time (seconds) AND beat-based (BPM) scheduling of events
-- Test and minimize system audio latency
-- REFACTOR, REFACTOR, REFACTOR !!!
-– GUI cleanup and refactor.  (Implement GridLayout and possibly FlowLayout for responsive GUI.)
-
------------------*/
-
-(
-//INITIALIZE #1 - DEFAULT ============================
-//run this chunk of code first to use your system's built-in soundcard at default 44.1k sampling rate
-s = Server.local;
-s.options.sampleRate = 44100;
-s.options.inDevice = "Built-in Microph";
-s.options.outDevice = "Built-in Output";
-s.boot;
-
-//if the SC server crashes and fails to start after executing, try evaluating again....the server's sometimes stubborn...alternatively, you can delete the brackets around this chunk of code and execute each line individually...this seems to be more agreeable to the SC server
-)
-
-ServerOptions.devices;  //execute this command to view your system's available input/output options
-
-(//INITIALIZE #1 - CUSTOM
-//OR, if you'd like to configure the SC server for your unique audio system, you can do so by editing or commenting/uncommenting lines here.
-
-//alternatively, edit and run this chunk of code first if you'd like to use configure the SC server with custom audio settings
-s = Server.local;
-s.options.sampleRate= 48000;
-s.options.inDevice = "MiC";
-//s.options.device = "iConnectAudio4+";
-s.boot;
-)
+(~dir ++ "01_Startup.scd").load;           // Server Options and Startup
+(~dir ++ "02_SynthDefs.scd").load;       // SynthDefs
+(~dir ++ "03_Busses.scd").load;            // Busses
 
 s.quit;  //convenience method (for cleanup)
 s.plotTree; //for debugging
 Buffer.freeAll; //for cleanup
-
-(//CREATE SYNTHDEFS AND BUSSES - #2 ============================
-
-//Record audio input to buffer using audio-rate input Phasor to control position in buffer
-SynthDef(\RecBuf_loop, { //<---NEW -- Added Lo-cut
-	arg phaseBus, buf, sendBus, loCutoff = 90, rQ = 1, mul = 1;
-	//var sig = SoundIn.ar(bus: 0, mul: mul);
-	var sig = BHiPass4.ar( SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
-	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
-	//OffsetOut.ar(sendBus, sig);  //would this provide better sample accurate scope plotting and recording?
-	Out.ar(sendBus, sig); //<---
-} ).add;
-
-/*SynthDef(\RecBuf_loop, { //pre-Hipass
-	arg phaseBus, buf, sendBus, mul = 1;
-	var sig = SoundIn.ar(bus: 0, mul: mul);
-	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
-	//OffsetOut.ar(sendBus, sig);
-	Out.ar(sendBus, sig); //<---
-} ).add; */
-
-/*//from earliest version of sonic mirror...use RecordBuf to continuously record to buffer 1, when reach end, loop back to beginning and write over prev data...not as flexible as writing to buffer with phasor
-SynthDef.new(\RecBuf_loop, {
-  arg buf = ~buffer.bufnum;
-  var sound = SoundIn.ar(0);
-  RecordBuf.ar(sound, buf, loop: 1, doneAction: 0); //consider making 'run' a configurable parameter to permit pickup at last buffer index when resuming recording after pause....
-} ).add;*/
-
-// Phasor drives the buffer scaling at audio rate
-SynthDef(\phasor, {
-	arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
-	//Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start * BufFrames.kr(buf), (end * BufFrames.kr(buf)) - 1, resetPos ) );
-	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
-}).add;
-
-// Needed to monitor phasor
-SynthDef(\a2k_patch, {
-  arg in, out;
-  Out.kr(out, A2K.kr(InFeedback.ar(in) ) ); //is InFeedback necessary?
-}).add;
-
-// Takes audio-rate input phase to control the buffer position
-SynthDef.new(\ReadBuf_loop, { //define synth to read from buffer w/ phasor...
-  arg amp=1, out=0, phaseBus, buf;
-  var sig;
-  sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus));
-  sig = sig * amp;
-  //~sliderPlayPos.value_(ptr);
-  Out.ar(out, sig);
-} ).add;
-
-SynthDef.new(\pitchShifter, {
-	arg inBus, outBus, windowSize = 0.2, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.2, amp = 1;
-	var sigIn, sigOut;
-	sigIn = In.ar(inBus, 1);
-	//sigIn = InFeedback.ar(inBus, 1);
-	sigOut = PitchShift.ar(sigIn, windowSize, pitchRatio, pitchDispers, timeDispers, amp);
-	Out.ar(outBus, sigOut);
-}).add;
-
-SynthDef.new(\XFade, { //newer version w/ global amp control
-	|in1, in2, out, amountControlBus, amp = 1|
-	var inArray, mixSignal, sig;
-	inArray = [In.ar(in1), In.ar(in2)];
-	//inArray = [InFeedback.ar(in1), InFeedback.ar(in2)];
-	mixSignal = SelectX.ar(amountControlBus, inArray);
-	sig = mixSignal * amp;
-	Out.ar(out, sig);
-} ).add;
-
-/*SynthDef.new(\XFade, {
-	|in1, in2, out, amountControlBus|
-	var inArray, mixSignal;
-	inArray = [In.ar(in1), In.ar(in2)];
-	//inArray = [InFeedback.ar(in1), InFeedback.ar(in2)];
-	mixSignal = SelectX.ar(amountControlBus, inArray);
-	Out.ar(out, mixSignal);
-} ).add;  */
-
-SynthDef(\LinInterp_pitch, {
-	arg startVal, stopVal, duration, out;
-	Out.kr(out, Line.kr(startVal, stopVal, duration, doneAction: 2).midiratio);
-} ).add;
-
-SynthDef(\LinInterp_rate, {
-	arg startVal, stopVal, duration, out, rateMod = 1;
-	var outputVal = rateMod * Line.kr(startVal, stopVal, duration, doneAction: 2).midiratio;
-	Out.kr(out, outputVal);
-} ).add;
-
-SynthDef(\LinInterp_num, {
-	arg startVal, stopVal, duration, mult = 1, out;
-	Out.kr(out, Line.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
-} ).add;
-
-SynthDef.new(\subMix, { //<--NEW - utility
-	|in, amp = 1, out|
-	var sig;
-	sig = In.ar(in) * amp;
-	//sig = InFeedback.ar(in) * amp;
-	//OffsetOut.ar(out, sig);
-	Out.ar(out, sig);
-} ).add;
-
-SynthDef.new(\mainOut, { //<--NEW w/ Lo-cut
-	|in, loCutoff = 90, rQ = 1, amp = 1|
-	var sig;
-	sig = BHiPass4.ar( In.ar(in), loCutoff, rq: rQ, mul: amp);
-	//sig = In.ar(in) * amp;
-	//sig = InFeedback.ar(in) * amp;
-	//OffsetOut.ar(0, sig);
-	Out.ar([0, 1], sig);
-} ).add;
-
-/*SynthDef.new(\mainOut, { //ORIG mainOut
-	|in, amp = 1|
-	var sig;
-	sig = In.ar(in) * amp;
-	//sig = InFeedback.ar(in) * amp;
-	//OffsetOut.ar(0, sig);
-	Out.ar([0, 1], sig);
-} ).add; */
-
-SynthDef.new(\scopeOut, { //<------NEW
-	|inBus, buf|
-	var sig;
-	sig = In.ar(inBus, 1);
-	ScopeOut2.ar(sig, buf);
-} ).add;
-
-SynthDef(\write2Disk, {arg buf, inBus = 0; //record audio file to disk - mono
-	DiskOut.ar(buf, In.ar(inBus, 1));
-}).add;
-
-// play audio file from disk WITH an amplitude envelope to avoid clicks @ beginning & end of sample
-SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out; //<----NEW MOD VERS w/ amp control
-	var env, envgen, sig;
-	env = Env.linen(0.02, (sampleDur - 0.04), 0.02, 1, -1);
-	envgen = EnvGen.ar(env, doneAction: 2);
-	sig = (DiskIn.ar(1, buf) * envgen) * amp;
-	Out.ar(out, sig);
-}).add;
-
-/*SynthDef(\readDisk, { arg buf, sampleDur, out;
-	var env, envgen, sig;
-	env = Env.linen(0.02, (sampleDur - 0.04), 0.02, 1, -1);
-	envgen = EnvGen.ar(env, doneAction: 2);
-	sig = DiskIn.ar(1, buf) * envgen;
-	Out.ar(out, sig);
-}).add; */
-
-
-//-----BUSSES-----
-~recInPosBus = Bus.control(s, 1);
-~recOutPosBus = Bus.control(s, 1);
-~playInPosBus = Bus.control(s, 1);
-~playOutPosBus = Bus.control(s, 1);
-
-~rateBus = Bus.control(s, 1);
-~pitchBus = Bus.control(s, 1);
-~pitchShiftMixValBus = Bus.control(s, 1); //mix % between orig and pitch-shifted signal
-~pitchShiftOut = Bus.audio(s, 1);
-
-~inputStreamLevelBus = Bus.control(s, 1);  //level of audio output from ~pShiftMix Synth  <-----NEW
-~fileOutputLevelBus = Bus.control(s, 1);  //level of audio file playback <------- NEW
-
-~revRateBusMon = Bus.control(s, 1);
-
-~phaseBusRec = Bus.audio(s, 1);
-~phaseBusMonRec = Bus.control(s, 1);
-~inputLevelBus = Bus.control(s, 1);
-
-~loCutBus_in = Bus.control(s, 1); //<----NEW
-~loCutBus_out = Bus.control(s, 1); //<----NEW
-~inputSendBus = Bus.audio(s, 1); //<---NEW
-
-~phaseBusPly = Bus.audio(s, 1);
-~phaseBusMonPly = Bus.control(s, 1);
-~play1LevelBus = Bus.control(s, 1); //to control level of audioPlayback ("playhead1")
-~playOut1Bus = Bus.audio(s, 1);
-
-~outMainLevelBus = Bus.control(s, 1);
-~outMainBus = Bus.audio(s, 1);
-)
 
 ( //LAUNCH GUI & RUN - #3 ============================
 
@@ -334,17 +62,14 @@ SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out; //<----NEW MOD VERS w/ a
 ~minRecDur = 3.0; //<-----NEW: min sec per recorded sample
 ~maxRecDur = 6.0; //<----NEW: max sec per recorded sample
 ~recSound_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
-~recSound_input_startTime; //<---NEW: .............should I store this info in a contol bus?
-~recSound_input_stopTime; //<---NEW: .............should I store this info in a contol bus?
+~recSound_input_startTime; //<---NEW: ....should I store this info in a contol bus?
+~recSound_input_stopTime; //<---NEW: .....should I store this info in a contol bus?
 
 ~playSound = false; //<---NEW: play audio file from disk flag
 ~hearSound = false; //<---NEW: for machine listening
 ~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 
 ~playSoundBuf = Buffer.alloc(s, 65536, 1); //buffer for playing back mono audio files from disk
-
-~input1_specFlatVal; //<---NEW:  .........should I store this info in a contol bus?
-~input1_ampVal; //<---NEW:  .........should I store this info in a contol bus?
 //////////////////
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
@@ -701,8 +426,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 						},
 						{15.yieldAndReset;} //<------------ wait if not enough files have been written yet
 					);
-				}, //else if (~recSoundInput == true)
-				{5.yieldAndReset;}
+				},
+				{5.yieldAndReset;} //else if (~recSoundInput == true)
 			);
 		}
 	);
@@ -1023,7 +748,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		~pitchShiftMix_prev = val;
 	} );
 
-	//!!!!!CONSIDER ALSO GETTING CURRENT pitchShift value....if == 0 make mixVal = 0 !!!!!!!
+	//!!!!!CONSIDER ALSO GETTING CURRENT pitchShift value....if == 0 make mixVal = 0
 
 	0.1.yield; //<<<<<works, but not sure if ideal way...
 
@@ -1351,7 +1076,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } );
 //////
 
-//BEHAVIOR BUTTONS
+//-------------BEHAVIOR BUTTONS-----------
 
 ~buttonRev = Button(w, Rect(490, 349, 45, 25)) //Reverse playback
 .states_( [
@@ -1559,7 +1284,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~bufPlot.refresh;
 */
 
-////RECORD TO BUFFER////
+////---------------RECORD TO BUFFER--------------////
 
 ~buttonRec = Button(w, Rect(372, 349, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer
 .states_( [
@@ -1574,9 +1299,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		{
 			~recPhase = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~buffer, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap, \trig, 0, \resetPos, ~lastRecPhasePos] ); //***can experiment w/ in/out locking w/ in/OutPosBus or fixed pos at beg and end of buf...***
 			~a2kRec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] );
-			//~bufRecSynth = Synth(\RecBuf_loop, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \mul, ~inputLevelBus.asMap] );
-			//~bufRecSynth = Synth(\RecBuf_loop, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \sendBus, ~inputSendBus, \mul, ~inputLevelBus.asMap] );
-			~bufRecSynth = Synth(\RecBuf_loop, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ); //<----NEW!!!!!!
+			//~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \mul, ~inputLevelBus.asMap] );
+			//~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \sendBus, ~inputSendBus, \mul, ~inputLevelBus.asMap] );
+			~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ); //<----NEW!!!!!!
 			//~lastRecPhasePos.value.postln;
 			~recTrig = true;
 
@@ -1586,6 +1311,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			~scopeView.bufnum = ~bufferScope.bufnum; //<----
 			~scopeOut = Synth.tail(s, \scopeOut, [\inBus, ~inputSendBus, \buf, ~bufferScope]); //<----
 			~scopeView.start; //<----
+			//note to self: check out ScopeBuffer as a way to scope entire buffer
 
 			//////////
 		},
@@ -1797,7 +1523,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
-////PLAYBACK BUFFER (DELAYED OUTPUT)////
+////------------PLAYBACK BUFFER (DELAYED OUTPUT)-----------////
 
 ~buttonPlay = Button(w, Rect(430, 349, 55, 25)) //activate / deactivate playback output
 .states_( [
@@ -1847,8 +1573,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 			~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~buffer, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] ); //.asMap needs to follow control bus arguments for current values to constantly update phasor
 			~a2k = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
-			//~playBuf = Synth(\ReadBuf_loop, [\amp, ~outMainLevelBus.asMap, \out, 0, \phaseBus, ~phaseBusPly] ); //orig
-			~playBuf = Synth(\ReadBuf_loop, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly] );  //<!!!--NEW--!!!
+			//~playBuf = Synth(\bufRead, [\amp, ~outMainLevelBus.asMap, \out, 0, \phaseBus, ~phaseBusPly] ); //orig
+			~playBuf = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly] );  //<!!!--NEW--!!!
 			~playTrig = true;
 			//~lastPlayPhasePos.postln; //for debugging...
 
