@@ -17,8 +17,9 @@ Buffer.freeAll; //for cleanup
 ( //LAUNCH GUI & RUN - #3 ============================
 
 ////GLOBAL VARIABLES
-~bufferSize = 60.0;
-~buffer = Buffer.alloc(s, s.sampleRate * ~bufferSize, 1);
+~audioBuf0_dur = 60.0;
+~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
+
 ~delayTime = 1.23;
 ~play2recOffset; //displacement of playhead pos from rec pos (in frames/samples)
 ~lastPlayPhasePos = 0; //for resume functionality - stores last pos (frame) of play head before playback disabled
@@ -26,6 +27,9 @@ Buffer.freeAll; //for cleanup
 ~playTrig = false;
 ~recTrig = false;
 ~fixPlayRecOffset = false;
+
+~loCutVal_in = 90; //<-----NEW initialization val for loCut (and also stores ongoing values?)
+~loCutVal_out = 90; //<-----NEW ...for initialization
 
 ~pitchShiftValPrev_rate;
 ~pitchShiftValTarget_rate = 0;
@@ -52,39 +56,17 @@ Buffer.freeAll; //for cleanup
 ~pitchShiftMix_interp = false;
 
 ~currentPlayInFrame = 0;
-~currentPlayOutFrame = ~bufferSize * s.sampleRate - 1; //~buffer.numFrames - 1; (won't work unless ~buffer's already been allocated...)
+~currentPlayOutFrame = ~audioBuf0_dur * s.sampleRate - 1; //~audioBuf0.numFrames - 1; (won't work unless ~audioBuf0's already been allocated...)
 ~currentRecInFrame = 0;
-~currentRecOutFrame = ~bufferSize * s.sampleRate - 1;
+~currentRecOutFrame = ~audioBuf0_dur * s.sampleRate - 1;
 
 ~playBehavior = 0; //stores state of playback behavior
+~hearSound = false; //<---NEW: for machine listening
 
 ////////////////
-~minRecDur = 3.0; //<-----NEW: min sec per recorded sample
-~maxRecDur = 6.0; //<----NEW: max sec per recorded sample
-~recSound_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
-~recSound_input_startTime; //<---NEW: ....should I store this info in a contol bus?
-~recSound_input_stopTime; //<---NEW: .....should I store this info in a contol bus?
 
-~playSound = false; //<---NEW: play audio file from disk flag
-~hearSound = false; //<---NEW: for machine listening
-~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 
-~playSoundBuf = Buffer.alloc(s, 65536, 1); //buffer for playing back mono audio files from disk
-//////////////////
 
-~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
-//~fileAudio_writeOut_lastPath = ("~/Music/SCrecs/SncMir-MainOut_" ++ ~fileAudio_writeOut_nameNum ++ ".aiff");
-~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir-MainOut_"; //stores string of file path for last written audio file from disk
-//~fileAudio_lastReadPath = ("~/Music/SCrecs/SncMir-MainOut_" ++ ~fileAudio_writeOut_nameNum ++ ".aiff"); //stores string of file path for last read audio file from disk
-~fileAudio_writeOut_maxNum = 30;  //<---NEW: max # of files written per session (wrap-around & overwrite limit)
-
-~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name
-~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir-In_"; //stores string of file path for last written audio file
-
-~minNumFilesB4Playback = 1; //<----!!!!!NEW!!!!!!!  file # threshold before file playback routine commences
-
-~loCutVal_in = 90; //<-----NEW initialization val for loCut (and also stores ongoing values?)
-~loCutVal_out = 90; //<-----NEW ...for initialization
 ////
 Window.closeAll;
 w = Window.new("SonicMirror", Rect.new(470, 330, 780, 405))
@@ -118,13 +100,77 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~loCutBus_in.set(~loCutVal_in); //<---NEW
 ~loCutBus_out.set(~loCutVal_out); //<----NEW
 
-////BUFFER CONTROLS////
-~label_LoCut = StaticText(w, Rect(693, 226, 48, 20) )//<---
-.string_("LoCut-Hz")
-.font_(Font("Monaco", 10) )
-.align_(\left);
+//------ Main In/Out Controls (Levels & Lo-Cut) -----------
 
-~numBox_inputLoCut = NumberBox(w, Rect(680, 216, 32, 14))//<---
+//Main Input Level --
+~slider_inMainLevel = Slider(w, Rect(684, 8, 17, 173) )
+.background_(Color(0.9, 0.0, 0.0, 0.2))
+.value_(1.0)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~inputLevelBus.set(val);
+	//~bufRecSynth.set(\mul, val);
+	~numBox_inMainLevel.value_(val);
+	//~bufRecSynth.get(\mul, {arg mulval; mulval.postln;} );
+	//~inputLevelBus.get({arg val; val.postln;} );
+} );
+
+~numBox_inMainLevel = NumberBox(w, Rect(682, 183, 26, 15))
+.value_(1.0)
+.clipLo_(0.0)
+.clipHi_(1.0)
+.decimals_(2)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.01)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~inputLevelBus.set(val);
+	~slider_inMainLevel.value_(val);
+} );
+
+~label_inMainLevel = StaticText(w, Rect(687, 195, 12, 20) )
+.string_("IN")
+.font_(Font("Monaco", 10) )
+.align_(\center);
+
+//Main Out Level --
+~slider_outMainLevel = Slider(w, Rect(733, 8, 17, 173) )
+.background_(Color(0.0, 0.8, 0.2, 0.01))
+.value_(1.0)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~outMainLevelBus.set(val);
+	~numBox_outMainLevel.value_(val);
+} );
+
+~numBox_outMainLevel = NumberBox(w, Rect(728, 183, 26, 15))
+.value_(1.0)
+.clipLo_(0.0)
+.clipHi_(1.0)
+.decimals_(2)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.01)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~outMainLevelBus.set(val);
+	~slider_outMainLevel.value_(val);
+} );
+
+~label_outMainLevel = StaticText(w, Rect(730, 195, 20, 20) )
+.string_("OUT")
+.font_(Font("Monaco", 10) )
+.align_(\center);
+
+//Main In / Out Lo-Cuts --
+~numBox_inMainLoCut = NumberBox(w, Rect(680, 216, 32, 14))//<---
 .value_(~loCutVal_in)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
@@ -138,7 +184,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_in=" ++ ~loCutVal_in ++ "Hz").postln;
 } );
 
-~numBox_outputLoCut = NumberBox(w, Rect(724, 216, 32, 14))//<---
+~numBox_outMainLoCut= NumberBox(w, Rect(724, 216, 32, 14))//<---
 .value_(~loCutVal_out)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
@@ -152,24 +198,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_out=" ++ ~loCutVal_out ++ "Hz").postln;
 } );
 
-~labelBufSize = StaticText(w, Rect(568, 380, 200, 20) )
-.string_("Buf(sec)")
-.font_(Font("Monaco", 12) )
+~label_inoutMainLoCut = StaticText(w, Rect(693, 226, 48, 20) )//<---
+.string_("LoCut-Hz")
+.font_(Font("Monaco", 10) )
 .align_(\left);
+//------------
 
-~numBoxBuf = NumberBox(w, Rect(490, 377, 75, 25))
-.value_(~bufferSize)
-.clipLo_(10) //smallest possible length of buffer (in seconds)
-.clipHi_(120) //longest possible length of buffer (in seconds)
-.font_(Font("Monaco", 14) )
-.decimals_(2)
-.action_( {
-	arg obj;
-	~bufferSize = obj.value.round(0.01);
-	("***Buffer Length=" + ~bufferSize + "seconds.").postln;
-} );
+//----- AUDIO BUFFER --------
 
-~buttonBuf = Button(w, Rect(400, 377, 85, 25)) //Activate / Deactivate audio buffer
+~button_audioBuf_0 = Button(w, Rect(400, 377, 85, 25)) //Activate / Deactivate audio buffer
 .states_( [
 	["BUF_ACT", Color.black, Color.gray(0.8)] ,
 	["BUF_ACT", Color.white, Color(0.8,0.8, 0)]
@@ -181,181 +218,60 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{//allocate(create) buffer w/ duration = bufferSize seconds
-			~buffer = Buffer.alloc(s, s.sampleRate * ~bufferSize, 1);
+			~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
 		} , //else
-		{~buffer.close; ~buffer.free;} //free(erase) buffer
+		{~audioBuf0.close; ~audioBuf0.free;} //free(erase) buffer
 	);
 } );
 
-~buttonRecOut = Button(w, Rect(16, 372, 45, 20) )
-.states_( [
-	["RECOUT", Color.black, Color(0.95, 0, 0, 0.3)] ,
-	["RECOUT", Color.white, Color(0.95, 0, 0)]
-] )
-.font_(Font("Monaco", 11) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1,
-		{//BEGIN RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
-			~bufferMainOutWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-			~bufferMainOutWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-			~write2Disk = Synth.tail(nil, \write2Disk, [\buf, ~bufferMainOutWrite, \inBus, 0] ); //record audio sent to bus 0 to buffer writing to audio file
-		} ,
-		{//STOP RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
-			~write2Disk.free; //stop recording to disk
-			~bufferMainOutWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
-			~bufferMainOutWrite.free; //free buffer
-			~fileAudio_writeOut_nameNum = ~fileAudio_writeOut_nameNum + 1; //increment file name suffix in prep for next rec file
-		} );
-} );
-
-/*
-~labelPlayFile = StaticText(w, Rect(130, 373, 135, 20) ) //<------NEW
-.string_("FILENAMEFILENAME...")
-.font_(Font("Monaco", 12) )
-.align_(\left);
-*/
-
-~buttonPlayFile = Button(w, Rect(62, 372, 65, 20) ) //<------TODO!!!!
-.states_( [
-	["PLAY FILE", Color.black, Color(0.0, 0.5, 0.5, 0.3)] ,
-	["PLAY FILE", Color.white, Color(0.0, 0.5, 0.5)]
-] )
-.font_(Font("Monaco", 11) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1,
-		{//BEGIN PLAYING AUDIO FILE
-
-		} ,
-		{//STOP RECORDING / WRITING AUDIO INPUT TO FILE
-
-		} );
-} );
-
-~buttonRecIn = Button(w, Rect(16, 352, 45, 20) ) //<------NEW
-.states_( [
-	["RECIN", Color.black, Color(0.0, 0.5, 0, 0.3)] ,
-	["RECIN", Color.white, Color(0.0, 0.5, 0)]
-] )
-.font_(Font("Monaco", 11) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1,
-		{//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
-			~bufferInWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-			~bufferInWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~bufferInWrite, \inBus, ~inputSendBus] ); //record audio sent to first input channel bus to buffer, and write an audio file to hard disk
-		} ,
-		{//STOP RECORDING / WRITING AUDIO INPUT TO FILE
-			~writeIn2Disk.free; //stop recording to disk
-			~bufferInWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
-			~bufferInWrite.free;
-			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
-		} );
-} );
-
-~numBoxDel = NumberBox(w, Rect(610, 349, 75, 25))  //WORKS but a little buggy....
-.value_(~delayTime)
-.clipLo_(0)
-.clipHi_(~bufferSize - 0.01)
+~numBox_audioBuf0_dur = NumberBox(w, Rect(490, 377, 75, 25))
+.value_(~audioBuf0_dur)
+.clipLo_(10) //smallest possible length of buffer (in seconds)
+.clipHi_(120) //longest possible length of buffer (in seconds)
 .font_(Font("Monaco", 14) )
 .decimals_(2)
-.scroll_step_(0.01)
-.step_(0.01)
 .action_( {
 	arg obj;
-	var lastPlay2RecOffset;
-	~delayTime = obj.value.round(0.01);
-	//~delayTime.postln;
-	//~sliderDelay.value = obj.value.linlin(0, ~bufferSize - 0.01, 0, 1); //ideally do this only when the numBox is being manipulated directly, otherwise it's redundantly updating value of slider...OBSOLESCED in 1.82
-
-	~playHeadOffsetRoutine.reset;
-	AppClock.play(~playHeadOffsetRoutine);
-
-	/* ~phaseBusMonRec.get( { //<----works but BUGGY small delay values don't seem to be accurate...
-		//calculate the offset of the playhead from the rechead
-		arg val;
-		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-		lastPlay2RecOffset = val - ((~delayTime * s.sampleRate).round(1));
-		//if (~play2recOffset < 0,
-		if (lastPlay2RecOffset < 0,
-			{//~lastPlayPhasePos = (~buffer.numFrames - 1) + ~play2recOffset;
-				~lastPlayPhasePos = (~buffer.numFrames - 1) + lastPlay2RecOffset;
-			} ,
-			{//~lastPlayPhasePos = ~play2recOffset;
-			 ~lastPlayPhasePos = lastPlay2RecOffset;
-			}
-		);
-	} );
-
-	if (~buttonPlay.value == 1, {~playPhase.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); */
-
+	~audioBuf0_dur = obj.value.round(0.01);
+	("***Buffer Length=" + ~audioBuf0_dur + "seconds.").postln;
 } );
 
-~labelDelTime = StaticText(w, Rect(688, 352, 78, 20) )
-.string_("Offset(sec)")
+~label_audioBuf0_dur = StaticText(w, Rect(568, 380, 200, 20) )
+.string_("Buf(sec)")
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
-/*~sliderDelay = Slider(w, Rect(489, 332, 180, 15))
-.background_(Color(0.85, 0.85, 0.0))
-.value_(~delayTime.linlin(0, ~bufferSize - 0.01, 0, 1))
-.action_( { //<----BUGGY....?????
-	arg obj;
-	var pos, playPosFrame;
-	pos = obj.value.linlin(0, 1, 0, ~bufferSize - 0.01).round(0.01);
-	//~numBoxDel.value_(pos); //update numBoxPitch value
-	~numBoxDel.valueAction_(pos); //so we don't have to duplicate calc code from numBoxDel here
-} ); */
+//--------------------------------
 
-~buttonDel = Button(w, Rect(550, 349, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
-.states_( [
-	["SYNC", Color.black, Color(0.7, 0.7, 0, 0.3)] ,
-	["SYNC", Color.white, Color(0.8, 0.8, 0)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1, // when sync button enabled
-		{
-			~fixPlayRecOffset = true; //IS THIS BETTER THAN POLLING BUTTON.VALUE?????
-			~playHeadOffsetRoutine.reset;
-			AppClock.play(~playHeadOffsetRoutine);
+//--------- Soundfile Rec / Playback ---------------
 
-			/*
-			//snap playhead to position based on delay offset from rechead<------
-			~phaseBusMonRec.get( { //<----this block doesn't function properly when uncommented, needs to be in a routine?????
-				//calculate the offset of the playhead from the rechead
-				arg val;
-				~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-				if (~play2recOffset < 0,
-					{~lastPlayPhasePos = (~buffer.numFrames - 1) + ~play2recOffset;
-						//lastPlay2RecOffset = ~lastPlayPhasePos;
-					} ,
-					{~lastPlayPhasePos = ~play2recOffset;
-						//lastPlay2RecOffset = ~play2recOffset;
-					}
-				);
-			} );
+//--put these variables back w/ the rest of env variables at some point??--
 
-			if (~buttonPlay.value == 1, {~playPhase.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
-			*/
+~minRecDur = 1.0; //<-----NEW: min sec per recorded sample
+~maxRecDur = 6.0; //<----NEW: max sec per recorded sample
+~recSound_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
+~recSound_input_startTime; //<---NEW: ....should I store this info in a contol bus?
+~recSound_input_stopTime; //<---NEW: .....should I store this info in a contol bus?
 
-		},
-		{ //when button disabled
-			~fixPlayRecOffset = false;
-			~playHeadOffsetRoutine.stop;
-		}
-	);
-} )
-.value_(0);
+~playSound = false; //<---NEW: play audio file from disk flag
 
-/////ROUTINES/////
+~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
+
+~playSoundBuf = Buffer.alloc(s, 65536, 1); //buffer for playing back mono audio files from disk
+
+~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
+//~fileAudio_writeOut_lastPath = ("~/Music/SCrecs/SncMir-MainOut_" ++ ~fileAudio_writeOut_nameNum ++ ".aiff");
+~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-MainOut_"; //stores string of file path for last written audio file from disk
+//~fileAudio_lastReadPath = ("~/Music/SCrecs/SncMir-MainOut_" ++ ~fileAudio_writeOut_nameNum ++ ".aiff"); //stores string of file path for last read audio file from disk
+~fileAudio_writeOut_maxNum = 30;  //<---NEW: max # of files written per session (wrap-around & overwrite limit)
+
+~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name
+~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir/SncMir-In_"; //stores string of file path for last written audio file
+
+~minNumFilesB4Playback = 1; //<----!!!!!NEW!!!!!!!  file # threshold before file playback routine commences
+
+
+//---
 ~soundRoutine_autoRec = Routine.new( { //<---TODO!!!!!!, model after autoPlay below until machine listening functionality is implemented
 	if (~recSound_input == true,
 		{
@@ -378,7 +294,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			0.2.yield;  //<----is this necessary????
 
 			~playSound = false;
-			~buttonPlayFile.value = 0; //update GUI button
+			~button_playSamp.value = 0; //update GUI button
 
 			~playSoundBuf.close; //<----IS THIS NECESSARY IF GOING TO REASSIGN LATER, SHOULD I ONLY DO THIS DURING FINAL CLEANUP????
 			~playSoundBuf.free; //<----IS THIS NECESSARY HERE????
@@ -398,7 +314,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							~playSound = true; //set flag
 							randFilePick = rrand(0, (~fileAudio_writeIn_nameNum - 1)); //pick a random file to play (needs to be "current nameNum counter val - 1" b/c current counter value doesn't have a file associated w/ it yet due to counter incrementing after a new file has been written...)
 							("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
-							~buttonPlayFile.value = 1; //update GUI
+							~button_playSamp.value = 1; //update GUI
 
 							readDiskSynth = Synth.basicNew(\readDisk);
 
@@ -433,12 +349,232 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	);
 } );
 
+~button_randAutoRecPlaySamp = Button(w, Rect(215, 349, 25, 25)) //<---still working on this, need to complete and add ~soundRoutine_autoRec
+.states_( [
+	["^v", Color.black, Color(0.6, 0.9, 0.4, 0.3)] ,
+	["^v", Color.white, Color(0.8, 1.0, 0.4)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1,
+		{
+			~soundRoutine_autoPlay.reset;
+			AppClock.play(~soundRoutine_autoPlay);
+		},
+		{
+			~soundRoutine_autoPlay.stop;
+		}
+	);
+} )
+.value_(0);
+
+~button_recIn = Button(w, Rect(16, 352, 45, 20) ) //<------NEW
+.states_( [
+	["RECIN", Color.black, Color(0.0, 0.5, 0, 0.3)] ,
+	["RECIN", Color.white, Color(0.0, 0.5, 0)]
+] )
+.font_(Font("Monaco", 11) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1,
+		{//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
+			~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio sent to first input channel bus to buffer, and write an audio file to hard disk
+		} ,
+		{//STOP RECORDING / WRITING AUDIO INPUT TO FILE
+			~writeIn2Disk.free; //stop recording to disk
+			~audioBuf_inMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
+			~audioBuf_inMainWrite.free;
+			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
+		} );
+} );
+
+~button_recOut = Button(w, Rect(16, 372, 45, 20) )
+.states_( [
+	["RECOUT", Color.black, Color(0.95, 0, 0, 0.3)] ,
+	["RECOUT", Color.white, Color(0.95, 0, 0)]
+] )
+.font_(Font("Monaco", 11) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1,
+		{//BEGIN RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
+			~audioBuf_outMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+			~audioBuf_outMainWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+			~write2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_outMainWrite, \inBus, 0] ); //record audio sent to bus 0 to buffer writing to audio file
+		} ,
+		{//STOP RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
+			~write2Disk.free; //stop recording to disk
+			~audioBuf_outMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
+			~audioBuf_outMainWrite.free; //free buffer
+			~fileAudio_writeOut_nameNum = ~fileAudio_writeOut_nameNum + 1; //increment file name suffix in prep for next rec file
+		} );
+} );
+
+~button_recInOut = Button(w, Rect(62, 352, 70, 20))
+.states_( [
+	["REC-InOut", Color.black, Color(0.9, 0.9, 0.3, 0.3)] ,
+	["REC-InOut", Color.black, Color(0.9, 0.9, 0.3)]
+] )
+.font_(Font("Monaco", 12) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1,
+		{
+			~button_recIn.valueAction = 1;
+			~button_recOut.valueAction = 1;
+		},
+		{
+			~button_recIn.valueAction = 0;
+			~button_recOut.valueAction = 0;
+		}
+	);
+} )
+.value_(0);
+
+~button_playSamp = Button(w, Rect(62, 372, 65, 20) ) //<------TODO!!!!
+.states_( [
+	["PLAY FILE", Color.black, Color(0.0, 0.5, 0.5, 0.3)] ,
+	["PLAY FILE", Color.white, Color(0.0, 0.5, 0.5)]
+] )
+.font_(Font("Monaco", 11) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1,
+		{//BEGIN PLAYING AUDIO FILE
+			//play random or pre-selected or wildcard, etc. file(s) from sample folder?
+		} ,
+		{//STOP RECORDING / WRITING AUDIO INPUT TO FILE
+			//stop playing random file from sample folder
+		} );
+} );
+
+~label_playSamp = StaticText(w, Rect(130, 373, 135, 20) ) //<------NEW
+.string_("FILENAMEFILENAME...")
+.font_(Font("Monaco", 12) )
+.align_(\left);
+
+
+//++++ADD FILE SELECTOR INTERFACE (OPEN DIALOG?) FOR SAMPLE LOADING...
+
+//++++ADD BUFFSCOPE FOR PLAYING / LOADED AUDIO FILE(s) (make into re-usable view for GUI of multi-channel & multi-sample playback)
+
+//////////////////--------------------------
+
+
+~numBoxDel = NumberBox(w, Rect(610, 349, 75, 25))  //WORKS but a little buggy....
+.value_(~delayTime)
+.clipLo_(0)
+.clipHi_(~audioBuf0_dur - 0.01)
+.font_(Font("Monaco", 14) )
+.decimals_(2)
+.scroll_step_(0.01)
+.step_(0.01)
+.action_( {
+	arg obj;
+	var lastPlay2RecOffset;
+	~delayTime = obj.value.round(0.01);
+	//~delayTime.postln;
+	//~sliderDelay.value = obj.value.linlin(0, ~audioBuf0_dur - 0.01, 0, 1); //ideally do this only when the numBox is being manipulated directly, otherwise it's redundantly updating value of slider...OBSOLESCED in 1.82
+
+	~playHeadOffsetRoutine.reset;
+	AppClock.play(~playHeadOffsetRoutine);
+
+	/* ~phaseBusMonRec.get( { //<----works but BUGGY small delay values don't seem to be accurate...
+		//calculate the offset of the playhead from the rechead
+		arg val;
+		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
+		lastPlay2RecOffset = val - ((~delayTime * s.sampleRate).round(1));
+		//if (~play2recOffset < 0,
+		if (lastPlay2RecOffset < 0,
+			{//~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
+				~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + lastPlay2RecOffset;
+			} ,
+			{//~lastPlayPhasePos = ~play2recOffset;
+			 ~lastPlayPhasePos = lastPlay2RecOffset;
+			}
+		);
+	} );
+
+	if (~buttonPlay.value == 1, {~playPhase.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); */
+
+} );
+
+~labelDelTime = StaticText(w, Rect(688, 352, 78, 20) )
+.string_("Offset(sec)")
+.font_(Font("Monaco", 12) )
+.align_(\left);
+
+/*~sliderDelay = Slider(w, Rect(489, 332, 180, 15))
+.background_(Color(0.85, 0.85, 0.0))
+.value_(~delayTime.linlin(0, ~audioBuf0_dur - 0.01, 0, 1))
+.action_( { //<----BUGGY....?????
+	arg obj;
+	var pos, playPosFrame;
+	pos = obj.value.linlin(0, 1, 0, ~audioBuf0_dur - 0.01).round(0.01);
+	//~numBoxDel.value_(pos); //update numBoxPitch value
+	~numBoxDel.valueAction_(pos); //so we don't have to duplicate calc code from numBoxDel here
+} ); */
+
+~buttonDel = Button(w, Rect(550, 349, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
+.states_( [
+	["SYNC", Color.black, Color(0.7, 0.7, 0, 0.3)] ,
+	["SYNC", Color.white, Color(0.8, 0.8, 0)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1, // when sync button enabled
+		{
+			~fixPlayRecOffset = true; //IS THIS BETTER THAN POLLING BUTTON.VALUE?????
+			~playHeadOffsetRoutine.reset;
+			AppClock.play(~playHeadOffsetRoutine);
+
+			/*
+			//snap playhead to position based on delay offset from rechead<------
+			~phaseBusMonRec.get( { //<----this block doesn't function properly when uncommented, needs to be in a routine?????
+				//calculate the offset of the playhead from the rechead
+				arg val;
+				~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
+				if (~play2recOffset < 0,
+					{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
+						//lastPlay2RecOffset = ~lastPlayPhasePos;
+					} ,
+					{~lastPlayPhasePos = ~play2recOffset;
+						//lastPlay2RecOffset = ~play2recOffset;
+					}
+				);
+			} );
+
+			if (~buttonPlay.value == 1, {~playPhase.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
+			*/
+
+		},
+		{ //when button disabled
+			~fixPlayRecOffset = false;
+			~playHeadOffsetRoutine.stop;
+		}
+	);
+} )
+.value_(0);
+
+/////ROUTINES/////
+
+
 ~playHeadOffsetRoutine = Routine.new( {
 	~phaseBusMonRec.get( {
 		arg val;
 		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1)); //calculate the offset of the playhead from the rechead
 		if (~play2recOffset < 0,
-			{~lastPlayPhasePos = (~buffer.numFrames - 1) + ~play2recOffset;} ,
+			{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
 			{~lastPlayPhasePos = ~play2recOffset;}
 		);
 	} );
@@ -481,8 +617,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~outMainLevelBus.get( {
 		arg val;
 		AppClock.sched(0.0, { //this is necessary for some reason...??????
-			~sliderOutputLevel.value_(val);
-			~numBoxOutputLevel.value_(val.round(0.01));
+			~slider_outMainLevel.value_(val);
+			~numBox_outMainLevel.value_(val.round(0.01));
 			nil;
 		} );
 	} );
@@ -613,7 +749,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		//("---outLevel-randNum=" + randNum).postln;
 		if (randNum <= 8.8, { //88% of time keep level at 1
 			//~outMainLevelBus.set(1);
-			//~sliderOutputLevel.value_(1);
+			//~slider_outMainLevel.value_(1);
 			time2nextRandomize = rrand(12, 18);
 			//("--NO LEVEL CHANGE...time2next=" + time2nextRandomize).postln;
 		},
@@ -937,7 +1073,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				newOffsetPos = ~lastRecPhasePos - ((newOffsetAmount * s.sampleRate).round(1)); //deduce new playPhase position based on newOffsetAmount (converted to frames)
 
 				/*if (newOffsetPos < 0, //orig simple safe driving
-				{newOffsetPos = (~buffer.numFrames - 1) + newOffsetPos;} //wrap around buffer if negative position generated
+				{newOffsetPos = (~audioBuf0.numFrames - 1) + newOffsetPos;} //wrap around buffer if negative position generated
 				); */
 
 				if ( (~currentPlayInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
@@ -1023,23 +1159,23 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 				//("--BACKWARDS--").postln;
 				newPos = ~lastPlayPhasePos - (offsetSec * s.sampleRate);
-				if (newPos < 0, {newPos = (~buffer.numFrames - 1) + newPos;} ); //wrap around if newPos initially less than 0
+				if (newPos < 0, {newPos = (~audioBuf0.numFrames - 1) + newPos;} ); //wrap around if newPos initially less than 0
 				//("lastPlayPhaseFrame=" + ~lastPlayPhasePos + " | lastPlaySec=" + (~lastPlayPhasePos/s.sampleRate) ).postln;
 				//("newPos=" + newPos + " | " + (newPos/s.sampleRate) + "sec").postln;
 			},
 			{ //50% chance playHead offset forwards in time
-				//newPos = rrand(~lastPlayPhasePos, ~buffer.numFrames - 1);
+				//newPos = rrand(~lastPlayPhasePos, ~audioBuf0.numFrames - 1);
 
 				//("--FORWARDS--").postln;
 				newPos = ~lastPlayPhasePos + (offsetSec * s.sampleRate);
-				if (newPos > (~buffer.numFrames - 1), {newPos = (newPos % ~buffer.numFrames) - 1;} ); //wrap around if newPos greater than buffer length
+				if (newPos > (~audioBuf0.numFrames - 1), {newPos = (newPos % ~audioBuf0.numFrames) - 1;} ); //wrap around if newPos greater than buffer length
 
 				if ( ((~lastRecPhasePos - newPos) <= (2 * s.sampleRate) ) && ((~lastRecPhasePos - newPos) >= 0), {
 					//("---AVOIDING FEEDBACK---").postln;
 					//("lastRecHeadPos =" + (~lastRecPhasePos/s.sampleRate) + " | ").post;
 					//("newPos WAS: " + (newPos/s.sampleRate).round(0.01) + "sec").postln;
 					newPos = ~lastRecPhasePos + (1.5 * s.sampleRate); //reset newPos to 1.5 seconds AFTER recHead to avoid inducing rapid feedback (only would happen if rate and pitch shift == 0)
-					if (newPos > (~buffer.numFrames - 1), {newPos = (newPos % ~buffer.numFrames) - 1;} ); //wrap around if newPos greater than buffer length
+					if (newPos > (~audioBuf0.numFrames - 1), {newPos = (newPos % ~audioBuf0.numFrames) - 1;} ); //wrap around if newPos greater than buffer length
 					//("newPos IS NOW: " + (newPos/s.sampleRate).round(0.01) + "sec").postln;
 				} ); //to avoid landing too close to recHead and causing rapid audio feedback
 
@@ -1076,7 +1212,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } );
 //////
 
-//-------------BEHAVIOR BUTTONS-----------
+//============ BEHAVIORS ============
+
+
 
 ~buttonRev = Button(w, Rect(490, 349, 45, 25)) //Reverse playback
 .states_( [
@@ -1114,53 +1252,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~buttonRecInOut = Button(w, Rect(62, 352, 70, 20))
-.states_( [
-	["REC-InOut", Color.black, Color(0.9, 0.9, 0.3, 0.3)] ,
-	["REC-InOut", Color.black, Color(0.9, 0.9, 0.3)]
-] )
-.font_(Font("Monaco", 12) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1,
-		{
-			~buttonRecIn.valueAction = 1;
-			~buttonRecOut.valueAction = 1;
-		},
-		{
-			~buttonRecIn.valueAction = 0;
-			~buttonRecOut.valueAction = 0;
-		}
-	);
-} )
-.value_(0);
+//-------------- RANDOM BEHAVIORS ------------
 
-~buttonRandAutoRecPlayFiles = Button(w, Rect(215, 349, 25, 25)) //<---still working on this, need to complete and add ~soundRoutine_autoRec
+~buttonRandomState_1 = Button(w, Rect(314, 349, 55, 25)) //<------playRecOffsetCheck DISABLED
 .states_( [
-	["^v", Color.black, Color(0.6, 0.9, 0.4, 0.3)] ,
-	["^v", Color.white, Color(0.8, 1.0, 0.4)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1,
-		{
-			~soundRoutine_autoPlay.reset;
-			AppClock.play(~soundRoutine_autoPlay);
-		},
-		{
-			~soundRoutine_autoPlay.stop;
-		}
-	);
-} )
-.value_(0);
-
-~buttonRandomState_3 = Button(w, Rect(243, 349, 25, 25))
-.states_( [
-	["!", Color.black, Color(0.6, 0.9, 0.0, 0.3)] ,
-	["!", Color.white, Color(0.8, 1.0, 0.0)]
+	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
+	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
 ] )
 .font_(Font("Monaco", 18) )
 .action_( {
@@ -1168,15 +1265,20 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1, // when randomize button enabled
 		{
-			~randomRoutine_reverse.reset;
-			~randomRoutine_playBehavior.reset;
-			AppClock.play(~randomRoutine_reverse);
-			AppClock.play(~randomRoutine_playBehavior);
+			~randomRoutine_rate.reset;
+			~numBoxCountdownRoutine.reset;
+			//~playRecOffsetCheckRoutine.reset;
+			~updateGUI_rate.reset;
+			AppClock.play(~randomRoutine_rate);
+			AppClock.play(~numBoxCountdownRoutine);
+			//AppClock.play(~playRecOffsetCheckRoutine); //<--CREATE ROUTINE TO VARY THIS (e.g. ON for 60 - 90, OFF for 10 - 25)
 		},
 		{ //when randomize button disabled
-			~randomRoutine_reverse.stop;
-			~randomRoutine_playBehavior.stop;
-			~playRecOffsetCheckRoutine.stop;
+			~randomRoutine_rate.stop;
+			~numBoxCountdownRoutine.stop;
+			//~playRecOffsetCheckRoutine.stop;
+			~updateGUI_rate.stop;
+			~numBoxRandomState.value_(0.0);
 		}
 	);
 } )
@@ -1215,10 +1317,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~buttonRandomState_1 = Button(w, Rect(314, 349, 55, 25)) //<------playRecOffsetCheck DISABLED
+~buttonRandomState_3 = Button(w, Rect(243, 349, 25, 25))
 .states_( [
-	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
-	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
+	["!", Color.black, Color(0.6, 0.9, 0.0, 0.3)] ,
+	["!", Color.white, Color(0.8, 1.0, 0.0)]
 ] )
 .font_(Font("Monaco", 18) )
 .action_( {
@@ -1226,20 +1328,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1, // when randomize button enabled
 		{
-			~randomRoutine_rate.reset;
-			~numBoxCountdownRoutine.reset;
-			//~playRecOffsetCheckRoutine.reset;
-			~updateGUI_rate.reset;
-			AppClock.play(~randomRoutine_rate);
-			AppClock.play(~numBoxCountdownRoutine);
-			//AppClock.play(~playRecOffsetCheckRoutine); //<--CREATE ROUTINE TO VARY THIS (e.g. ON for 60 - 90, OFF for 10 - 25)
+			~randomRoutine_reverse.reset;
+			~randomRoutine_playBehavior.reset;
+			AppClock.play(~randomRoutine_reverse);
+			AppClock.play(~randomRoutine_playBehavior);
 		},
 		{ //when randomize button disabled
-			~randomRoutine_rate.stop;
-			~numBoxCountdownRoutine.stop;
-			//~playRecOffsetCheckRoutine.stop;
-			~updateGUI_rate.stop;
-			~numBoxRandomState.value_(0.0);
+			~randomRoutine_reverse.stop;
+			~randomRoutine_playBehavior.stop;
+			~playRecOffsetCheckRoutine.stop;
 		}
 	);
 } )
@@ -1257,6 +1354,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
+//--------------------
+
+
 //SCOPE VIEW//
 
 ~scopeView = ScopeView(w.view, Rect(15, 10, 665, 170) );
@@ -1271,7 +1371,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 /*
 ~bufPlot = Plotter.new("Buffer", Rect(15, 10, 665, 170), w); //CREATE PLOTTER
 ~bufPlot.value = 0; //initialize w/ value of 0
-//~bufPlot.value = ~buffer;
+//~bufPlot.value = ~audioBuf0;
 ~bufPlot.setProperties(
 	\fontColor, Color.red,
 	\plotColor, Color.blue,
@@ -1285,7 +1385,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 */
 
 ////---------------RECORD TO BUFFER--------------////
-
 ~buttonRec = Button(w, Rect(372, 349, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer
 .states_( [
 	["REC", Color.black, Color(0.95, 0, 0, 0.3)] ,
@@ -1297,19 +1396,19 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1, // when REC button enabled (start recording to buffer)
 		{
-			~recPhase = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~buffer, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap, \trig, 0, \resetPos, ~lastRecPhasePos] ); //***can experiment w/ in/out locking w/ in/OutPosBus or fixed pos at beg and end of buf...***
+			~recPhase = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~audioBuf0, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap, \trig, 0, \resetPos, ~lastRecPhasePos] ); //***can experiment w/ in/out locking w/ in/OutPosBus or fixed pos at beg and end of buf...***
 			~a2kRec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] );
-			//~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \mul, ~inputLevelBus.asMap] );
-			//~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \sendBus, ~inputSendBus, \mul, ~inputLevelBus.asMap] );
-			~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~buffer, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ); //<----NEW!!!!!!
+			//~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \mul, ~inputLevelBus.asMap] );
+			//~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \mul, ~inputLevelBus.asMap] );
+			~bufRecSynth = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ); //<----NEW!!!!!!
 			//~lastRecPhasePos.value.postln;
 			~recTrig = true;
 
 			//////////////SCOPE
 
-			~bufferScope = Buffer.alloc(s, ~buffer.numFrames, 1); //create additional buffer for displaying contents of audio buffer...is this the only way to do this?? what happens if I 'scopeOut' to ~buffer?
-			~scopeView.bufnum = ~bufferScope.bufnum; //<----
-			~scopeOut = Synth.tail(s, \scopeOut, [\inBus, ~inputSendBus, \buf, ~bufferScope]); //<----
+			~audioBuf0Scope = Buffer.alloc(s, ~audioBuf0.numFrames, 1); //create additional buffer for displaying contents of audio buffer...is this the only way to do this?? what happens if I 'scopeOut' to ~audioBuf0?
+			~scopeView.bufnum = ~audioBuf0Scope.bufnum; //<----
+			~scopeOut = Synth.tail(s, \scopeOut, [\inBus, ~inputSendBus, \buf, ~audioBuf0Scope]); //<----
 			~scopeView.start; //<----
 			//note to self: check out ScopeBuffer as a way to scope entire buffer
 
@@ -1324,47 +1423,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			 ///FOR SCOPE
 			~scopeView.stop; //<----
 			~scopeOut.free; //<----
-			~bufferScope.free; //<----
+			~audioBuf0Scope.free; //<----
 
 		}
 	);
 } );
 
-///LEVELS///
-
-~labelInputLevel = StaticText(w, Rect(687, 195, 12, 20) )
-.string_("IN")
-.font_(Font("Monaco", 10) )
-.align_(\center);
-
-~sliderInputLevel = Slider(w, Rect(684, 8, 17, 173) )
-.background_(Color(0.9, 0.0, 0.0, 0.2))
-.value_(1.0)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~inputLevelBus.set(val);
-	//~bufRecSynth.set(\mul, val);
-	~numBoxInputLevel.value_(val);
-	//~bufRecSynth.get(\mul, {arg mulval; mulval.postln;} );
-	//~inputLevelBus.get({arg val; val.postln;} );
-} );
-
-~numBoxInputLevel = NumberBox(w, Rect(682, 183, 26, 15))
-.value_(1.0)
-.clipLo_(0.0)
-.clipHi_(1.0)
-.decimals_(2)
-.font_(Font("Monaco", 8) )
-.scroll_step_(0.01)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~inputLevelBus.set(val);
-	~sliderInputLevel.value_(val);
-} );
+///---------- LEVELS ----------///
 
 ~sliderInStreamLevel = Slider(w, Rect(684, 242, 12, 73) )
 .background_(Color(0.0, 0.5, 0.9))
@@ -1428,37 +1493,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
-~labelOutputLevel = StaticText(w, Rect(730, 195, 20, 20) )
-.string_("OUT")
-.font_(Font("Monaco", 10) )
-.align_(\center);
-
-~numBoxOutputLevel = NumberBox(w, Rect(728, 183, 26, 15))
-.value_(1.0)
-.clipLo_(0.0)
-.clipHi_(1.0)
-.decimals_(2)
-.font_(Font("Monaco", 8) )
-.scroll_step_(0.01)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~outMainLevelBus.set(val);
-	~sliderOutputLevel.value_(val);
-} );
-
-~sliderOutputLevel = Slider(w, Rect(733, 8, 17, 173) )
-.background_(Color(0.0, 0.8, 0.2, 0.01))
-.value_(1.0)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~outMainLevelBus.set(val);
-	~numBoxOutputLevel.value_(val);
-} );
-
 ///////
 
 ~sliderRecPos = Slider(w, Rect(15, 212, 470, 20))
@@ -1466,8 +1500,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .action_( {
 	arg obj;
 	var pos;
-	//pos = obj.value.linlin(0, 1, 0, ((s.sampleRate * ~bufferSize) - 1)).round(1); //convert slider value to frame
-	pos = obj.value.linlin(0, 1, 0, ~buffer.numFrames - 1); //convert slider value to frame
+	//pos = obj.value.linlin(0, 1, 0, ((s.sampleRate * ~audioBuf0_dur) - 1)).round(1); //convert slider value to frame
+	pos = obj.value.linlin(0, 1, 0, ~audioBuf0.numFrames - 1); //convert slider value to frame
 	~recPhase.set ( //update ~recPhase phasor synth position....
 		\resetPos, pos,
 		\trig, 1
@@ -1480,7 +1514,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		{
 			~play2recOffset = pos - ((~delayTime * s.sampleRate).round(1));
 			if (~play2recOffset < 0,
-				{~lastPlayPhasePos = (~buffer.numFrames - 1) + ~play2recOffset;} ,
+				{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
 				{~lastPlayPhasePos = ~play2recOffset; }
 			);
 				if (~buttonPlay.value == 1, {~playPhase.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); //is this best way to do it or should I create a flag indicating whenever recPhase position is updated w/ click so that playPhase is updated w/ clock instead???
@@ -1494,13 +1528,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					 ~delayTime = ~play2recOffset/s.sampleRate;
 					},
 					{
-					 ~play2recOffset = ~buffer.numFrames - (pos - val);
+					 ~play2recOffset = ~audioBuf0.numFrames - (pos - val);
 					 ~delayTime = ~play2recOffset/s.sampleRate;
 					}
 				);
 			} );
 			~numBoxDel.value = ~delayTime;
-			//~sliderDelay.value = ~delayTime.linlin(0, ~bufferSize - 0.01, 0, 1); //obsolesced in 1.82
+			//~sliderDelay.value = ~delayTime.linlin(0, ~audioBuf0_dur - 0.01, 0, 1); //obsolesced in 1.82
 		}
 	 );
 	//SYNC functionality----------------
@@ -1510,12 +1544,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~numBoxRecPos = NumberBox(w, Rect(490, 208, 75, 25)) //numBox PlayPos
 .value_(0)
 .clipLo_(0)
-//.clipHi_(~bufferSize) //HOW COME UNCOMMENTING THIS MESSES UP THE GUI??????
+//.clipHi_(~audioBuf0_dur) //HOW COME UNCOMMENTING THIS MESSES UP THE GUI??????
 .font_(Font("Monaco", 14) )
 .decimals_(2);
 //.action_( {
 	//arg obj;
-	//~sliderRecPos.valueAction = obj.value / ~bufferSize; //<---
+	//~sliderRecPos.valueAction = obj.value / ~audioBuf0_dur; //<---
 //} );
 
 ~labelRecPos = StaticText(w, Rect(568, 182, 100, 80) )
@@ -1551,8 +1585,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 						"play2recOffset= ".post; ~play2recOffset.postln;
 						if (~play2recOffset < 0,
 							{
-								~lastPlayPhasePos = (~buffer.numFrames - 1) + ~play2recOffset; //if true, wrap around buffer
-								//newPlayPos = (~buffer.numFrames - 1) + ~play2recOffset;
+								~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset; //if true, wrap around buffer
+								//newPlayPos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
 							} ,
 							{
 								~lastPlayPhasePos = ~play2recOffset; //else normal subtraction
@@ -1560,18 +1594,18 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							}
 						);
 					} );
-					//~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~buffer, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, newPlayPos] );
+					//~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, newPlayPos] );
 					"lastPlayPhasePosafterOffsetAdjust".post; ~lastPlayPhasePos.postln;
 				} //,
 				//{
-					//~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~buffer, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] );
+					//~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] );
 				//}
 			); */ //<------------------------------^^^^^^^^^^^^^^^^^^^
 
 			//"--afterIf".postln;
 			//~lastPlayPhasePos.postln;
 
-			~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~buffer, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] ); //.asMap needs to follow control bus arguments for current values to constantly update phasor
+			~playPhase = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] ); //.asMap needs to follow control bus arguments for current values to constantly update phasor
 			~a2k = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
 			//~playBuf = Synth(\bufRead, [\amp, ~outMainLevelBus.asMap, \out, 0, \phaseBus, ~phaseBusPly] ); //orig
 			~playBuf = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly] );  //<!!!--NEW--!!!
@@ -1615,7 +1649,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .action_( {
 	arg obj;
 	var pos;
-	pos = obj.value.linlin(0, 1, 0, ~buffer.numFrames - 1).round(1); //convert slider value to frame
+	pos = obj.value.linlin(0, 1, 0, ~audioBuf0.numFrames - 1).round(1); //convert slider value to frame
 	~playPhase.set (  //is set the correct method??? //update ~playPhase phasor synth position....
 		\resetPos, pos,
 		\trig, 1
@@ -1628,7 +1662,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~numBoxPlayPos = NumberBox(w, Rect(490, 234, 75, 25))
 .value_(0)
 .clipLo_(0)
-//.clipHi_(~buffer.numFrames-1)
+//.clipHi_(~audioBuf0.numFrames-1)
 .font_(Font("Monaco", 14) )
 .decimals_(2);
 
@@ -1638,13 +1672,14 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .align_(\left);
 
 
-AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!!!!!!!!!!=======?????????????????????
+//----Turn this into routine????
+AppClock.sched(0.0, { //AppClock scheduler increments slider positions...
 	//THIS DOUBLE APPCLOCK ENCAPS IS NECESSARY FOR SOME REASON (otherwise errors thrown)
 	~phaseBusMonPly.get( {
 		arg val;
 		AppClock.sched(0.0, { //<--1111111BBBBBB??????????????????
-			//(val / (s.sampleRate * ~bufferSize)).postln; //uncomment to view sliderPlayPos from 0-1 (debugging)
-			~sliderPlayPos.value = val / (s.sampleRate * ~bufferSize); //update slider position
+			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1 (debugging)
+			~sliderPlayPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
 			~numBoxPlayPos.value = (val.round(1)/s.sampleRate).round(0.1); //convert frames to seconds and display
 			nil;
 		} );
@@ -1653,26 +1688,26 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 	~phaseBusMonRec.get( {
 		arg val;
 		AppClock.sched(0.0, { //<--errors thrown w/out this but still functions properly for some reason...why?
-			//(val / (s.sampleRate * ~bufferSize)).postln; //uncomment to view sliderPlayPos from 0-1
-			~sliderRecPos.value = val / (s.sampleRate * ~bufferSize); //update slider position
+			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1
+			~sliderRecPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
 			~numBoxRecPos.value = (val.round(1)/s.sampleRate).round(0.01) ; //convert frames to seconds and display
 
 			/* PLOTTER UPDATE CODE IN PROGRESS.........<<<<<<<<<<<<!!!!!!!!!!#########!!!!!!!!!!###########!!!!!!!!
 
-			//~buffer.getToFloatArray(wait:0.01, action: {arg array; a = array; ~bufPlot.value = a; ~bufPlot.refresh;} );
-			if (~buttonBuf.value == 1, {
+			//~audioBuf0.getToFloatArray(wait:0.01, action: {arg array; a = array; ~bufPlot.value = a; ~bufPlot.refresh;} );
+			if (~button_audioBuf_0.value == 1, {
 				//var bufCurrent;
 				AppClock.sched(0.0, {
-					~buffer.get(val, {
+					~audioBuf0.get(val, {
 						|bufVal|
-						~bufPlot.value = (0..(~buffer.numFrames - 1)).normalize(0, rrand(2,50)).sin;
-						//~bufPlot.value = bufVal.(0..(~buffer.numFrames - 1)).normalize;
+						~bufPlot.value = (0..(~audioBuf0.numFrames - 1)).normalize(0, rrand(2,50)).sin;
+						//~bufPlot.value = bufVal.(0..(~audioBuf0.numFrames - 1)).normalize;
 						~bufPlot.refresh;
 					} ); //<----------??????
 					nil;
 				} );
 			} );
-			//~bufPlot.value = ~buffer.read;
+			//~bufPlot.value = ~audioBuf0.read;
 			//~bufPlot.refresh;
 			*/
 			//<<<<<<<<<<<<!!!!!!!!!!#########!!!!!!!!!!###########!!!!!!!!
@@ -1719,17 +1754,6 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 	0.1;
 });
 
-/*AppClock.sched(0.5, { //test to monitor phasor value
-	~phaseBusMonPly.get( {
-		arg val;
-		val.postln;
-	} );
-	//~phaseBusMonPly.value.postln; //just posts info about bus, not its current stored value...
-	0.5;
-} );
-*/
-
-
 /////OTHER PLAYBACK PARAMETER CONTROLS/////
 ~sliderRecInOut = RangeSlider(w, Rect(15, 187, 470, 20)) //SLIDER => Play In/Out
 .lo_(0.0)
@@ -1740,9 +1764,9 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 
 	var recIn, recOut;
 
-	recIn = slider.lo.round(0.0001).linlin(0, 1.0, 0, ~buffer.numFrames - 1).round(1);
+	recIn = slider.lo.round(0.0001).linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
 	("recIn=" + recIn).postln;
-	recOut = slider.hi.round(0.0001).linlin(0, 1.0, 0, ~buffer.numFrames - 1).round(1);
+	recOut = slider.hi.round(0.0001).linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
 	("recOut=" + recOut).postln;
 
 	~recInPosBus.set(recIn);
@@ -1752,19 +1776,19 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 	~currentRecOutFrame = recOut;
 	("RecOutFrame=" + ~currentRecOutFrame).postln;
 
-	//~numBoxPlayIn.value_((playIn * ~bufferSize).round(0.1));
+	//~numBoxPlayIn.value_((playIn * ~audioBuf0_dur).round(0.1));
 	~numBoxRecIn.value_( (recIn / s.sampleRate).round(0.01) ); //
-	//~numBoxPlayIn.value_( (slider.lo.round(0.0001) * ~bufferSize).round(0.1)  );
+	//~numBoxPlayIn.value_( (slider.lo.round(0.0001) * ~audioBuf0_dur).round(0.1)  );
 
-	//~numBoxPlayOut.value_((playOut * ~bufferSize).round(0.1));
+	//~numBoxPlayOut.value_((playOut * ~audioBuf0_dur).round(0.1));
 	~numBoxRecOut.value_( (recOut / s.sampleRate).round(0.01) );
 } );
 
 ~numBoxRecIn = NumberBox(w, Rect(490, 187, 46, 20))
 .value_(0.0)
 .clipLo_(0.0)
-//.clipHi_(~bufferSize)
-.clipHi_(~numBoxBuf.clipHi)
+//.clipHi_(~audioBuf0_dur)
+.clipHi_(~numBox_audioBuf0_dur.clipHi)
 .font_(Font("Monaco", 12) )
 .decimals_(2);
 /*
@@ -1774,10 +1798,10 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 } ); */
 
 ~numBoxRecOut = NumberBox(w, Rect(535, 187, 46, 20))
-.value_(~bufferSize)
+.value_(~audioBuf0_dur)
 .clipLo_(0.0)
-//.clipHi_(~bufferSize)
-.clipHi_(~numBoxBuf.clipHi)
+//.clipHi_(~audioBuf0_dur)
+.clipHi_(~numBox_audioBuf0_dur.clipHi)
 .font_(Font("Monaco", 12) )
 .decimals_(2);
 /*
@@ -1801,26 +1825,26 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 	var playIn, playOut;
 
 	//playIn = slider.lo.round(0.0001);
-	playIn = slider.lo.round(0.0001).linlin(0, 1.0, 0, ~buffer.numFrames - 1).round(1);
+	playIn = slider.lo.round(0.0001).linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
 	("playIn=" + playIn).postln;
 	//playOut = slider.hi.round(0.0001);
-	playOut = slider.hi.round(0.0001).linlin(0, 1.0, 0, ~buffer.numFrames - 1).round(1);
+	playOut = slider.hi.round(0.0001).linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
 	("playOut=" + playOut).postln;
 
 	~playInPosBus.set(playIn);
-	//~currentPlayInFrame = playIn.linlin(0, 1.0, 0, ~buffer.numFrames - 1).round(1);
+	//~currentPlayInFrame = playIn.linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
 	~currentPlayInFrame = playIn;
 	("currentInFrame=" + ~currentPlayInFrame).postln;
 	~playOutPosBus.set(playOut);
-	//~currentPlayOutFrame = playOut.linlin(0, 1.0, 0, ~buffer.numFrames - 1).round(1);
+	//~currentPlayOutFrame = playOut.linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
 	~currentPlayOutFrame = playOut;
 	("currentOutFrame=" + ~currentPlayOutFrame).postln;
 
-	//~numBoxPlayIn.value_((playIn * ~bufferSize).round(0.1));
+	//~numBoxPlayIn.value_((playIn * ~audioBuf0_dur).round(0.1));
 	~numBoxPlayIn.value_( (playIn / s.sampleRate).round(0.01) ); //
-	//~numBoxPlayIn.value_( (slider.lo.round(0.0001) * ~bufferSize).round(0.1)  );
+	//~numBoxPlayIn.value_( (slider.lo.round(0.0001) * ~audioBuf0_dur).round(0.1)  );
 
-	//~numBoxPlayOut.value_((playOut * ~bufferSize).round(0.1));
+	//~numBoxPlayOut.value_((playOut * ~audioBuf0_dur).round(0.1));
 	~numBoxPlayOut.value_( (playOut / s.sampleRate).round(0.01) );
 } );
 
@@ -1832,8 +1856,8 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 ~numBoxPlayIn = NumberBox(w, Rect(490, 260, 46, 20))
 .value_(0.0)
 .clipLo_(0.0)
-//.clipHi_(~bufferSize)
-.clipHi_(~numBoxBuf.clipHi)
+//.clipHi_(~audioBuf0_dur)
+.clipHi_(~numBox_audioBuf0_dur.clipHi)
 .font_(Font("Monaco", 12) )
 .decimals_(2);
 /*
@@ -1843,10 +1867,10 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...<<!!!!!
 } ); */
 
 ~numBoxPlayOut = NumberBox(w, Rect(535, 260, 46, 20))
-.value_(~bufferSize)
+.value_(~audioBuf0_dur)
 .clipLo_(0.0)
-//.clipHi_(~bufferSize)
-.clipHi_(~numBoxBuf.clipHi)
+//.clipHi_(~audioBuf0_dur)
+.clipHi_(~numBox_audioBuf0_dur.clipHi)
 .font_(Font("Monaco", 12) )
 .decimals_(2)
 /*
