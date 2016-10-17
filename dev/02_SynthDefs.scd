@@ -17,8 +17,7 @@ SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 // Takes audio-rate input phase to control the buffer position
 SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
   arg amp=1, out=0, phaseBus, buf;
-  var sig;
-  sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus));
+  var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus));
   sig = sig * amp;
   //~sliderPlayPos.value_(ptr);
   Out.ar(out, sig);
@@ -26,7 +25,8 @@ SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
 
 // Phasor indexes through buffer at audio rate
 SynthDef(\phasor, {
-	arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
+	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
+	arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf), resetPos = 0;
 	//Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start * BufFrames.kr(buf), (end * BufFrames.kr(buf)) - 1, resetPos ) );
 	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
 }).add;

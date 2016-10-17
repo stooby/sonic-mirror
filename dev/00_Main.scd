@@ -1,3 +1,5 @@
+//REC IN AND REC OUT ARE WORKING....SAMPLE PLAYBACK IS NOT WORKING.....
+
 //Sonic Mirror - 00_Main:
 
 //== Main Performance Doc ==
@@ -20,12 +22,14 @@ Buffer.freeAll; //for cleanup
 ~audioBuf0_dur = 60.0;
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
 
+~dummyBuf = Buffer.alloc(s, 44100, 1);
+
 ~delayTime = 1.23;
 ~play2recOffset; //displacement of playhead pos from rec pos (in frames/samples)
 ~lastPlayPhasePos = 0; //for resume functionality - stores last pos (frame) of play head before playback disabled
 ~lastRecPhasePos = 0; //for resume functionality - stores last pos (frame) of rec head before recording disabled
-~playTrig = false;
-~recTrig = false;
+~playPosLatchTrig = false;
+~recPosLatchTrig = false;
 ~fixPlayRecOffset = false;
 
 ~loCutVal_in = 90; //<-----NEW initialization val for loCut (and also stores ongoing values?)
@@ -55,10 +59,11 @@ Buffer.freeAll; //for cleanup
 ~pitchShiftMix_prevChangeTime = 0;
 ~pitchShiftMix_interp = false;
 
-~currentPlayInFrame = 0;
-~currentPlayOutFrame = ~audioBuf0_dur * s.sampleRate - 1; //~audioBuf0.numFrames - 1; (won't work unless ~audioBuf0's already been allocated...)
-~currentRecInFrame = 0;
-~currentRecOutFrame = ~audioBuf0_dur * s.sampleRate - 1;
+~playInFrame = 0;  //<--- consider renaming
+~playOutFrame = ~audioBuf0_dur * s.sampleRate - 1; //~audioBuf0.numFrames - 1; (won't work unless ~audioBuf0's already been allocated...)
+
+~recInFrame = 0;
+~recOutFrame = ~audioBuf0_dur * s.sampleRate - 1;
 
 ~playBehavior = 0; //stores state of playback behavior
 ~hearSound = false; //<---NEW: for machine listening
@@ -66,9 +71,9 @@ Buffer.freeAll; //for cleanup
 
 //(RESET BUS VALUES FOR INITIALIZATION OF SKETCH)
 ~playInPosBus.set(0);
-~playOutPosBus.set(~currentPlayOutFrame);
+~playOutPosBus.set(~playOutFrame);
 ~recInPosBus.set(0);
-~recOutPosBus.set(~currentRecOutFrame);
+~recOutPosBus.set(~recOutFrame);
 
 ~rateBus.set(1);
 ~pitchBus.set(1);
@@ -89,6 +94,13 @@ Buffer.freeAll; //for cleanup
 ~loCutBus_in.set(~loCutVal_in); //<---NEW
 ~loCutBus_out.set(~loCutVal_out); //<----NEW
 //-----------------
+
+// --------- SET UP SOME INITIAL SYNTHS? ------------  <----------!! ??
+//Synth(\mainOut)  at least this one.... to enable play back of audio files when main buffer audio not being played back.....  <------------!!!!!!!!!!!!!!!!!!!
+
+//Synth(\pitchShift1)???
+
+//-------------------
 
 ////
 Window.closeAll;
@@ -242,7 +254,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //--------------------------------
 
-//--------- Soundfile Rec / Playback ---------------     <----------!!!!!!!!
+
+//--------- Soundfile Rec / Playback ---------------
 
 //--put these variables back w/ the rest of env variables at some point??--
 
@@ -252,11 +265,11 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~recSamp_input_startTime; //<---NEW: ....should I store this info in a contol bus?
 ~recSamp_input_stopTime; //<---NEW: .....should I store this info in a contol bus?
 
-~playSamp = false; //<---NEW: play audio file from disk flag
+~playSamp = false; //<--- flag:  playing audio file from disk
 
 ~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 
-~audioBuf_play0 = Buffer.alloc(s, 65536, 1); //<---MIGHT NOT BE NECESSARY HERE...declared and freed in routine...
+~audioBuf_play0 = Buffer.alloc(s, 65536, 1); //<---- maybe remove this from here...
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
@@ -291,15 +304,18 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			interpSynth = Synth(\LinInterp_num, [\startVal, 0.0, \stopVal, 1.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //turn inStreamLevel back to 1.0 in 0.2 sec (++++\startVal should probs = variable storing current value of inputStreamLevel++++)
 			~slider_inFlow1_level.value = 1;  //update GUI
 			~numBox_inFlow1_level.value = 1; //update GUI
+
 			0.2.yield;  //<----is this necessary????
+
+			~audioBuf_play0.close; //<----IS THIS NECESSARY IF GOING TO REASSIGN LATER, SHOULD I ONLY DO THIS DURING FINAL CLEANUP????
+			~audioBuf_play0.free; //<----IS THIS NECESSARY HERE????
+			~audioBuf_play0 = Buffer.alloc(s, 65536, 1);  //<---
 
 			~playSamp = false;
 			~button_playSamp.value = 0; //update GUI button
 
-			~audioBuf_play0.close; //<----IS THIS NECESSARY IF GOING TO REASSIGN LATER, SHOULD I ONLY DO THIS DURING FINAL CLEANUP????
-			~audioBuf_play0.free; //<----IS THIS NECESSARY HERE????
-			~audioBuf_play0 = Buffer.alloc(s, 65536, 1);  //<----IS THIS NECESSARY HERE? already declared as env variable
-			time2yield = rrand(12, 35); //<-----TIME RANGE - TRIGGER RATE (IN SEC).....
+			time2yield = rrand(3, 5);
+			//time2yield = rrand(12, 35); //<-----TIME RANGE - TRIGGER RATE (IN SEC).....
 			("---time2nextSoundPlay=" ++ time2yield ++ "sec").postln;
 			time2yield.yieldAndReset;
 		},
@@ -307,18 +323,31 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			if (~recSamp_input == false,
 				{
 					if (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback, //if min # of files have been written
-						{
+						{//.....currently triggers random sample every time routine is played...DEVELOP....
+
+							//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
+							//---e.g. routines checking machine listening ugen output control busses...
+							//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
+							//----~loudness.get(
+							//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
+
 							//PLAYBACK AUDIO FILE FROM DISK
 							var readDiskSynth, interpSynth, readFileFunc, randFilePick, duration;
 
 							~playSamp = true; //set flag
+
 							randFilePick = rrand(0, (~fileAudio_writeIn_nameNum - 1)); //pick a random file to play (needs to be "current nameNum counter val - 1" b/c current counter value doesn't have a file associated w/ it yet due to counter incrementing after a new file has been written...)
-							("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
-							~button_playSamp.value = 1; //update GUI
+
+							//<----***could alternatively insert other file picking behaviors or mappings here****
+
+
+							//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
+
+							//OR REWRITE AND USE Buffer.read and phasor to playback audio files !!!!!!!!
 
 							readDiskSynth = Synth.basicNew(\readDisk);
 
-							readFileFunc = { arg buf;
+							readFileFunc = { arg buf;  //completion func for .cueSoundFile of audioBuf
 								var fileDir, soundFile;
 								fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath;
 								soundFile = SoundFile.new;
@@ -327,8 +356,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								//duration = soundFile.duration;
 								//("soundFileDur=" + duration).postln;
 								soundFile.close;
-								readDiskSynth.addToHeadMsg(nil, [\buf, buf, \sampleDur, duration, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]) //<---now w/ amp control
+								readDiskSynth.addToHeadMsg(nil, [\buf, buf, \sampleDur, duration, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]) //create readDiskSynth to play back audio file
 							};
+							//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
+
+
+							//get current signal flow/chain level val from ~inputStreamLevelBus and assign to local variable used for \startVal arg in interpSynth below...
 
 							interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.2 sec (***startVal should probs = variable storing current value of inputStreamLevel***
 							~slider_inFlow1_level.value = 0;  //update GUI
@@ -337,6 +370,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							0.2.yield;  //<---routine fails w/out this sometimes, is there a better way to do this w/out adding latency?
 
 							~audioBuf_play0 = Buffer.cueSoundFile(s, (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath, 0, 1, completionMessage: readFileFunc);  //PLAY SOUND FILE from disk
+
+							("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
+							~button_playSamp.value = 1; //update GUI
 
 							(duration + 0.2).yieldAndReset; //<-------might not be necessary to add 0.2 sec, experiment
 						},
@@ -431,7 +467,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{
-			~button_recIn.valueAction = 1;
+			~button_recIn.valueAction = 1;  //<---NOT GOOD IN LONG RUN...CREATE FUNCTION TO TRIGGER AUDIO FILE WRITING SYNTHS...
 			~button_recOut.valueAction = 1;
 		},
 		{
@@ -460,7 +496,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		} );
 } );
 
-~label_playSamp = StaticText(w, Rect(130, 373, 135, 20) ) //<------NEW
+~label_playSamp = StaticText(w, Rect(130, 373, 135, 20) )
 .string_("FILENAMEFILENAME...")
 .font_(Font("Monaco", 12) )
 .align_(\left);
@@ -470,7 +506,74 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //++++ADD BUFFSCOPE FOR PLAYING / LOADED AUDIO FILE(s) (make into re-usable view for GUI of multi-channel & multi-sample playback)
 
-//////////////////--------------------------
+//--------------------------
+
+
+///---------- LEVELS ----------///
+
+~slider_inFlow1_level = Slider(w, Rect(684, 242, 12, 73) )
+.background_(Color(0.0, 0.5, 0.9))
+.value_(1.0)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~inputStreamLevelBus.set(val);
+	~numBox_inFlow1_level.value_(val);
+} );
+
+~numBox_inFlow1_level = NumberBox(w, Rect(678, 315, 26, 15))
+.value_(1.0)
+.clipLo_(0.0)
+.clipHi_(1.0)
+.decimals_(2)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.01)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~inputStreamLevelBus.set(val);
+	~slider_inFlow1_level.value_(val);
+} );
+
+~label_inFlow1_level = StaticText(w, Rect(670, 332, 40, 8) )
+.string_("IN+FX")
+.font_(Font("Monaco", 10) )
+.align_(\center);
+
+~slider_sampOut_level = Slider(w, Rect(715, 242, 12, 73) )
+.background_(Color(0.0, 0.8, 0.2))
+.value_(1.0)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~fileOutputLevelBus.set(val);
+	~numBox_sampOut_level.value_(val);
+} );
+
+~numBox_sampOut_level = NumberBox(w, Rect(709, 315, 26, 15))
+.value_(1.0)
+.clipLo_(0.0)
+.clipHi_(1.0)
+.decimals_(2)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.01)
+.action_( {
+	arg obj;
+	var val;
+	val = obj.value.round(0.01);
+	~fileOutputLevelBus.set(val);
+	~slider_sampOut_level.value_(val);
+} );
+
+~label_sampOut_level = StaticText(w, Rect(707, 332, 32, 8) )
+.string_("FILE")
+.font_(Font("Monaco", 10) )
+.align_(\center);
+
+//----------
 
 
 //------ DELAY OFFSET -------
@@ -1116,7 +1219,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		0.1.yield; //<--not sure if needed...not ideal and crude
 
 		if (~lastRecPhasePos < ~lastPlayPhasePos, //measure distance between rec and play - if rec's wrapped around to start of buffr before play
-			{currentTimeOffset = ( (~currentPlayOutFrame - ~currentPlayInFrame) - (~lastPlayPhasePos - ~lastRecPhasePos) ) / (s.sampleRate); } ,
+			{currentTimeOffset = ( (~playOutFrame - ~playInFrame) - (~lastPlayPhasePos - ~lastRecPhasePos) ) / (s.sampleRate); } ,
 			{currentTimeOffset = (~lastRecPhasePos - ~lastPlayPhasePos)/(s.sampleRate); } //else measure offset if no wrap around has occured (will happen most of the time)
 		);
 		currentTimeOffset = currentTimeOffset.round(0.01);
@@ -1132,16 +1235,16 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				{newOffsetPos = (~audioBuf0.numFrames - 1) + newOffsetPos;} //wrap around buffer if negative position generated
 				); */
 
-				if ( (~currentPlayInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
-					newOffsetPos = ~currentPlayOutFrame + newOffsetPos; //wrap around buffer if negative position generated
+				if ( (~playInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
+					newOffsetPos = ~playOutFrame + newOffsetPos; //wrap around buffer if negative position generated
 					if (newOffsetPos < 0, {
 						/*newOffsetPos = 0;*/ //think this could potentially cause issues if current recPos = 0 too...
 						newOffsetPos = ~lastRecPhasePos + 1000;} ); //to avoid never ending loop if result is still < 0
 				} );
 
-				if ( (~currentPlayInFrame > 0) && (newOffsetPos < ~currentPlayInFrame), { //safe driving: case 2
-					newOffsetPos = newOffsetPos + (~currentPlayOutFrame - ~currentPlayInFrame);
-					if (newOffsetPos < ~currentPlayInFrame, {newOffsetPos = ~lastRecPhasePos + 1000;}); //to avoid never-ending loop
+				if ( (~playInFrame > 0) && (newOffsetPos < ~playInFrame), { //safe driving: case 2
+					newOffsetPos = newOffsetPos + (~playOutFrame - ~playInFrame);
+					if (newOffsetPos < ~playInFrame, {newOffsetPos = ~lastRecPhasePos + 1000;}); //to avoid never-ending loop
 				} );
 
 				~phasor_play.set(\resetPos, newOffsetPos, \trig, 1); //set new position of playPhase (move playHead)
@@ -1153,16 +1256,16 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				newOffsetAmount = rrand(0.5, 2.75); //generate random offset amount (in seconds)
 				newOffsetPos = ~lastRecPhasePos - ((newOffsetAmount * s.sampleRate).round(1)); //deduce new playPhase position based on newOffsetAmount (convert to frames)
 
-				if ( (~currentPlayInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
-					newOffsetPos = ~currentPlayOutFrame + newOffsetPos; //wrap around buffer if negative position generated
+				if ( (~playInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
+					newOffsetPos = ~playOutFrame + newOffsetPos; //wrap around buffer if negative position generated
 					if (newOffsetPos < 0, {
 						/*newOffsetPos = 0;*/ //think this could potentially cause issues if current recPos = 0 too...
 						newOffsetPos = ~lastRecPhasePos + 1000;} ); //to avoid never ending loop if result is still < 0
 				} );
 
-				if ( (~currentPlayInFrame > 0) && (newOffsetPos < ~currentPlayInFrame), { //safe driving: case 2
-					newOffsetPos = newOffsetPos + (~currentPlayOutFrame - ~currentPlayInFrame);
-					if (newOffsetPos < ~currentPlayInFrame, {newOffsetPos = ~lastRecPhasePos + 1000;}); //to avoid never-ending loop
+				if ( (~playInFrame > 0) && (newOffsetPos < ~playInFrame), { //safe driving: case 2
+					newOffsetPos = newOffsetPos + (~playOutFrame - ~playInFrame);
+					if (newOffsetPos < ~playInFrame, {newOffsetPos = ~lastRecPhasePos + 1000;}); //to avoid never-ending loop
 				} );
 
 				~phasor_play.set(\resetPos, newOffsetPos, \trig, 1); //set new position of playPhase (move playHead)
@@ -1319,11 +1422,21 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1, // when REC button enabled (start recording to buffer)
 		{
-			~phasor_rec = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~audioBuf0, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap, \trig, 0, \resetPos, ~lastRecPhasePos] ); //***can experiment w/ in/out locking w/ in/OutPosBus or fixed pos at beg and end of buf...***
-			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] );
-			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ); //<----NEW!!!!!!
+			if ((~lastRecPhasePos >= ~recInFrame) && (~lastRecPhasePos <= ~recOutFrame), {
+				//if rec head is still w/in rec In/Out range
+				~phasor_rec = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~audioBuf0, \rate, 1, \start, ~lastRecPhasePos, \end, ~recOutPosBus.asMap] ).moveToHead;
+				~recPosLatchTrig = true; //used to trigger reset of \start arg to ~recInPosBus.asMap after init
+			} , { //else ~lastRecPhasePos is outside of rec In/Out range
+				~phasor_rec = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~audioBuf0, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap] ).moveToHead;  //have phasor start at ~recInFrame
+			} );
+
+			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec);
+
+			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
+
+			NodeWatcher.register(~bufRecorder);
+
 			//~lastRecPhasePos.value.postln;
-			~recTrig = true;  //used to reset recHead to last pos after button reset
 
 			//////////////SCOPE
 
@@ -1399,17 +1512,22 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			//"--afterIf".postln;
 			//~lastPlayPhasePos.postln;
 
-			~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] ); //.asMap needs to follow control bus arguments for current values to constantly update phasor
-			~a2k_play = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
-			~bufPlayer = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly] );  //<!!!--NEW--!!!
-			~playTrig = true; //used to reset playHead to last pos after button reset
-			//~lastPlayPhasePos.postln; //for debugging...
+			if ((~lastPlayPhasePos >= ~playInFrame) && (~lastPlayPhasePos <= ~playOutFrame), {
+				//if play head is still w/in play In/Out range
+				~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~lastPlayPhasePos, \end, ~playOutPosBus.asMap] );
+				~playPosLatchTrig = true; //used to start playPhasor at lastPlayPhasePos
+			} , { //else ~lastPlayPhasePos is outside of play In/Out range
+				~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap] );  //have phasor start at ~playInFrame
+			} );
 
-			//~pShift = Synth.after(~bufPlayer, \pitchShifter,
-				//[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]);
+			if (~bufRecorder.isRunning, {~phasor_play.moveAfter(~bufRecorder);});
+
+			~a2k_play = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]).moveAfter(~phasor_play); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
+
+			~bufPlayer = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly, \buf, ~audioBuf0] ).moveAfter(~a2k_play);
+
 			~pShift = Synth(\pitchShifter,
-				[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]);
-			~pShift.moveAfter(~bufPlayer);
+				[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]).moveAfter(~bufPlayer);
 
 			~pShiftMix = Synth(\XFade, [
 			\in1, ~playOut1Bus,
@@ -1417,16 +1535,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			\out, ~outMainBus,
 			\amountControlBus, ~pitchShiftMixValBus.asMap,
 			\amp, ~inputStreamLevelBus.asMap //<--NEW
-			] );
-			~pShiftMix.moveAfter(~pShift);
+			] ).moveAfter(~pShift);
 
-			~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);
+			~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);  //<----MOVE THIS OUTTA HERE.... init on startup......
 		} ,
 		{
 			//"-PlayBackOff-".postln;
-			("playb4Get=" + ~lastPlayPhasePos).postln;
-			~phaseBusMonPly.get( {arg val; ~lastPlayPhasePos = val; ("playInGet=" + val).postln;} );
-			("playAfterGet=" + ~lastPlayPhasePos).postln;
+			~phaseBusMonPly.get( {|val| ~lastPlayPhasePos = val;} );
 			~phasor_play.free;
 			~a2k_play.free;
 			~bufPlayer.free;
@@ -1547,12 +1662,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	arg obj;
 	var pos;
 	pos = obj.value.linlin(0, 1, 0, ~audioBuf0.numFrames - 1).round(1); //convert slider value to frame
-	~phasor_play.set (  //is set the correct method??? //update ~phasor_play phasor synth position....
-		\resetPos, pos,
-		\trig, 1
-	);
+	~phasor_play.set (\resetPos, pos, \trig, 1);
 	~numBox_playPos.value = (pos/s.sampleRate).round(0.01); //convert frames to seconds and display
-	//~numBox_playPos.value_(pos/s.sampleRate).round(0.1); //convert frames to seconds and display
 } )
 .value_(0.0);
 
@@ -1584,11 +1695,11 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("recOut=" + recOut).postln;
 
 	~recInPosBus.set(recIn);
-	~currentRecInFrame = recIn;
-	("RecInFrame=" + ~currentRecInFrame).postln;
+	~recInFrame = recIn;
+	("RecInFrame=" + ~recInFrame).postln;
 	~recOutPosBus.set(recOut);
-	~currentRecOutFrame = recOut;
-	("RecOutFrame=" + ~currentRecOutFrame).postln;
+	~recOutFrame = recOut;
+	("RecOutFrame=" + ~recOutFrame).postln;
 
 	//~numBox_playIn.value_((playIn * ~audioBuf0_dur).round(0.1));
 	~numBox_recIn.value_( (recIn / s.sampleRate).round(0.01) ); //
@@ -1646,13 +1757,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("playOut=" + playOut).postln;
 
 	~playInPosBus.set(playIn);
-	//~currentPlayInFrame = playIn.linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
-	~currentPlayInFrame = playIn;
-	("currentInFrame=" + ~currentPlayInFrame).postln;
+	//~playInFrame = playIn.linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
+	~playInFrame = playIn;
+	("currentInFrame=" + ~playInFrame).postln;
 	~playOutPosBus.set(playOut);
-	//~currentPlayOutFrame = playOut.linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
-	~currentPlayOutFrame = playOut;
-	("currentOutFrame=" + ~currentPlayOutFrame).postln;
+	//~playOutFrame = playOut.linlin(0, 1.0, 0, ~audioBuf0.numFrames - 1).round(1);
+	~playOutFrame = playOut;
+	("currentOutFrame=" + ~playOutFrame).postln;
 
 	//~numBox_playIn.value_((playIn * ~audioBuf0_dur).round(0.1));
 	~numBox_playIn.value_( (playIn / s.sampleRate).round(0.01) ); //
@@ -1811,73 +1922,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //----------
 
-///---------- LEVELS ----------///
-
-~slider_inFlow1_level = Slider(w, Rect(684, 242, 12, 73) )
-.background_(Color(0.0, 0.5, 0.9))
-.value_(1.0)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~inputStreamLevelBus.set(val);
-	~numBox_inFlow1_level.value_(val);
-} );
-
-~numBox_inFlow1_level = NumberBox(w, Rect(678, 315, 26, 15))
-.value_(1.0)
-.clipLo_(0.0)
-.clipHi_(1.0)
-.decimals_(2)
-.font_(Font("Monaco", 8) )
-.scroll_step_(0.01)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~inputStreamLevelBus.set(val);
-	~slider_inFlow1_level.value_(val);
-} );
-
-~label_inFlow1_level = StaticText(w, Rect(670, 332, 40, 8) )
-.string_("IN+FX")
-.font_(Font("Monaco", 10) )
-.align_(\center);
-
-~slider_sampOut_level = Slider(w, Rect(715, 242, 12, 73) )
-.background_(Color(0.0, 0.8, 0.2))
-.value_(1.0)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~fileOutputLevelBus.set(val);
-	~numBox_sampOut_level.value_(val);
-} );
-
-~numBox_sampOut_level = NumberBox(w, Rect(709, 315, 26, 15))
-.value_(1.0)
-.clipLo_(0.0)
-.clipHi_(1.0)
-.decimals_(2)
-.font_(Font("Monaco", 8) )
-.scroll_step_(0.01)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~fileOutputLevelBus.set(val);
-	~slider_sampOut_level.value_(val);
-} );
-
-~label_sampOut_level = StaticText(w, Rect(707, 332, 32, 8) )
-.string_("FILE")
-.font_(Font("Monaco", 10) )
-.align_(\center);
-
-///////
-
-
 //--------- GUI UPDATER (turn into routine?) ---------------
 
 AppClock.sched(0.0, { //AppClock scheduler increments slider positions...
@@ -1923,23 +1967,22 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...
 		} );
 	} );
 
-	if (~button_playBuf.value == 1, { //I think this intermittently buggy, but not able to reliably reproduce.....consider moving to SystemClock????
-		if (~playTrig == true,
+	if (~button_playBuf.value == 1, {
+		if (~playPosLatchTrig == true,
 			{
-				~phasor_play.set(\trig, 1); //trigger to move phasor pos
-				~playTrig = false;
-			} ,
-			{ //else
+				~phasor_play.set(\start, ~playInPosBus.asMap); //reset phasor \start to ~playInPosBus.asMap after initalizing at ~lastPlayPhasePos (permits resuming playback from last read pos in buffer when playHead still w/in play In/Out range after buff playback turned off)
+				~playPosLatchTrig = false;
+			} , { //else
 				~phasor_play.get(\trig, { |trigval| if (trigval > 0) {~phasor_play.set(\trig, 0) ;} } ); //reset trigger val to 0 if prev triggered
 			}
 		);
 	} );
 
-	if (~button_recBuf.value == 1, { //I think this intermittently buggy, but not able to reliably reproduce.....
-		if (~recTrig == true,
+	if (~button_recBuf.value == 1, {
+		if (~recPosLatchTrig == true,
 			{
-				~phasor_rec.set(\trig, 1); //trigger to move phasor pos
-				~recTrig = false;
+				~phasor_rec.set(\start, ~recInPosBus.asMap);  //reset phasor start to ~recInPos after initially starting phasor synth (permits resuming recording from last read pos in buffer)
+				~recPosLatchTrig = false;
 			} ,
 			{ //else
 				~phasor_rec.get(\trig, { |trigval| if (trigval > 0) {~phasor_rec.set(\trig, 0) ;} } ); //reset trigger val to 0 if prev triggered
