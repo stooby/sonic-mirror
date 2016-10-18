@@ -15,12 +15,22 @@ SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 } ).add;
 
 // Takes audio-rate input phase to control the buffer position
+SynthDef.new(\bufRead_noLoop, {
+	arg buf, rate = 1, amp=1, out=0;
+	var sig, frames, dur, env, phasor;
+	frames = BufFrames.kr(buf);
+	dur = frames / BufSampleRate.kr(buf); // in seconds
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.03), releaseTime: 0.02, level: 1);
+	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames);
+	sig = BufRd.ar(1, buf, phasor, loop: 0) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
 SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
-  arg amp=1, out=0, phaseBus, buf;
-  var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus));
-  sig = sig * amp;
-  //~sliderPlayPos.value_(ptr);
-  Out.ar(out, sig);
+	arg amp=1, out=0, phaseBus, buf;
+	var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus));
+	sig = sig * amp;
+	Out.ar(out, sig);
 } ).add;
 
 // Phasor indexes through buffer at audio rate

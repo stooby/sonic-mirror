@@ -95,9 +95,8 @@ Buffer.freeAll; //for cleanup
 ~loCutBus_out.set(~loCutVal_out); //<----NEW
 //-----------------
 
-// --------- SET UP SOME INITIAL SYNTHS? ------------  <----------!! ??
-//Synth(\mainOut)  at least this one.... to enable play back of audio files when main buffer audio not being played back.....  <------------!!!!!!!!!!!!!!!!!!!
-
+// --------- SET UP SOME INITIAL SYNTHS? ------------
+~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);
 //Synth(\pitchShift1)???
 
 //-------------------
@@ -269,7 +268,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 
-~audioBuf_play0 = Buffer.alloc(s, 65536, 1); //<---- maybe remove this from here...
+//~audioBuf_play0 = Buffer.alloc(s, 65536, 1); //<---- maybe remove this from here...
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
@@ -490,9 +489,28 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		obj.value == 1,
 		{//BEGIN PLAYING AUDIO FILE
 			//play random or pre-selected or wildcard, etc. file(s) from sample folder?
+
+			if (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback,
+				{
+					var randFilePick, fileDir;
+					~playSamp = true;  //yes or no?
+					randFilePick = rrand(0, (~fileAudio_writeIn_nameNum - 1));
+					fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath;
+					fileDir.postln;
+					~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
+						~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+						NodeWatcher.register(~samp0);
+
+						//---put routine here that will turn off button when sample playback complete? ----
+					});
+				}
+			);
+
 		} ,
-		{//STOP RECORDING / WRITING AUDIO INPUT TO FILE
-			//stop playing random file from sample folder
+		{//STOP Sample playback
+			~playSamp = false; //yes or no?
+			if (~samp0.isRunning, {~samp0.free;});
+			~audioBuf_play0.free;
 		} );
 } );
 
@@ -1434,7 +1452,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
 
-			NodeWatcher.register(~bufRecorder);
+			NodeWatcher.register(~bufRecorder); //this ensures all synths associated w/ buf play back are positioned after all these buf recording synths in the node-tree, no matter when they're created
 
 			//~lastRecPhasePos.value.postln;
 
@@ -1520,7 +1538,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap] );  //have phasor start at ~playInFrame
 			} );
 
-			if (~bufRecorder.isRunning, {~phasor_play.moveAfter(~bufRecorder);});
+			if (~bufRecorder.isRunning, {~phasor_play.moveAfter(~bufRecorder);}); //safer node-tree order
 
 			~a2k_play = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]).moveAfter(~phasor_play); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
 
@@ -1537,7 +1555,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			\amp, ~inputStreamLevelBus.asMap //<--NEW
 			] ).moveAfter(~pShift);
 
-			~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);  //<----MOVE THIS OUTTA HERE.... init on startup......
+			//~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);  //<----MOVE THIS OUTTA HERE.... init on startup......
 		} ,
 		{
 			//"-PlayBackOff-".postln;
@@ -1549,7 +1567,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 			~pShift.free;
 			~pShiftMix.free;
-			~mainOut.free;
+			//~mainOut.free;
 		} );
 } );
 
