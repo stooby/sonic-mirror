@@ -478,6 +478,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			if (~samp0.isRunning, { //free sample playback synth and buffer if it's still running when this button is turned off / ~autoPlay routine is stopped
 				~samp0.free;
 				~audioBuf_play0.free;
+				~playSamp = false;
+				~button_playSamp.value = 0;
 			});
 		}
 	);

@@ -32,4 +32,17 @@
 
 ~outMainLevelBus = Bus.control(s, 1);
 ~outMainBus = Bus.audio(s, 1);
+
+// Busses for Feature Extractor Synths (from SCML) ---------------
+
+~bus_loudness = Bus.control(s, 1);
+~bus_rms = Bus.control(s, 1);
+~bus_mfcc = Bus.control(s, 13);
+~bus_pitch = Bus.control(s, 2);
+~bus_pitch2 = Bus.control(s, 3);
+~bus_specCent = Bus.control(s, 1);
+~bus_specFlat = Bus.control(s, 1);
+~bus_onsets = Bus.control(s, 1);
+
+~bus_input1 = Bus.audio(s, 1);  //<---not sure if I need this at the moment....
 );
