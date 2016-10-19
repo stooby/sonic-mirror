@@ -300,6 +300,84 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
 			var time2yield, interpSynth;
 
+			if (~bufPlayer.isRunning, {
+				interpSynth = Synth(\LinInterp_num, [\startVal, 0.0, \stopVal, 1.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //turn inStreamLevel back to 1.0 in 0.2 sec (++++\startVal should probs = variable storing current value of inputStreamLevel++++)
+				~slider_inFlow1_level.value = 1;  //update GUI
+				~numBox_inFlow1_level.value = 1; //update GUI
+				//0.2.yield;  //not necessary, since sound's stopped by this point...
+			});
+
+			~audioBuf_play0.free;
+			~playSamp = false;
+			~button_playSamp.value = 0; //update GUI button
+
+			time2yield = rrand(3, 5);
+			//time2yield = rrand(12, 35); //<-----TIME RANGE - TRIGGER RATE (IN SEC).....
+			("---time2nextSoundPlay=" ++ time2yield ++ "sec").postln;
+			time2yield.yieldAndReset;
+		},
+		{//if not playing a soundFile, ~playSamp == false
+			if (~recSamp_input == false,
+				{
+					if (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback, //if min # of files have been written
+						{//.....currently triggers random sample every time routine is played...DEVELOP....
+
+							//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
+							//---e.g. routines checking machine listening ugen output control busses...
+
+							//PLAYBACK AUDIO FILE FROM DISK
+							//var readDiskSynth, interpSynth, readFileFunc, randFilePick, duration;
+							var interpSynth, randFilePick, fileDir, duration;
+
+							if (~bufPlayer.isRunning, { //if playing buffer audio, silence it for audio sample playback
+								//get current signal flow/chain level val from ~inputStreamLevelBus and assign to local variable used for \startVal arg in interpSynth below...
+								interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.2 sec (***startVal should probs = variable storing current value of inputStreamLevel***
+								~slider_inFlow1_level.value = 0;  //update GUI
+								~numBox_inFlow1_level.value = 0; //update GUI
+								("~bufPlayer.isRunning - 0.2.yield").postln;
+								0.2.yield;
+							});
+							("--after checking ~bufPlayer.isRunning").postln;
+							~playSamp = true; //set flag
+
+							randFilePick = rrand(0, (~fileAudio_writeIn_nameNum - 1)); //pick a random file to play (needs to be "current nameNum counter val - 1" b/c current counter value doesn't have a file associated w/ it yet due to counter incrementing after a new file has been written...)
+
+							//<----***could alternatively insert other file picking behaviors or mappings here****
+
+							//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
+							fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath;
+
+							//PLAY SOUND FILE from disk
+							~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
+								duration = buffer.numFrames/s.sampleRate;
+								~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+								NodeWatcher.register(~samp0);
+
+								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
+
+							});
+							~button_playSamp.value = 1; //update GUI
+							("Pre-yield samp Dur = " ++ duration).postln;
+							0.1.yield;  //<---UNFORTUNATE YIELD needed to update duration variable...
+							("Post-yield samp Dur = " ++ duration).postln;
+							(duration + 0.02).yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
+							//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
+						},
+						{15.yieldAndReset;} //<------------ wait if not enough files have been written yet
+					);
+				},
+				{5.yieldAndReset;} //else if (~recSoundInput == true)
+			);
+		}
+	);
+} );
+
+
+/*~autoPlay = Routine.new( {  //old version using DiskIn-based synth for sample playback - abandon
+	if (~playSamp == true,
+		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
+			var time2yield, interpSynth;
+
 			interpSynth = Synth(\LinInterp_num, [\startVal, 0.0, \stopVal, 1.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //turn inStreamLevel back to 1.0 in 0.2 sec (++++\startVal should probs = variable storing current value of inputStreamLevel++++)
 			~slider_inFlow1_level.value = 1;  //update GUI
 			~numBox_inFlow1_level.value = 1; //update GUI
@@ -339,10 +417,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 							//<----***could alternatively insert other file picking behaviors or mappings here****
 
-
 							//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
-
-							//OR REWRITE AND USE Buffer.read and phasor to playback audio files !!!!!!!!
 
 							readDiskSynth = Synth.basicNew(\readDisk);
 
@@ -382,7 +457,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			);
 		}
 	);
-} );
+} );  */
 
 ~button_randAutoRecPlaySamp = Button(w, Rect(215, 349, 25, 25)) //<---still working on this, need to complete and add ~autoRec
 .states_( [
@@ -400,6 +475,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		},
 		{
 			~autoPlay.stop;
+			if (~samp0.isRunning, { //free sample playback synth and buffer if it's still running when this button is turned off / ~autoPlay routine is stopped
+				~samp0.free;
+				~audioBuf_play0.free;
+			});
 		}
 	);
 } )
@@ -418,7 +497,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		{//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
 			~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
 			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio sent to first input channel bus to buffer, and write an audio file to hard disk
+			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
 
 			//SET FLAG??? ~recSamp_input = true;
 		} ,
@@ -1543,6 +1622,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			~a2k_play = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]).moveAfter(~phasor_play); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
 
 			~bufPlayer = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly, \buf, ~audioBuf0] ).moveAfter(~a2k_play);
+			NodeWatcher.register(~bufPlayer);
 
 			~pShift = Synth(\pitchShifter,
 				[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]).moveAfter(~bufPlayer);
