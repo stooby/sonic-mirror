@@ -258,9 +258,11 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //--put these variables back w/ the rest of env variables at some point??--
 
-~minRecDur = 1.0; //<-----NEW: min sec per recorded sample
+~minRecDur = 2.0; //<-----NEW: min sec per recorded sample
 ~maxRecDur = 6.0; //<----NEW: max sec per recorded sample
+
 ~recSamp_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
+~recSamp_output = false;
 ~recSamp_input_startTime; //<---NEW: ....should I store this info in a contol bus?
 ~recSamp_input_stopTime; //<---NEW: .....should I store this info in a contol bus?
 
@@ -268,56 +270,95 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 
-//~audioBuf_play0 = Buffer.alloc(s, 65536, 1); //<---- maybe remove this from here...
-
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
-
-//~fileAudio_lastReadPath = ("~/Music/SCrecs/SncMir-MainOut_" ++ ~fileAudio_writeOut_nameNum ++ ".aiff"); //stores string of file path for last read audio file from disk  <--------!!!!
-
-~fileAudio_writeOut_maxNum = 30;  //<---NEW: max # of files written per session (wrap-around & overwrite limit)
 
 ~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name
 ~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir/SncMir-In_"; //stores string of file path for last written audio file
 
 ~minNumFilesB4Playback = 1; //<----!!!!!NEW!!!!!!!  file # threshold before file playback routine commences
 
+~fileAudio_writeIn_maxNum = 30; //max # of audio input samples written per session (wrap-around & overwrite limit)
+~fileAudio_writeOut_maxNum = 30;  //max # of audio out samples written per session (wrap-around & overwrite limit)
 
 //---
-~autoRec = Routine.new( { //<---TODO!!!!!!, model after autoPlay below until machine listening functionality is implemented
+~autoRec_random = Routine.new( {
 	if (~recSamp_input == true,
-		{
+		{ //STOP RECORDING / WRITING AUDIO INPUT TO FILE
+			var yieldTime = rrand(5, 8).round(0.01);
+			//var yieldTime = rrand(8, 30); //<---- set to this eventually?
+			~recSamp_input = false;
+			{~button_recIn.value = 0;}.defer;
 
+			~writeIn2Disk.free; //stop recording to disk
+			~audioBuf_inMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
+			~audioBuf_inMainWrite.free;
+			("AutoRecRand -- WROTE Samp-AUDIO-IN_" ++ ~fileAudio_writeIn_nameNum).postln;
+			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
+
+			("AutoRecRand -- Next Time to RandRec = " ++ yieldTime).postln;
+			yieldTime.yieldAndReset;
 		} ,
-		{
+		{//else if ~recSamp_input == false
+			if (~bufRecorder.isRunning, {
+				if (~fileAudio_writeIn_nameNum <= ~fileAudio_writeIn_maxNum, {//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
+					var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
+					~recSamp_input = true;
+					{~button_recIn.value = 1;}.defer;
 
+					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
+					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
+					("AutoRecRand: -- recTime = " ++ recTime).postln;
+					("---").postln;
+					recTime.yieldAndReset;
+				}, {//else if ~fileAudio_writeIn_nameNum > max limit, wrap around and overwrite existing files
+					var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
+
+					~fileAudio_writeIn_nameNum = 0;
+					~recSamp_input = true;
+					{~button_recIn.value = 1;}.defer;
+
+					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
+					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
+					("AutoRecRand: -- recTime = " ++ recTime).postln;
+					("---").postln;
+					recTime.yieldAndReset;
+				});
+			} , { //else if ~bufRecorder not running, don't record anything
+				"AutoRecRand: -- NO RECORDING - BUF REC NOT ACTIVE".postln;
+				8.yieldAndReset;
+			});
 		}
 	);
 } );
 
-~autoPlay = Routine.new( {
+~autoPlay_random = Routine.new( {  //<----- LIL BUGGY, almost there.... sample playback buffer getting lost somehow????
 	if (~playSamp == true,
 		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
 			var time2yield, interpSynth;
+			~playSamp = false;
 
 			if (~bufPlayer.isRunning, {
 				interpSynth = Synth(\LinInterp_num, [\startVal, 0.0, \stopVal, 1.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //turn inStreamLevel back to 1.0 in 0.2 sec (++++\startVal should probs = variable storing current value of inputStreamLevel++++)
-				~slider_inFlow1_level.value = 1;  //update GUI
-				~numBox_inFlow1_level.value = 1; //update GUI
+				{~slider_inFlow1_level.value = 1;}.defer;  //update GUI
+				{~numBox_inFlow1_level.value = 1;}.defer; //update GUI
 				//0.2.yield;  //not necessary, since sound's stopped by this point...
 			});
 
 			~audioBuf_play0.free;
-			~playSamp = false;
-			~button_playSamp.value = 0; //update GUI button
+			{~button_playSamp.value = 0;}.defer; //update GUI button
 
-			time2yield = rrand(3, 5);
+			time2yield = rrand(3, 5).round(0.01);
 			//time2yield = rrand(12, 35); //<-----TIME RANGE - TRIGGER RATE (IN SEC).....
-			("---time2nextSoundPlay=" ++ time2yield ++ "sec").postln;
+			("AutoPlayRand: -- time2nextPlay= " ++ time2yield ++ " sec").postln;
 			time2yield.yieldAndReset;
 		},
 		{//if not playing a soundFile, ~playSamp == false
-			if (~recSamp_input == false,
+			if (~recSamp_input == false, //only play back sounds if not currently recording...
 				{
 					if (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback, //if min # of files have been written
 						{//.....currently triggers random sample every time routine is played...DEVELOP....
@@ -329,16 +370,17 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							//var readDiskSynth, interpSynth, readFileFunc, randFilePick, duration;
 							var interpSynth, randFilePick, fileDir, duration;
 
+							~playSamp = true; //set flag
+
 							if (~bufPlayer.isRunning, { //if playing buffer audio, silence it for audio sample playback
 								//get current signal flow/chain level val from ~inputStreamLevelBus and assign to local variable used for \startVal arg in interpSynth below...
 								interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.2 sec (***startVal should probs = variable storing current value of inputStreamLevel***
-								~slider_inFlow1_level.value = 0;  //update GUI
-								~numBox_inFlow1_level.value = 0; //update GUI
+								{~slider_inFlow1_level.value = 0;}.defer;  //update GUI
+								{~numBox_inFlow1_level.value = 0;}.defer; //update GUI
 								("~bufPlayer.isRunning - 0.2.yield").postln;
 								0.2.yield;
 							});
 							("--after checking ~bufPlayer.isRunning").postln;
-							~playSamp = true; //set flag
 
 							randFilePick = rrand(0, (~fileAudio_writeIn_nameNum - 1)); //pick a random file to play (needs to be "current nameNum counter val - 1" b/c current counter value doesn't have a file associated w/ it yet due to counter incrementing after a new file has been written...)
 
@@ -349,18 +391,20 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 							//PLAY SOUND FILE from disk
 							~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
-								duration = buffer.numFrames/s.sampleRate;
+								//duration = buffer.numFrames/s.sampleRate;
+								duration = buffer.numFrames/buffer.sampleRate;
 								~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-								NodeWatcher.register(~samp0);
+								//NodeWatcher.register(~samp0);
 
 								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
 
 							});
-							~button_playSamp.value = 1; //update GUI
+							{~button_playSamp.value = 1;}.defer; //update GUI
 							("Pre-yield samp Dur = " ++ duration).postln;
-							0.1.yield;  //<---UNFORTUNATE YIELD needed to update duration variable...
+							0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that lon, thought short yield times was causing a "Buffer UGen: buffer data" error, but testing seems to point elsewhere ...
 							("Post-yield samp Dur = " ++ duration).postln;
-							(duration + 0.02).yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
+							//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
+							(duration + 0.2).round(0.01).yieldAndReset; //<---probs not necessary to add 0.2 sec, experiment
 							//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
 						},
 						{15.yieldAndReset;} //<------------ wait if not enough files have been written yet
@@ -373,7 +417,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } );
 
 
-/*~autoPlay = Routine.new( {  //old version using DiskIn-based synth for sample playback - abandon
+/*~autoPlay_random = Routine.new( {  //old version using DiskIn-based synth for sample playback - abandon
 	if (~playSamp == true,
 		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
 			var time2yield, interpSynth;
@@ -470,17 +514,49 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{
-			~autoPlay.reset;
-			AppClock.play(~autoPlay);
+			~autoRec_random.reset;
+			//~autoPlay_random.reset;
+			//AppClock.play(~autoRec_random);
+			SystemClock.play(~autoRec_random);
+			//AppClock.play(~autoPlay_random);
+			//SystemClock.play(~autoPlay_random);
 		},
 		{
-			~autoPlay.stop;
-			if (~samp0.isRunning, { //free sample playback synth and buffer if it's still running when this button is turned off / ~autoPlay routine is stopped
+			~autoRec_random.stop;
+			//~autoPlay_random.stop;
+
+			if (~recSamp_input == true, {
+				~writeIn2Disk.free;
+				~audioBuf_inMainWrite.close;
+				~audioBuf_inMainWrite.free;
+				~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+				~recSamp_input = false;
+				~button_recIn.value = 0;
+			} );
+
+			if (~playSamp == true, {
 				~samp0.free;
 				~audioBuf_play0.free;
 				~playSamp = false;
 				~button_playSamp.value = 0;
+			} );
+
+			/*
+			if(~writeIn2Disk.isRunning, {
+				~writeIn2Disk.free;
+				~audioBuf_inMainWrite.close;
+				~audioBuf_inMainWrite.free;
+				~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+				~recSamp_input = false;
+				~button_recIn.value = 0;
 			});
+
+			if (~samp0.isRunning, { //free sample playback synth and buffer if it's still running when this button is turned off / ~autoPlay_random routine is stopped
+				~samp0.free;
+				~audioBuf_play0.free;
+				~playSamp = false;
+				~button_playSamp.value = 0;
+			}); */
 		}
 	);
 } )
