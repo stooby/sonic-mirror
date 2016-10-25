@@ -300,38 +300,42 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			yieldTime.yieldAndReset;
 		} ,
 		{//else if ~recSamp_input == false
-			if (~bufRecorder.isRunning, {
-				if (~fileAudio_writeIn_nameNum <= ~fileAudio_writeIn_maxNum, {//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
-					var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
-					~recSamp_input = true;
-					{~button_recIn.value = 1;}.defer;
+			if (~playSamp == false, {
+				if (~bufRecorder.isRunning, {
+					if (~fileAudio_writeIn_nameNum <= ~fileAudio_writeIn_maxNum, {//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
+						var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
+						~recSamp_input = true;
+						{~button_recIn.value = 1;}.defer;
 
-					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-					("AutoRecRand: -- recTime = " ++ recTime).postln;
-					("---").postln;
-					recTime.yieldAndReset;
-				}, {//else if ~fileAudio_writeIn_nameNum > max limit, wrap around and overwrite existing files
-					var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
+						~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+						~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+						~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
+						("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
+						("AutoRecRand: -- recTime = " ++ recTime).postln;
+						("---").postln;
+						recTime.yieldAndReset;
+					}, {//else if ~fileAudio_writeIn_nameNum > max limit, wrap around and overwrite existing files
+						var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
 
-					~fileAudio_writeIn_nameNum = 0;
-					~recSamp_input = true;
-					{~button_recIn.value = 1;}.defer;
+						~fileAudio_writeIn_nameNum = 0;
+						~recSamp_input = true;
+						{~button_recIn.value = 1;}.defer;
 
-					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-					("AutoRecRand: -- recTime = " ++ recTime).postln;
-					("---").postln;
-					recTime.yieldAndReset;
+						~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+						~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+						~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
+						("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
+						("AutoRecRand: -- recTime = " ++ recTime).postln;
+						("---").postln;
+						recTime.yieldAndReset;
+					});
+				} , { //else if ~bufRecorder not running, don't record anything
+					"AutoRecRand: -- NO RECORDING - BUF REC NOT ACTIVE".postln;
+					8.yieldAndReset;
 				});
-			} , { //else if ~bufRecorder not running, don't record anything
-				"AutoRecRand: -- NO RECORDING - BUF REC NOT ACTIVE".postln;
-				8.yieldAndReset;
-			});
+			}, { //else if (~playSamp == true)
+				5.yieldAndReset;
+			} );
 		}
 	);
 } );
@@ -515,15 +519,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		obj.value == 1,
 		{
 			~autoRec_random.reset;
-			//~autoPlay_random.reset;
+			~autoPlay_random.reset;
 			//AppClock.play(~autoRec_random);
 			SystemClock.play(~autoRec_random);
 			//AppClock.play(~autoPlay_random);
-			//SystemClock.play(~autoPlay_random);
+			SystemClock.play(~autoPlay_random);
 		},
 		{
 			~autoRec_random.stop;
-			//~autoPlay_random.stop;
+			~autoPlay_random.stop;
 
 			if (~recSamp_input == true, {
 				~writeIn2Disk.free;
