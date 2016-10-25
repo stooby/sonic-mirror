@@ -21,8 +21,9 @@ SynthDef.new(\bufRead_noLoop, {
 	frames = BufFrames.kr(buf);
 	//dur = frames / BufSampleRate.kr(buf); // in seconds
 	dur = BufDur.kr(buf); //in seconds
-	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.03), releaseTime: 0.02, level: 1);
-	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames);
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	//phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames);
+	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames - 1);
 	sig = BufRd.ar(1, buf, phasor, loop: 0) * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sig * amp);
 } ).add;
@@ -36,8 +37,8 @@ SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
 
 // Phasor indexes through buffer at audio rate
 SynthDef(\phasor, {
-	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
-	arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf), resetPos = 0;
+	arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
+	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf), resetPos = 0;
 	//Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start * BufFrames.kr(buf), (end * BufFrames.kr(buf)) - 1, resetPos ) );
 	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
 }).add;
