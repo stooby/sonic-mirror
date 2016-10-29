@@ -1,6 +1,12 @@
-//REC IN AND REC OUT ARE WORKING....SAMPLE PLAYBACK IS NOT WORKING.....
-
 //Sonic Mirror - 00_Main:
+
+//TODO:
+//  • add new pitch tracker synth instrument feature:  freq of synth/sampler mimics or derived from audio feature extraction...
+//• add DiskIn recording method from ~autoRec_random into alternate version of ~autoRec_soundTrig1 to avoid strict buffer.copy and .write methods and hopefully get rid of some funky bugs....
+
+//Fix:
+//• autoRec_soundTrig routine....works first time run,  but drops recPhaseStart polling in subsequent restarts and seems to record increasingly larger files from same start point
+//      - also make it detect exact recPhaseFrame when all feature extractors aren't exceeding thresholds (when ~hearSound first = false;) and then calculate sampleStop time from this for tighter sample  durations....
 
 //== Main Performance Doc ==
 
@@ -257,108 +263,294 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //--put these variables back w/ the rest of env variables at some point??--
 
 ~playBehavior = 0; //stores state of playback behavior
-~hearSound = false; //<---NEW: for machine listening
-~currentSound = 0; //state of current heard sound (0 = silence, 1 = unpitched sound, 2 = pitched sound
-~currentScene = 0; //sound scene index (0 = quiet, 1 = sparse transient sounds, 2 = drone, 3 = noise
 
-~minRecDur = 2.0; //<-----NEW: min sec per recorded sample
-~maxRecDur = 6.0; //<----NEW: max sec per recorded sample
-
-~recSamp_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
-~recSamp_output = false;
-~recSamp_input_startTime; //<---NEW: ....should I store this info in a contol bus?
-~recSamp_input_stopTime; //<---NEW: .....should I store this info in a contol bus?
+~currentSound = "silence"; //state of current heard sound (0 = silence, 1 = unpitched sound, 2 = pitched sound
+~currentScene = "quiet"; //sound scene index (0 = quiet, 1 = sparse transient sounds, 2 = drone, 3 = noise
 
 ~playSamp = false; //<--- flag:  playing audio file from disk
-
-~listenInterval_intraSound = 1.0; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
 ~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name
 ~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir/SncMir-In_"; //stores string of file path for last written audio file
-~minNumFilesB4Playback = 1; //<----!!!!!NEW!!!!!!!  file # threshold before file playback routine commences
-~fileAudio_writeIn_maxNum = 30; //max # of audio input samples written per session (wrap-around & overwrite limit)
+~minNumFilesB4Playback = 1; // file # threshold before file playback routine commences
+~fileAudio_writeIn_maxNum = 30; //max # of audio samples written per session (wrap-around & overwrite limit - inclusive of 0)
 ~fileAudio_writeOut_maxNum = 30;  //max # of audio out samples written per session (wrap-around & overwrite limit)
 
 //---
-~senseNoiseFloor = Routine.new( {
+~listenDur_noiseFloor = 5.0;
+/*~senseNoiseFloor = Routine.new( {
+	//sets ~loudnessThresh
+} );  */
 
-} );
+//s.plotTree;
+//~listen.value(1, post: 1);
+//~listen.value(0);
+//~listen.value(1, rate: 1, post: 1);
+//~bus_onsets.get({|val| val.postln;});
+//~bus_onsets.set(0);
 
+~listen = { |active = 1, rate = 0.1, post = 0| //setup and trigger all automated feature extractors???
+	if (active == 1, {//start feature extraction...
+		if (~bufRecorder.isRunning, {
+			//LOUDNESS monitor
+			l = Synth(\Loudness, [\input, ~inputSendBus, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+			//PITCH tracker
+			p = Synth(\Pitch, [\input, ~inputSendBus, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
+			//ONSET detector
+			n = Synth(\onsets, [\input, ~inputSendBus, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);
+			//etc....
 
-~autoRec_loudnessTrig = Routine.new( {
-	if (~recSamp_input == true,
-		{ //STOP RECORDING / WRITING AUDIO INPUT TO FILE
-			var yieldTime = rrand(5, 8).round(0.01);
-			//var yieldTime = rrand(8, 30); //<---- set to this eventually?
-			~recSamp_input = false;
-			{~button_recIn.value = 0;}.defer;
+			//fire off ~senseNoiseFloor routine....?
 
-			~writeIn2Disk.free; //stop recording to disk
-			~audioBuf_inMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
-			~audioBuf_inMainWrite.free;
-			("AutoRecRand -- WROTE Samp-AUDIO-IN_" ++ ~fileAudio_writeIn_nameNum).postln;
-			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
+			~busSum_lop = ~sumFunc_xin.value([~bus_loudness, ~bus_onsets, ~bus_pitch]); //4 feats
+			~transmit = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post); //<---here or in other routines???
+			~deBounce = Routine({
+				("debounce pause - 2 sec").postln;
+				2.yield;
+				SystemClock.play(~transmit);
+				~bus_onsets.set(0);
+				nil;
+			});
+			SystemClock.play(~deBounce);
 
-			("AutoRecRand -- Next Time to RandRec = " ++ yieldTime).postln;
-			yieldTime.yieldAndReset;
-		} ,
-		{//else if ~recSamp_input == false
-			if (~playSamp == false, {
-				if (~bufRecorder.isRunning, {
+			~listening = true;
+			"LISTENING NOW...".postln;
+		}, {
+			"CAN'T LISTEN UNLESS BUF RECORDER ENABLED...".postln;
+		} );
+	}, {//if active == 0, stop feature extraction and clean up...
+		if (~listening == true, { //only free synths and cleanup if we were listening in the first place, otherwise don't do anything and avoid server errors....
+			~transmit.stop;
+			~transmit.free;  //<---just added...necessary?
+			~deBounce.stop;
+			~deBounce.free;
+			~sumSyn_xin.free;
+			~busSum_lop.free;
+			l.free;
+			p.free;
+			n.free;
+			~listening = false;
+			"STOPPED LISTENING...".postln;
+		});
+	} );
+};
 
-					//GET loudnessBus{|loudness|
-					//if (loudness > thresh) {
-					//throw initial flag
-					//if (loudSound == true) upon revisiting this routine after ~loudnessThreshDur.yieldAndReset...
-					//START RECORDING AND SET STATE(S)
-					//FOR AS LONG AS loudSound == true? (up until a ~maxRecLength....)
+/*~listen = { |active = 1, rate = 0.1, post = 0| //setup and trigger all automated feature extractors???
+	if (active == 1, {//start feature extraction...
+		if (~bufRecorder.isRunning, {
+			//LOUDNESS monitor
+			l = Synth(\Loudness, [\input, ~inputSendBus, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+			//PITCH tracker
+			p = Synth(\Pitch, [\input, ~inputSendBus, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
+			//ONSET detector
+			n = Synth(\onsets, [\input, ~inputSendBus, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);
+			//etc....
 
+			//fire off ~senseNoiseFloor routine....?
 
-					if (~fileAudio_writeIn_nameNum <= ~fileAudio_writeIn_maxNum, {//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
-						var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
-						~recSamp_input = true;
-						{~button_recIn.value = 1;}.defer;
+			~busSum_lop = ~sumFunc_xin.value([~bus_loudness, ~bus_onsets, ~bus_pitch]); //4 feats
+			~transmit = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post); //<---here or in other routines???
+			SystemClock.play(~transmit);
 
-						~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-						~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-						~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-						("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-						("AutoRecRand: -- recTime = " ++ recTime).postln;
-						("---").postln;
-						recTime.yieldAndReset;
-					}, {//else if ~fileAudio_writeIn_nameNum > max limit, wrap around and overwrite existing files
-						var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
+			~listening = true;
+			"LISTENING NOW...".postln;
+		}, {
+			"CAN'T LISTEN UNLESS BUF RECORDER ENABLED...".postln;
+		} );
+	}, {//if active == 0, stop feature extraction and clean up...
+		if (~listening == true, { //only free synths and cleanup if we were listening in the first place, otherwise don't do anything and avoid server errors....
+			~transmit.stop;
+			~transmit.free;  //<---just added...necessary?
+			~sumSyn_xin.free;
+			~busSum_lop.free;
+			l.free;
+			p.free;
+			n.free;
+			~listening = false;
+			"STOPPED LISTENING...".postln;
+		});
+	} );
+}; */
 
-						~fileAudio_writeIn_nameNum = 0;
-						~recSamp_input = true;
-						{~button_recIn.value = 1;}.defer;
+~loudnessThresh = 5; //set w/ ~senseNoiseFloor
+~pitchThresh = 0.55;
 
-						~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-						~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-						~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-						("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-						("AutoRecRand: -- recTime = " ++ recTime).postln;
-						("---").postln;
-						recTime.yieldAndReset;
+~hearSound = false; //<---NEW: for machine listening
+~listening = false;  //flag indicates audio analysis activity
+
+~minRecDur = 2.0; //<-----min sec per recorded sample (only being used w/ autoRec_random now...)
+~maxRecDur = 6.0; //<----max sec per recorded sample (only being used w/ autoRec_random now...)
+
+~recSamp_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
+~recSamp_output = false;
+~recSamp_input_startFrame = 0;
+~recSamp_input_stopFrame = 0;
+
+~preRecDur = 0.2; //amount of time to sample from buffer prior to start of ~autoRec
+~postRecSnip = 0.5; //amount of time to subtract from total dur of sampled sound (to cut silence at end of sample after ~autoRec finished and ~listenDur_intraSound pads end...)
+
+~listenDur_intraSound = 1.5; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
+~autoRec_rate = 0.1; //finest timing resolution of ~autoRec_soundTrig routine
+~listenDur_stateChange = 0.2;  //not sure if I'm going to need/use this yet...
+~yieldTime_autoRec = 0.1;  //val to be reassigned as routine runs...
+
+~autoRecStartTrig = false; //flag triggered when ~autoRec routines initiated (used for debounce time when triggered via button press to avoid false sound detection)
+
+~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceTime = 1|
+	Routine( { //<----model this after ~routine_wekiSynthControl1 from SCML --turn into a function....... ALSO use write2Disk synth method instead of buffer copying....?
+		if (~recSamp_input == true,
+			{
+				// add if (~listening == true, {  }); <---yes or no?
+				featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
+					if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
+					//if (( (val[0] >= ~loudnessThresh) || (val[3] >= ~pitchThresh) ),
+						{//SOUND DETECTED
+							~hearSound = true;
+							//CONTINUE RECORDING / DO NOTHING....
+							("-----=======-----").postln;
+							("**Recording... SOUND DETECTED").postln;
+							("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+							~yieldTime_autoRec = ~listenDur_intraSound;
+							//~yieldTime_autoRec = rate.asFloat;  //<--- switch to this for more accurate sample stop time
+						}, {//IF NO SOUND DETECTED...
+							if (~hearSound == false, {//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
+								("--------++++++++-------").postln;
+								("**Recording... SOUND STOP CONFIRMED").postln;
+								("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+								~writeSampFromBufCopy_input.value();
+								~yieldTime_autoRec = rate.asFloat;
+
+								/*  ///ORIG....VVVVVVV
+								//GET recHead phasor position and log "STOP  SAMPLE TIME"
+								~phaseBusMonRec.get({|val| //<---move to false condition of this conditional for more accurate sample out time ------<<<<<<<<<<<<
+									~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
+									if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
+										~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
+									} );
+									("--Sound Stop at (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+									~writeSampFromBufCopy_input.value();  //<---this seems to be working here....test more.....
+									//OR SET FLAG TO TRIGGER FOLLOWING CHUNKS OF CODE AFTER .YIELDANDRESET RE-EXECUTION OF ROUTINE....???
+									~yieldTime_autoRec = rate.asFloat;
+								});
+								("--Sound Stop at (outside get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+								*/
+
+								//0.1.yield; //<---NOPE, CAN'T DO THIS HERE....but would it work if encapsulated inside a larger function?
+								//~yieldTime_autoRec = rate.asFloat; <-- moving inside get
+							}, {//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
+								("-------").postln;
+								("**Recording...SOUND STOP? ... Testing...").postln;
+								("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+								//GET recHead phasor position and log "STOP  SAMPLE TIME"
+								~phaseBusMonRec.get({|val|
+									~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
+									if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
+										~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
+									} );
+									("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+									//~yieldTime_autoRec = rate.asFloat;
+									~hearSound = false;
+									~yieldTime_autoRec = ~listenDur_intraSound;
+								});
+								//("--Sound Stop at (outside get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+
+								/*~hearSound = false; //////////------orig
+								//could log sound stop time here for more accurate sample out pos <------!!!!!!
+								("-------").postln;
+								("**Recording...SOUND STOP? ... Testing...").postln;
+								~yieldTime_autoRec = ~listenDur_intraSound; */
+							});
 					});
-				} , { //else if ~bufRecorder not running, don't record anything
-					"AutoRecRand: -- NO RECORDING - BUF REC NOT ACTIVE".postln;
-					8.yieldAndReset;
 				});
-			}, { //else if (~playSamp == true)
-				5.yieldAndReset;
-			} );
-		}
-	);
-} );
+			} ,
+			{//else if ~recSamp_input == false
+				if (~listening == false,
+					{
+						"***Can't record, not listening...***".postln;
+						~yieldTime_autoRec = 1;
+					},
+					{//if ~listening == true...
+						if (~playSamp == false,{ //don't record if playing back samples...
+							if(~autoRecStartTrig == true, {
+								~autoRecStartTrig = false;
+								~hearSound = false;
+								("Debounce =" + debounceTime + "sec").postln;
+								debounceTime.yield;
+							}); //debounce when routine first launched (avoids false sound detection from mouse click)
+							//GET SUM BUS
+							featureBus.get({|val|
+								if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
+									{//SOUND DETECTED
+										("---").postln;
+										("**HEAR SOUND**").postln;
+										("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+										if (~hearSound == false, //TEST SOUND START...  <---not sure if need test...just start rec????
+											{
+												~phaseBusMonRec.get({|val| //log recHead pos //<---here or after sound conf?
+													~recSamp_input_startFrame = (val - (~preRecDur * s.sampleRate)).round(1);
+													if (~recSamp_input_startFrame < 0, { //if presumed startFrame is negative...
+														~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
+													} );
+													("---------").postln;
+													("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
+													~hearSound = true; //<--- moved inside get
+													~yieldTime_autoRec = rate.asFloat; //<--- moved inside get
+												});
+											},
+											{//else ~hearSound == true
+												("- - - - -").postln;
+												("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
+												("--REC Sample Start").postln;
+												//("--------").postln;
+												~recSamp_input = true;
+												{~button_recIn.value = 1;}.defer;
+
+												//Log start time here or in previous iteration as above??
+												//Index sumBus feature vals into ~soundMemory buffer??? //<---
+
+												~yieldTime_autoRec = ~listenDur_intraSound; //LEAVING THIS SIDE OF ROUTINE
+											}
+										);
+									},
+									{//if NO SOUND DETECTED ........
+										("--- NO SOUND ---").postln;
+										("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+										if (~hearSound == true, {
+											~hearSound = false;
+											("--> ...false alarm?...").postln;
+											//~listenDur_intraSound.yieldAndReset; //<-- this or ~autoRec_rate ?
+											//~listenDur_stateChange.yieldAndReset; //<-- this or ~autoRec_rate ?
+											~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
+										}, { //else if ~hearSound == false
+											("-->...silence...").postln;
+											~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
+										});
+								});
+							});
+						},
+						{ //else if (~playSamp == true)
+							~yieldTime_autoRec = 1;
+						});
+					}
+				);
+			}
+		);
+
+		0.02.yield;
+		//	("~yieldTime_autoRec = " ++ ~yieldTime_autoRec).postln;
+		~yieldTime_autoRec.yieldAndReset;
+	} );
+};
 
 ~autoRec_random = Routine.new( {
 	if (~recSamp_input == true,
 		{ //STOP RECORDING / WRITING AUDIO INPUT TO FILE
-			var yieldTime = rrand(5, 8).round(0.01);
-			//var yieldTime = rrand(8, 30); //<---- set to this eventually?
+			//var yieldTime = rrand(5, 8).round(0.01);
+			var yieldTime = rrand(8, 30).round(0.01);
 			~recSamp_input = false;
 			{~button_recIn.value = 0;}.defer;
 
@@ -367,40 +559,27 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			~audioBuf_inMainWrite.free;
 			("AutoRecRand -- WROTE Samp-AUDIO-IN_" ++ ~fileAudio_writeIn_nameNum).postln;
 			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
+			if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, //cap max file count...
+				{~fileAudio_writeIn_nameNum = 0;}
+			);
 
 			("AutoRecRand -- Next Time to RandRec = " ++ yieldTime).postln;
 			yieldTime.yieldAndReset;
 		} ,
 		{//else if ~recSamp_input == false
 			if (~playSamp == false, {
-				if (~bufRecorder.isRunning, {
-					if (~fileAudio_writeIn_nameNum <= ~fileAudio_writeIn_maxNum, {//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
-						var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
-						~recSamp_input = true;
-						{~button_recIn.value = 1;}.defer;
+				if (~bufRecorder.isRunning, {//BEGIN RECORDING AUDIO INPUT TO FILE
+					var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
 
-						~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-						~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-						~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-						("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-						("AutoRecRand: -- recTime = " ++ recTime).postln;
-						("---").postln;
-						recTime.yieldAndReset;
-					}, {//else if ~fileAudio_writeIn_nameNum > max limit, wrap around and overwrite existing files
-						var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
-
-						~fileAudio_writeIn_nameNum = 0;
-						~recSamp_input = true;
-						{~button_recIn.value = 1;}.defer;
-
-						~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-						~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-						~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-						("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-						("AutoRecRand: -- recTime = " ++ recTime).postln;
-						("---").postln;
-						recTime.yieldAndReset;
-					});
+					~recSamp_input = true;
+					{~button_recIn.value = 1;}.defer;
+					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
+					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
+					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
+					("AutoRecRand: -- recTime = " ++ recTime).postln;
+					("---").postln;
+					recTime.yieldAndReset;
 				} , { //else if ~bufRecorder not running, don't record anything
 					"AutoRecRand: -- NO RECORDING - BUF REC NOT ACTIVE".postln;
 					8.yieldAndReset;
@@ -492,7 +671,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	);
 } );
 
-~button_randAutoRecPlaySamp = Button(w, Rect(215, 349, 25, 25)) //<---still working on this, need to complete and add ~autoRec
+~button_autoRecPlay = Button(w, Rect(215, 349, 25, 25))
 .states_( [
 	["^v", Color.black, Color(0.6, 0.9, 0.4, 0.3)] ,
 	["^v", Color.white, Color(0.8, 1.0, 0.4)]
@@ -503,23 +682,50 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{
-			~autoRec_random.reset;
-			~autoPlay_random.reset;
-			SystemClock.play(~autoRec_random);
-			SystemClock.play(~autoPlay_random);
+			~autoRecStartTrig = true;
+			~listen.value(1, post: 1); //start listening
+			//~autoRecStart = ~autoRec_soundTrig1.value(featureBus: ~busSum_lop, rate: 0.1); //<--uncomment when done debugging
+			//SystemClock.play(~autoRecStart);  //<--uncomment when done debugging
+
+			//~autoRec_random.reset;
+			//~autoPlay_random.reset;
+			//SystemClock.play(~autoRec_random);
+			//SystemClock.play(~autoPlay_random);
 		},
 		{
-			~autoRec_random.stop;
-			~autoPlay_random.stop;
+			//~autoRecStart.stop; //<--uncomment when done debugging
+			//~autoRecStart.free; //<--uncomment when done debugging
+			~listen.value(0); //stop listening
+			//~autoRec_random.stop;
+			//~autoPlay_random.stop;
 
-			if (~recSamp_input == true, {
+			if (~recSamp_input == true, { //pertains to ~autoRec_soundTrig1
+				if (~hearSound == true, {
+					~phaseBusMonRec.get({|val|
+						~recSamp_input_stopFrame = val.round(1);
+						("--Sound Stop at = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+						~writeSampFromBufCopy_input.value(); //writes sample, sets ~recSamp = false, updates GUI
+					});
+					~hearSound = false;
+				});
+				//~recSamp_input = false;
+				//~button_recIn.value = 0;
+			}, { //if ~recSamp_input == false
+				~hearSound = false;
+				~button_recIn.value = 0;
+			});
+
+			/*if (~recSamp_input == true, { //pertains to ~autoRec_random routine only...
 				~writeIn2Disk.free;
 				~audioBuf_inMainWrite.close;
 				~audioBuf_inMainWrite.free;
 				~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+				if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
+					~fileAudio_writeIn_nameNum = 0;
+				});
 				~recSamp_input = false;
 				~button_recIn.value = 0;
-			} );
+			} ); */
 
 			if (~playSamp == true, {
 				~samp0.free;
@@ -563,16 +769,17 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
 			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-
-			//SET FLAG??? ~recSamp_input = true;
+			~recSamp_input = true; //<--- not sure if this flag's needed right now...
 		} ,
 		{//STOP RECORDING / WRITING AUDIO INPUT TO FILE
 			~writeIn2Disk.free; //stop recording to disk
 			~audioBuf_inMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
 			~audioBuf_inMainWrite.free;
 			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
-
-			//SET FLAG??? ~recSamp_input = false;
+			if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
+				~fileAudio_writeIn_nameNum = 0;
+			});
+			~recSamp_input = false; //<--- not sure if this flag's needed right now...
 		} );
 } );
 
@@ -590,12 +797,17 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			~audioBuf_outMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
 			~audioBuf_outMainWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 			~write2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_outMainWrite, \inBus, 0] ); //record audio sent to bus 0 to buffer writing to audio file
+			~recSamp_output = true;  //<--- not sure if this flag's needed right now...
 		} ,
 		{//STOP RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
 			~write2Disk.free; //stop recording to disk
 			~audioBuf_outMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
 			~audioBuf_outMainWrite.free; //free buffer
 			~fileAudio_writeOut_nameNum = ~fileAudio_writeOut_nameNum + 1; //increment file name suffix in prep for next rec file
+			if (~fileAudio_writeOut_nameNum > ~fileAudio_writeOut_maxNum, { //cap max file count...
+				~fileAudio_writeOut_nameNum = 0;
+			});
+			~recSamp_output = false; //<--- not sure if this flag's needed right now...
 		} );
 } );
 
@@ -621,7 +833,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~button_playSamp = Button(w, Rect(62, 372, 65, 20) ) //<------TODO!!!!
+~button_playSamp = Button(w, Rect(62, 372, 65, 20) )
 .states_( [
 	["PLAY FILE", Color.black, Color(0.0, 0.5, 0.5, 0.3)] ,
 	["PLAY FILE", Color.white, Color(0.0, 0.5, 0.5)]
@@ -1571,6 +1783,14 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~bufPlot.refresh;
 */
 //----------
+
+/*~phaseBusMonRec.get({|val| (val/s.sampleRate).postln;});  //junk for monitoring
+~phaseBusMonRec.get({|val| val.postln;});
+~phaseBusMonPly.get({|val| (val/s.sampleRate).postln;});  //<----this is where to get phasor value....
+~phasor_play.get(\end, {|val| val.postln;});
+~phasor_rec.get(\end, {|val| val.postln;});
+~phasor_rec.get(\start, {|val| (val/s.sampleRate).postln;}); */
+
 
 ////---------------RECORD TO BUFFER BUTTON--------------////
 ~button_recBuf = Button(w, Rect(372, 349, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer

@@ -37,8 +37,8 @@ SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
 
 // Phasor indexes through buffer at audio rate
 SynthDef(\phasor, {
-	arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
-	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf), resetPos = 0;
+	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
+	arg out=0, buf, trig = 0, rate = 1, start = 0, end = 1, resetPos = 0; //<---don't remember why I used other lines....and why they worked...
 	//Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start * BufFrames.kr(buf), (end * BufFrames.kr(buf)) - 1, resetPos ) );
 	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
 }).add;
@@ -147,10 +147,10 @@ SynthDef.new(\RMS, {
 }).add;
 
 SynthDef.new(\Pitch, {
-	arg input, ampThresh = 0.04, median = 7, minFreq = 60, maxFreq = 4000, outBus;
+	arg input, ampThresh = 0.04, median = 7, minFreq = 60, maxFreq = 4000, clar = 0, outBus;
 	var sigIn, freq, hasFreq;
 	sigIn = In.ar(input);
-    # freq, hasFreq = Pitch.kr(sigIn, ampThreshold: ampThresh, median: median, minFreq: minFreq, maxFreq: maxFreq);
+    # freq, hasFreq = Pitch.kr(sigIn, ampThreshold: ampThresh, median: median, minFreq: minFreq, maxFreq: maxFreq, clar: clar);
     //freq = Lag.kr(freq.cpsmidi.round(1).midicps, 0.05);
 	Out.kr(outBus, [freq, hasFreq]);
     //freq.poll(trig: 10, label: "Freq");
@@ -158,10 +158,10 @@ SynthDef.new(\Pitch, {
 }).add;
 
 SynthDef.new(\Pitch2, {
-	arg input, ampThresh = 0.04, median = 7, minFreq = 60, maxFreq = 4000, outBus;
+	arg input, ampThresh = 0.04, median = 7, minFreq = 60, maxFreq = 4000, clar = 0, outBus;
 	var sigIn, freq, hasFreq, midinote;
 	sigIn = In.ar(input);
-    # freq, hasFreq = Pitch.kr(sigIn, ampThreshold: ampThresh, median: median, minFreq: minFreq, maxFreq: maxFreq);
+    # freq, hasFreq = Pitch.kr(sigIn, ampThreshold: ampThresh, median: median, minFreq: minFreq, maxFreq: maxFreq, clar: clar);
 	//midinote = Lag.kr(freq.cpsmidi.round(1), 0.05);
 	midinote = freq.cpsmidi.round(1);
 	Out.kr(outBus, [freq, hasFreq, midinote]);
@@ -222,6 +222,10 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 	OffsetOut.ar(outBus, sig);
 }).add;
 
+
+
+
+
 //---------
 
 //FUNCS (putting these here for now......)  ----------------------
@@ -246,45 +250,113 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 	outBus; //return new bus w/ concat values of all input busses in arg array
 };
 
-~post_busSum = {|bus|
+~get_busSum = {|bus, post = 1|
 	var numCh = bus.numChannels;
-	bus.get( {arg val; { //<---changing to getSynchronous prevents OSC output for some reason...?
-		switch (bus,
-			~busSum_ldns_mfcc, {
-				("Loudness:" + val[0].round(0.0001)).postln;
-				("MFCC:" + val[1..13].round(0.0001)).postln;
-				("-------").postln;
-			},
-			~busSum_ldns_sFlat_sCent, {
-				("Loudness:" + val[0].round(0.0001)).postln;
-				("Flatness:" + val[1].round(0.0001)).postln;
-				("Centroid:" + val[2].round(0.0001)).postln;
-				("-------").postln;
-			},
-			~busSum_ldns_pitch, {
-				("Loudness:" + val[0].round(0.0001)).postln;
-				("Pitch-freq:" + val[1].round(0.01)).postln;
-				("Pitch-hasFreq?:" + val[2]).postln;
-				("Pitch-MIDInote:" + val[3]).postln;
-				("-------").postln;
-			},
-			~busSum_ldns_sFlat_onset, {
-				("Loudness:" + val[0].round(0.0001)).postln;
-				("Flatness:" + val[1].round(0.0001)).postln;
-				("Onset Detected:" + val[2]).postln;
-				("-------").postln;
-			},
-			{//all other busses (cases)
-				if (numCh > 1,
-					{
-						numCh.do({arg item; ("Feature_" ++ (item + 1) ++ ":" + val[item].round(0.0001)).postln;});
-						("-------").postln;
-					},
-					{("Feature_1:" + val.round(0.0001)).postln;} //else
-				);
-			}
-		);
-	}.defer; } );  //don't think that defer is necessary....
+	bus.get( {arg val; //<---changing to getSynchronous prevents OSC output for some reason...?
+		if (post == 1, {//monitor feature vals in SC post window
+			switch (bus,
+				~busSum_ldns_mfcc, {
+					("Loudness:" + val[0].round(0.0001)).postln;
+					("MFCC:" + val[1..13].round(0.0001)).postln;
+					("-------").postln;
+				},
+				~busSum_ldns_sFlat_sCent, {
+					("Loudness:" + val[0].round(0.0001)).postln;
+					("Flatness:" + val[1].round(0.0001)).postln;
+					("Centroid:" + val[2].round(0.0001)).postln;
+					("-------").postln;
+				},
+				~busSum_ldns_pitch, {
+					("Loudness:" + val[0].round(0.0001)).postln;
+					("Pitch-freq:" + val[1].round(0.01)).postln;
+					("Pitch-hasFreq?:" + val[2]).postln;
+					("Pitch-MIDInote:" + val[3]).postln;
+					("-------").postln;
+				},
+				~busSum_ldns_sFlat_onset, {
+					("Loudness:" + val[0].round(0.0001)).postln;
+					("Flatness:" + val[1].round(0.0001)).postln;
+					("Onset Detected:" + val[2]).postln;
+					("-------").postln;
+				},
+				{//all other busses (cases)
+					if (numCh > 1,
+						{
+							numCh.do({arg item; ("Feature_" ++ (item + 1) ++ ":" + val[item].round(0.0001)).postln;});
+							("-------").postln;
+						},
+						{("Feature_1:" + val.round(0.0001)).postln;} //else
+					);
+				}
+			);
+		});
+
+		//INSERT SWITCH CASE HERE FOR EACH DIFFERENT SUM BUS
+		//....W/ NESTED CONDITIONALS SETTING ~currentSound based on extracted audio...
+
+		//push ~currentSound into "sound memory array / buffer" periodically
+		//update ~currentScene based on "sound memory array" periodically
+
+	});
+};
+
+~streamFeatures = {
+	|bus, rate = 0.1, post = 1|
+	Routine ( {
+		~get_busSum.value(bus, post);
+		rate.yieldAndReset;
+	} );
+};
+
+~writeSampFromBufCopy_input = {
+	("-----...........------").postln;
+	(">>>SAMPLING ~audioBuf0......<<<").postln;
+
+	if (~recSamp_input_startFrame < ~recSamp_input_stopFrame,
+		{//SIMPLE BUF WRITE
+
+			var recFrames = (~recSamp_input_stopFrame - ~recSamp_input_startFrame) + 1; //+1 to include stopFrame in frame count
+
+			~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", startFrame: ~recSamp_input_startFrame, numFrames: recFrames); // write sampled buffer to audio file - directly from original buffer...
+			("--SIMPLE Write--").postln;
+			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
+			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
+		}, { //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
+			var recFrames, bufChunk1frames, bufChunk2frames;
+			bufChunk1frames = ~audioBuf0.numFrames - ~recSamp_input_startFrame; //inclusive frame count from "startFrame" to last frame in buffer
+			bufChunk2frames = ~recSamp_input_stopFrame + 1; //inclusive frame count (b/c buffers start at frame 0)
+			recFrames = bufChunk1frames + bufChunk2frames; //total # of frames to sample
+
+			~audioBuf_inMainWrite = Buffer.alloc(s, recFrames, 1);
+
+			//copy chunk 1 to new buf from ~recSamp_startFrame to last frame of ~audioBuf0
+			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: 0, srcStartAt: ~recSamp_input_startFrame, numSamples: bufChunk1frames); //<---if "NO BUF data" errors thrown, try reducing bufChunk1frames by 1, not sure if this method counts samples inclusive or exclusive of start frame
+
+			//0.1.yield; //<--- CAN'T DO THIS HERE .... maybe not needed??? ...would this work inside a .get function if encapsulated in a routine?
+
+			//copy chunk 2 to new buf from first frame of ~audioBuf0 to ~recSamp_stopFrame
+			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: (bufChunk1frames - 1), srcStartAt: 0, numSamples: bufChunk2frames);
+
+			//write ~audioBuf_inMainWrite to an audio file
+			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24");
+			("--WRAP AROUND 2-STEP WRITE--").postln;
+			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
+			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
+
+			//0.1.yield; //<---CAN'T DO HERE....would this even be necessary? ...would this work inside a .get function if encapsulated in a routine?
+			~audioBuf_inMainWrite.free;
+	});
+
+	~recSamp_input = false; //EXIT THIS HALF OF ROUTINE, resume listening for sound...
+	{~button_recIn.value = 0}.defer; //update GUI
+
+	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
+	if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
+		~fileAudio_writeIn_nameNum = 0;
+	});
+
+	(">>>RECORDING COMPLETE<<<").postln;
+	("---.....---").postln;
 };
 
 );
