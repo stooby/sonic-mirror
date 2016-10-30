@@ -264,8 +264,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ~playBehavior = 0; //stores state of playback behavior
 
-~currentSound = "silence"; //state of current heard sound (0 = silence, 1 = unpitched sound, 2 = pitched sound
-~currentScene = "quiet"; //sound scene index (0 = quiet, 1 = sparse transient sounds, 2 = drone, 3 = noise
+~currentSound = "silence"; //state of current heard sound (0 = silence, 1 = unpitched sound, 2 = pitched sound...?)
+~currentScene = "quiet"; //sound scene index (0 = quiet, 1 = sparse transient sounds, 2 = drone, 3 = noise.........?)
 
 ~playSamp = false; //<--- flag:  playing audio file from disk
 
@@ -283,16 +283,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	//sets ~loudnessThresh
 } );  */
 
-/*s.plotTree;
-~listen.value(1, post: 1);
-~listen.value(0);
-~bus_onsets.get({|val| val.postln;}); */
-
-//~bus_onsets.set(0); //<---put this in main setup??? wondering if its ininitialization is causing bug w/ ~listen...
-//p = {Out.ar(~inputSendBus, SoundIn.ar(0))}.play;
-//n.moveAfter(p);
-//s.plotTree;
-
 ~listen = { |active = 1, rate = 0.1, post = 0| //setup and trigger all automated feature extractors???
 	if (active == 1, {//start feature extraction...
 		if (~bufRecorder.isRunning, {
@@ -307,19 +297,14 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			//fire off ~senseNoiseFloor routine....?
 
 			~busSum_lop = ~sumFunc_xin.value([~bus_loudness, ~bus_onsets, ~bus_pitch]); //4 feats
-			~transmit = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post); //<---here or in other routines???
-			/*~deBounce = Routine({  //<--I think it makes more sense to do debouncing in autoRec routine...
-				("~listen: debounce pause - 0.5 sec").postln;
-				~bus_onsets.set(0);  //<----
-				//zero out loudness and other feature busses here too???
-				0.5.yield;
-				SystemClock.play(~transmit);
-				nil;
-			});
-			SystemClock.play(~deBounce); */
-			SystemClock.play(~transmit);
 
-			~hearSound = false; //<---would be nice to manage this flag entirely in this function, but would currently conflict with cleanup of ~autoRec_soundTrig...
+			if (post == 1, { //only run this routine to monitor features w/ post window...
+				//===THIS IS WHERE ~transmit feature via OSC routine from SCML could live if needed
+				~listenPost = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post);
+				SystemClock.play(~listenPost);
+			});
+
+			~hearSound = false; //<---managing this flag entirely w/in this function now....
 			~listening = true;
 			"====LISTENING NOW====".postln;
 		}, {
@@ -327,15 +312,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		} );
 	}, {//if active == 0, stop feature extraction and clean up...
 		if (~listening == true, { //only free synths and cleanup if we were listening in the first place, otherwise don't do anything and avoid server errors....
-			~transmit.stop;
-			~transmit.free;  //<---just added...necessary?
-			//~deBounce.stop;
-			//~deBounce.free;
+			if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
+
 			~sumSyn_xin.free;
 			~busSum_lop.free;
 			l.free;  p.free;  n.free;
 			~listening = false;
-			//~hearSound = false;  //<--- this would conflict w/ cleanup after ~autoRec terminated
+			~hearSound = false;
 
 			~bus_onsets.set(0); //<----
 			//zero out loudness and other feature busses here too???
@@ -345,69 +328,32 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-/*~listen = { |active = 1, rate = 0.1, post = 0| //setup and trigger all automated feature extractors???
-	if (active == 1, {//start feature extraction...
-		if (~bufRecorder.isRunning, {
-			//LOUDNESS monitor
-			l = Synth(\Loudness, [\input, ~inputSendBus, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
-			//PITCH tracker
-			p = Synth(\Pitch, [\input, ~inputSendBus, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
-			//ONSET detector
-			n = Synth(\onsets, [\input, ~inputSendBus, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);
-			//etc....
-
-			//fire off ~senseNoiseFloor routine....?
-
-			~busSum_lop = ~sumFunc_xin.value([~bus_loudness, ~bus_onsets, ~bus_pitch]); //4 feats
-			~transmit = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post); //<---here or in other routines???
-			SystemClock.play(~transmit);
-
-			~listening = true;
-			"LISTENING NOW...".postln;
-		}, {
-			"CAN'T LISTEN UNLESS BUF RECORDER ENABLED...".postln;
-		} );
-	}, {//if active == 0, stop feature extraction and clean up...
-		if (~listening == true, { //only free synths and cleanup if we were listening in the first place, otherwise don't do anything and avoid server errors....
-			~transmit.stop;
-			~transmit.free;  //<---just added...necessary?
-			~sumSyn_xin.free;
-			~busSum_lop.free;
-			l.free;
-			p.free;
-			n.free;
-			~listening = false;
-			"STOPPED LISTENING...".postln;
-		});
-	} );
-}; */
-
 ~loudnessThresh = 5; //set w/ ~senseNoiseFloor
 ~pitchThresh = 0.55;
 
-~hearSound = false; //<---NEW: for machine listening
+~hearSound = false;
 ~listening = false;  //flag indicates audio analysis activity
 
 ~minRecDur = 2.0; //<-----min sec per recorded sample (only being used w/ autoRec_random now...)
 ~maxRecDur = 6.0; //<----max sec per recorded sample (only being used w/ autoRec_random now...)
 
-~recSamp_input = false; //<---NEW:  write audio file 2 disk flag....should I store this info in a contol bus?
+~recSamp_input = false;
 ~recSamp_output = false;
 ~recSamp_input_startFrame = 0;
 ~recSamp_input_stopFrame = 0;
 
 ~preRecDur = 0.2; //amount of time to sample from buffer prior to start of ~autoRec
-~postRecSnip = 0.5; //amount of time to subtract from total dur of sampled sound (to cut silence at end of sample after ~autoRec finished and ~listenDur_intraSound pads end...)
+~postRecSnip = -0.3; //amount of time to subtract from total dur of sampled sound (to cut silence at end of sample after ~autoRec finished and ~listenDur_intraSound pads end...)
 
 ~listenDur_intraSound = 1.5; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
 ~autoRec_rate = 0.1; //finest timing resolution of ~autoRec_soundTrig routine
 ~listenDur_stateChange = 0.2;  //not sure if I'm going to need/use this yet...
 ~yieldTime_autoRec = 0.1;  //val to be reassigned as routine runs...
 
-~autoRecStartTrig = false; //flag triggered when ~autoRec routines initiated (used for debounce time when triggered via button press to avoid false sound detection)
+~autoRecStartTrig = true; //flag triggered when ~autoRec routines initiated (used for debounce time when triggered via button press to avoid false sound detection)
 
 ~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceDur = 0.7|
-	Routine( { //<----model this after ~routine_wekiSynthControl1 from SCML --turn into a function....... ALSO use write2Disk synth method instead of buffer copying....?
+	Routine( {
 		if (~recSamp_input == true,
 			{
 				// add if (~listening == true, {  }); <---yes or no?
@@ -420,8 +366,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							("-----=======-----").postln;
 							("**Recording... SOUND DETECTED").postln;
 							("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-							~yieldTime_autoRec = ~listenDur_intraSound;
+							//~yieldTime_autoRec = ~listenDur_intraSound;
 							//~yieldTime_autoRec = rate.asFloat;  //<--- switch to this for more accurate sample stop time
+							~yieldTime_autoRec = 0.3;  //<----don't hardcode this...
 						}, {//IF NO SOUND DETECTED...
 							if (~hearSound == false, {//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
 								("--------++++++++-------").postln;
@@ -429,25 +376,11 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 
 								~writeSampFromBufCopy_input.value();
+
+								//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
+								//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
+
 								~yieldTime_autoRec = rate.asFloat;
-
-								/*  ///ORIG....VVVVVVV
-								//GET recHead phasor position and log "STOP  SAMPLE TIME"
-								~phaseBusMonRec.get({|val| //<---move to false condition of this conditional for more accurate sample out time ------<<<<<<<<<<<<
-									~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
-									if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
-										~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
-									} );
-									("--Sound Stop at (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
-									~writeSampFromBufCopy_input.value();  //<---this seems to be working here....test more.....
-									//OR SET FLAG TO TRIGGER FOLLOWING CHUNKS OF CODE AFTER .YIELDANDRESET RE-EXECUTION OF ROUTINE....???
-									~yieldTime_autoRec = rate.asFloat;
-								});
-								("--Sound Stop at (outside get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
-								*/
-
-								//0.1.yield; //<---NOPE, CAN'T DO THIS HERE....but would it work if encapsulated inside a larger function?
-								//~yieldTime_autoRec = rate.asFloat; <-- moving inside get
 							}, {//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
 								("-------").postln;
 								("**Recording...SOUND STOP? ... Testing...").postln;
@@ -464,13 +397,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 									~hearSound = false;
 									~yieldTime_autoRec = ~listenDur_intraSound;
 								});
-								//("--Sound Stop at (outside get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
-
-								/*~hearSound = false; //////////------orig
-								//could log sound stop time here for more accurate sample out pos <------!!!!!!
-								("-------").postln;
-								("**Recording...SOUND STOP? ... Testing...").postln;
-								~yieldTime_autoRec = ~listenDur_intraSound; */
 							});
 					});
 				});
@@ -484,7 +410,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					{//if ~listening == true...
 						if (~playSamp == false, { //don't record if playing back samples...
 
-							if(~autoRecStartTrig == true, {//debounce when routine first launched (avoids false sound detection from mouse click)
+							if(~autoRecStartTrig == true, {//DEBOUNCE when routine first launched (avoids false sound detection from mouse click)
 								~hearSound = false; //<--- probs not necessary here....just debugging....
 								~autoRecStartTrig = false;
 								~bus_onsets.set(0);  //<----?
@@ -493,7 +419,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							});
 
 							//GET SUM BUS
-							//if(~autoRecStartTrig == true, {"xkoxkokxkokx ________  here before ~autoRecStartTrig == false".postln; }); //<---
 							featureBus.get({|val|
 								if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
 									{//SOUND DETECTED
@@ -518,13 +443,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 												("- - - - -").postln;
 												("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
 												("--REC Sample Start").postln;
-												//("--------").postln;
 												~recSamp_input = true;
 												{~button_recIn.value = 1;}.defer;
-
-												//Log start time here or in previous iteration as above??
-												//Index sumBus feature vals into ~soundMemory buffer??? //<---
-
 												~yieldTime_autoRec = ~listenDur_intraSound; //LEAVING THIS SIDE OF ROUTINE
 											}
 										);
@@ -535,24 +455,20 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 										if (~hearSound == true, {
 											~hearSound = false;
 											("--> ...false alarm?...").postln;
-											//~listenDur_intraSound.yieldAndReset; //<-- this or ~autoRec_rate ?
-											//~listenDur_stateChange.yieldAndReset; //<-- this or ~autoRec_rate ?
 											~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
 										}, { //else if ~hearSound == false
 											("-->...silence...").postln;
 											~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
 										});
-								});
+									}
+								);
 							});
 						},
 						{ //else if (~playSamp == true)
 							~yieldTime_autoRec = 1;
 						});
-					}
-				);
-			}
-		);
-
+				});
+		});
 		0.02.yield;
 		//	("~yieldTime_autoRec = " ++ ~yieldTime_autoRec).postln;
 		~yieldTime_autoRec.yieldAndReset;
@@ -708,25 +624,22 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		{
 			~autoRecStart.stop; //<--uncomment when done debugging
 			~autoRecStart.free; //<--uncomment when done debugging
-			~listen.value(0); //stop listening
 			//~autoRec_random.stop;
 			//~autoPlay_random.stop;
 
 			if (~recSamp_input == true, { //pertains to ~autoRec_soundTrig1
-				if (~hearSound == true, {
+				if (~hearSound == true, { //if actively "recording" sound, stop recording and write sample file
 					~phaseBusMonRec.get({|val|
 						~recSamp_input_stopFrame = val.round(1);
 						("--Sound Stop at = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
 						~writeSampFromBufCopy_input.value(); //writes sample, sets ~recSamp = false, updates GUI
-						~hearSound = false;
 					});
 				});
-				//~recSamp_input = false;
-				//~button_recIn.value = 0;
 			}, { //if ~recSamp_input == false
-				~hearSound = false;
 				~button_recIn.value = 0;
 			});
+
+			~listen.value(0); //stop listening
 
 			/*if (~recSamp_input == true, { //pertains to ~autoRec_random routine only...
 				~writeIn2Disk.free;
@@ -746,23 +659,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				~playSamp = false;
 				~button_playSamp.value = 0;
 			} );
-
-			/*
-			if(~writeIn2Disk.isRunning, { //causes bugs if these env variables have never been created...
-				~writeIn2Disk.free;
-				~audioBuf_inMainWrite.close;
-				~audioBuf_inMainWrite.free;
-				~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
-				~recSamp_input = false;
-				~button_recIn.value = 0;
-			});
-
-			if (~samp0.isRunning, { //free sample playback synth and buffer if it's still running when this button is turned off / ~autoPlay_random routine is stopped.......
-				~samp0.free;
-				~audioBuf_play0.free;
-				~playSamp = false;
-				~button_playSamp.value = 0;
-			}); */
 		}
 	);
 } )

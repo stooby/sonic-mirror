@@ -294,8 +294,9 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 		//INSERT SWITCH CASE HERE FOR EACH DIFFERENT SUM BUS
 		//....W/ NESTED CONDITIONALS SETTING ~currentSound based on extracted audio...
 
-		//push ~currentSound into "sound memory array / buffer" periodically
-		//update ~currentScene based on "sound memory array" periodically
+
+		//push ~currentSound into "sound memory array / buffer" periodically  <--put this in ~autoRec routine?
+		//update ~currentScene based on "sound memory array" periodically <--put this in ~autoRec routine?
 
 	});
 };
@@ -332,8 +333,6 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 			//copy chunk 1 to new buf from ~recSamp_startFrame to last frame of ~audioBuf0
 			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: 0, srcStartAt: ~recSamp_input_startFrame, numSamples: bufChunk1frames); //<---if "NO BUF data" errors thrown, try reducing bufChunk1frames by 1, not sure if this method counts samples inclusive or exclusive of start frame
 
-			//0.1.yield; //<--- CAN'T DO THIS HERE .... maybe not needed??? ...would this work inside a .get function if encapsulated in a routine?
-
 			//copy chunk 2 to new buf from first frame of ~audioBuf0 to ~recSamp_stopFrame
 			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: (bufChunk1frames - 1), srcStartAt: 0, numSamples: bufChunk2frames);
 
@@ -342,8 +341,6 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 			("--WRAP AROUND 2-STEP WRITE--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
 			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
-
-			//0.1.yield; //<---CAN'T DO HERE....would this even be necessary? ...would this work inside a .get function if encapsulated in a routine?
 			~audioBuf_inMainWrite.free;
 	});
 
