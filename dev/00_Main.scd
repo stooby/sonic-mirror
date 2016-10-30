@@ -1,13 +1,5 @@
 //Sonic Mirror - 00_Main:
 
-//TODO:
-//  • add new pitch tracker synth instrument feature:  freq of synth/sampler mimics or derived from audio feature extraction...
-//• add DiskIn recording method from ~autoRec_random into alternate version of ~autoRec_soundTrig1 to avoid strict buffer.copy and .write methods and hopefully get rid of some funky bugs....
-
-//Fix:
-//• autoRec_soundTrig routine....works first time run,  but drops recPhaseStart polling in subsequent restarts and seems to record increasingly larger files from same start point
-//      - also make it detect exact recPhaseFrame when all feature extractors aren't exceeding thresholds (when ~hearSound first = false;) and then calculate sampleStop time from this for tighter sample  durations....
-
 //== Main Performance Doc ==
 
 //---- refactor in progress ----
