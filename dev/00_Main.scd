@@ -308,7 +308,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 			~sumSyn_xin.free;
 			~busSum_lop.free;
-			l.free;  p.free;  n.free;
+			l.free;
+			p.free;
+			n.free;
 			~listening = false;
 			~hearSound = false;
 
@@ -320,7 +322,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-~loudnessThresh = 5; //set w/ ~senseNoiseFloor
+~loudnessThresh = 5; //set w/ ~senseNoiseFloor eventually?
 ~pitchThresh = 0.55;
 
 ~hearSound = false;
@@ -337,7 +339,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~preRecDur = 0.2; //amount of time to sample from buffer prior to start of ~autoRec
 ~postRecSnip = -0.3; //amount of time to subtract from total dur of sampled sound (to cut silence at end of sample after ~autoRec finished and ~listenDur_intraSound pads end...)
 
-~listenDur_intraSound = 1.5; //<----NEW: amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
+~listenDur_intraSound = 1.5; //<----amount of time (sec) to continue listening for continuation of contiguous sound object between gaps of silence (e.g. seperation threshold for dividing sound objects)
+~time_listenTimeOut;  //time to wait until when testing for cessation of sound event
+
 ~autoRec_rate = 0.1; //finest timing resolution of ~autoRec_soundTrig routine
 ~listenDur_stateChange = 0.2;  //not sure if I'm going to need/use this yet...
 ~yieldTime_autoRec = 0.1;  //val to be reassigned as routine runs...
@@ -345,6 +349,154 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~autoRecStartTrig = true; //flag triggered when ~autoRec routines initiated (used for debounce time when triggered via button press to avoid false sound detection)
 
 ~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceDur = 0.7|
+	Routine( {
+		if (~recSamp_input == true,
+			{
+				// add if (~listening == true, {  }); <---yes or no?
+				featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
+					if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
+					//if (( (val[0] >= ~loudnessThresh) || (val[3] >= ~pitchThresh) ),
+						{//SOUND DETECTED
+							~hearSound = true;
+							//CONTINUE RECORDING / DO NOTHING....
+							("-----=======-----").postln;
+							("**Recording... SOUND DETECTED").postln;
+							("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+							//~yieldTime_autoRec = ~listenDur_intraSound;
+							~yieldTime_autoRec = rate.asFloat;  //<--- switch to this for more accurate sample stop time
+							//~yieldTime_autoRec = 0.3;  //<----don't hardcode this...
+						},
+						{//IF NO SOUND DETECTED...
+							if (~hearSound == false,
+								{
+									var currentTime = Main.elapsedTime.round(0.001);
+									if (currentTime >= ~time_listenTimeOut,
+										{
+											//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
+											("--------++++++++-------").postln;
+											("**Recording... SOUND STOP CONFIRMED").postln;
+											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+											~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
+
+											//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
+											//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
+
+											~yieldTime_autoRec = rate.asFloat;
+										},
+										{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
+											("----").postln;
+											("**Testing for sound stop...** - Current Time:" + currentTime).postln;
+											("---Terminate Test at:" + ~time_listenTimeOut).postln;
+											~yieldTime_autoRec = rate.asFloat;
+										}
+									);
+								},
+								{//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
+									~time_listenTimeOut = ~listenDur_intraSound + Main.elapsedTime.round(0.001);
+									("-------").postln;
+									("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
+									("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+									//GET recHead phasor position and log "STOP  SAMPLE TIME"
+									~phaseBusMonRec.get({|val|
+										~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
+										if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
+											~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
+										} );
+										("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+										//~yieldTime_autoRec = rate.asFloat;
+										~hearSound = false;
+										//~yieldTime_autoRec = ~listenDur_intraSound;
+										~yieldTime_autoRec = rate.asFloat;
+									});
+								}
+							);
+						}
+					);
+				});
+			} ,
+			{//else if ~recSamp_input == false
+				if (~listening == false,
+					{
+						"***Can't record, not listening...***".postln;
+						~yieldTime_autoRec = 1;
+					},
+					{//if ~listening == true...
+						if (~playSamp == false,
+							{ //don't record if playing back samples...
+								if(~autoRecStartTrig == true, {//DEBOUNCE when routine first launched (avoids false sound detection from mouse click)
+										~hearSound = false; //<--- probs not necessary here....just debugging....
+										~autoRecStartTrig = false;
+										~bus_onsets.set(0);  //<----?
+										("Debounce =" + debounceDur + "sec").postln;
+										debounceDur.yield;
+								});
+
+								//GET SUM BUS
+								featureBus.get({|val|
+									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
+										{//SOUND DETECTED
+											("---").postln;
+											("**HEAR SOUND**").postln;
+											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+											if (~hearSound == false, //TEST SOUND START...
+												{
+													~phaseBusMonRec.get({|val| //log recHead pos
+														~recSamp_input_startFrame = (val - (~preRecDur * s.sampleRate)).round(1);
+														if (~recSamp_input_startFrame < 0, { //if startFrame is negative...
+															~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
+														});
+														("---------").postln;
+														("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
+														~hearSound = true; //<--- moved inside get
+														~yieldTime_autoRec = rate.asFloat; //<--- moved inside get
+													});
+												},
+												{//else ~hearSound == true
+													("- - - - -").postln;
+													("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
+													("--REC Sample Start").postln;
+													~recSamp_input = true; //causes us to LEAVE THIS SIDE OF ROUTINE
+													{~button_recIn.value = 1;}.defer;
+													~yieldTime_autoRec = ~listenDur_intraSound; //forces min sample record dur
+												}
+											);
+										},
+										{//if NO SOUND DETECTED ........
+											("--- NO SOUND ---").postln;
+											("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											if (~hearSound == true,
+												{
+													~hearSound = false;
+													("--> ...false alarm?...").postln;
+													~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
+												},
+												{ //else if ~hearSound == false
+													("-->...silence...").postln;
+													~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
+												}
+											);
+										}
+									);
+								});
+							},
+							{ //else if (~playSamp == true)
+								~yieldTime_autoRec = 1;
+							}
+						);
+					}
+				);
+			}
+		);
+		0.02.yield;
+		//	("~yieldTime_autoRec = " ++ ~yieldTime_autoRec).postln;
+		~yieldTime_autoRec.yieldAndReset;
+	} );
+};
+
+/*~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceDur = 0.7|
 	Routine( {
 		if (~recSamp_input == true,
 			{
@@ -465,7 +617,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		//	("~yieldTime_autoRec = " ++ ~yieldTime_autoRec).postln;
 		~yieldTime_autoRec.yieldAndReset;
 	} );
-};
+};  */
 
 ~autoRec_random = Routine.new( {
 	if (~recSamp_input == true,
