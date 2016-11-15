@@ -50,7 +50,7 @@ SynthDef(\a2k_patch, {
 }).add;
 
 SynthDef.new(\pitchShifter, {
-	arg inBus, outBus, windowSize = 0.2, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.2, amp = 1;
+	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.002, amp = 1;
 	var sigIn, sigOut;
 	sigIn = In.ar(inBus, 1);
 	//sigIn = InFeedback.ar(inBus, 1);
@@ -319,6 +319,9 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 			var recFrames = (~recSamp_input_stopFrame - ~recSamp_input_startFrame) + 1; //+1 to include stopFrame in frame count
 
 			~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", startFrame: ~recSamp_input_startFrame, numFrames: recFrames); // write sampled buffer to audio file - directly from original buffer...
+
+			//~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
+
 			("--SIMPLE Write--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
 			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
@@ -338,6 +341,9 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 
 			//write ~audioBuf_inMainWrite to an audio file
 			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24");
+
+			//~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
+
 			("--WRAP AROUND 2-STEP WRITE--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
 			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
@@ -346,6 +352,10 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 
 	~recSamp_input = false; //EXIT THIS HALF OF ROUTINE, resume listening for sound...
 	{~button_recIn.value = 0}.defer; //update GUI
+
+	~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
+	~autoRecPlay_state = 1; //<------NEW --- (advance state to trigger ~autoPlay before next ~autoRec)
+	("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
 
 	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
 	if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
