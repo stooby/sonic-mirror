@@ -9,6 +9,7 @@
 (~dir ++ "01_Startup.scd").load;           // Server Options and Startup
 (~dir ++ "02_SynthDefs.scd").load;       // SynthDefs
 (~dir ++ "03_Busses.scd").load;            // Busses
+(~dir ++ "04_Functions.scd").load;        // Functions and Routines
 
 s.quit;  //convenience method (for cleanup)
 s.plotTree; //for debugging
@@ -91,9 +92,6 @@ Buffer.freeAll; //for cleanup
 // --------- SET UP SOME INITIAL SYNTHS? ------------
 ~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);
 //Synth(\pitchShift1)???
-
-//
-//
 
 //-------------------
 
@@ -249,7 +247,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //--------------------------------
 
-
 //--------- Soundfile Rec / Playback ---------------
 
 //--put these variables back w/ the rest of env variables at some point??--
@@ -270,7 +267,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~fileAudio_writeIn_lastFileDur; //<--------NEW
 ~soundMemory = []; //<-------NEW (init)
 //~soundMemory = [["sound1Name", sound1timeIn, sound1timeOut, sound1dur, sus / transient, mean loudness, pitchiness, mean pitch], ["sound2Name", sound2timeIn, sound2timeOut, ....], ["sound3Name", ...], ["soundMaxNumName", ...]];
-
 
 ~minNumFilesB4Playback = 1; // file # threshold before file playback routine commences
 ~fileAudio_writeIn_maxNum = 30; //max # of audio samples written per session (wrap-around & overwrite limit - inclusive of 0)
@@ -358,8 +354,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~yieldTime_autoRec = 0.1;  //val to be reassigned as routine runs...
 
 ~autoRecStartTrig = true; //flag triggered when ~autoRec routines initiated (used for debounce time when triggered via button press to avoid false sound detection)
-
-
 
 ~autoPlay_soundTrigAuto = Routine({
 	if (~playSamp == true,
@@ -484,8 +478,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		}
 	);
 });
-
-
 
 ~autoRec_soundTrigAuto =  {|featureBus, rate = 0.1, debounceDur = 0.5|
 	Routine( {
@@ -810,279 +802,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		rate.asFloat.yieldAndReset;
 	} );
 };
-
-/*~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceDur = 0.7|
-	Routine( {
-		if (~recSamp_input == true,
-			{
-				// add if (~listening == true, {  }); <---yes or no?
-				featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
-					if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
-					//if (( (val[0] >= ~loudnessThresh) || (val[3] >= ~pitchThresh) ),
-						{//SOUND DETECTED
-							~hearSound = true;
-							//CONTINUE RECORDING / DO NOTHING....
-							("-----=======-----").postln;
-							("**Recording... SOUND DETECTED").postln;
-							("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-							//~yieldTime_autoRec = ~listenDur_intraSound;
-							~yieldTime_autoRec = rate.asFloat;  //<--- switch to this for more accurate sample stop time
-							//~yieldTime_autoRec = 0.3;  //<----don't hardcode this...
-						},
-						{//IF NO SOUND DETECTED...
-							if (~hearSound == false,
-								{
-									var currentTime = Main.elapsedTime.round(0.001);
-									if (currentTime >= ~time_listenTimeOut,
-										{
-											//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
-											("--------++++++++-------").postln;
-											("**Recording... SOUND STOP CONFIRMED").postln;
-											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-
-											~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
-
-											//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
-											//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
-
-											~yieldTime_autoRec = rate.asFloat;
-										},
-										{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
-											("----").postln;
-											("**Testing for sound stop...** - Current Time:" + currentTime).postln;
-											("---Terminate Test at:" + ~time_listenTimeOut).postln;
-											~yieldTime_autoRec = rate.asFloat;
-										}
-									);
-								},
-								{//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
-									~time_listenTimeOut = ~listenDur_intraSound + Main.elapsedTime.round(0.001);
-									("-------").postln;
-									("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
-									("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-
-									//GET recHead phasor position and log "STOP  SAMPLE TIME"
-									~phaseBusMonRec.get({|val|
-										~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
-										if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
-											~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
-										} );
-										("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
-										//~yieldTime_autoRec = rate.asFloat;
-										~hearSound = false;
-										//~yieldTime_autoRec = ~listenDur_intraSound;
-										~yieldTime_autoRec = rate.asFloat;
-									});
-								}
-							);
-						}
-					);
-				});
-			} ,
-			{//else if ~recSamp_input == false
-				if (~listening == false,
-					{
-						"***Can't record, not listening...***".postln;
-						~yieldTime_autoRec = 1;
-					},
-					{//if ~listening == true...
-						if (~playSamp == false,
-							{ //don't record if playing back samples...
-								if(~autoRecStartTrig == true, {//DEBOUNCE when routine first launched (avoids false sound detection from mouse click)
-										~hearSound = false; //<--- probs not necessary here....just debugging....
-										~autoRecStartTrig = false;
-										~bus_onsets.set(0);  //<----?
-										("Debounce =" + debounceDur + "sec").postln;
-										debounceDur.yield;
-								});
-
-								//GET SUM BUS
-								featureBus.get({|val|
-									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
-										{//SOUND DETECTED
-											("---").postln;
-											("**HEAR SOUND**").postln;
-											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-
-											if (~hearSound == false, //TEST SOUND START...
-												{
-													~phaseBusMonRec.get({|val| //log recHead pos
-														~recSamp_input_startFrame = (val - (~preRecDur * s.sampleRate)).round(1);
-														if (~recSamp_input_startFrame < 0, { //if startFrame is negative...
-															~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
-														});
-														("---------").postln;
-														("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
-														~hearSound = true; //<--- moved inside get
-														~yieldTime_autoRec = rate.asFloat; //<--- moved inside get
-													});
-												},
-												{//else ~hearSound == true
-													("- - - - -").postln;
-													("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
-													("--REC Sample Start").postln;
-													~recSamp_input = true; //causes us to LEAVE THIS SIDE OF ROUTINE
-													{~button_recIn.value = 1;}.defer;
-													~yieldTime_autoRec = ~listenDur_intraSound; //forces min sample record dur
-												}
-											);
-										},
-										{//if NO SOUND DETECTED ........
-											("--- NO SOUND ---").postln;
-											("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-											if (~hearSound == true,
-												{
-													~hearSound = false;
-													("--> ...false alarm?...").postln;
-													~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
-												},
-												{ //else if ~hearSound == false
-													("-->...silence...").postln;
-													~yieldTime_autoRec = rate.asFloat; //routine's default quickest poll rate
-												}
-											);
-										}
-									);
-								});
-							},
-							{ //else if (~playSamp == true)
-								~yieldTime_autoRec = 1;
-							}
-						);
-					}
-				);
-			}
-		);
-		0.02.yield;
-		//	("~yieldTime_autoRec = " ++ ~yieldTime_autoRec).postln;
-		~yieldTime_autoRec.yieldAndReset;
-	} );
-};  */
-
-~autoRec_random = Routine.new( {
-	if (~recSamp_input == true,
-		{ //STOP RECORDING / WRITING AUDIO INPUT TO FILE
-			//var yieldTime = rrand(5, 8).round(0.01);
-			var yieldTime = rrand(8, 30).round(0.01);
-			~recSamp_input = false;
-			{~button_recIn.value = 0;}.defer;
-
-			~writeIn2Disk.free; //stop recording to disk
-			~audioBuf_inMainWrite.close; //close the buffer to finish writing the sound file (won't be readable otherwise)
-			~audioBuf_inMainWrite.free;
-			("AutoRecRand -- WROTE Samp-AUDIO-IN_" ++ ~fileAudio_writeIn_nameNum).postln;
-			~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file name suffix in prep for next rec file
-			if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, //cap max file count...
-				{~fileAudio_writeIn_nameNum = 0;}
-			);
-
-			("AutoRecRand -- Next Time to RandRec = " ++ yieldTime).postln;
-			yieldTime.yieldAndReset;
-		} ,
-		{//else if ~recSamp_input == false
-			if (~playSamp == false, {
-				if (~bufRecorder.isRunning, {//BEGIN RECORDING AUDIO INPUT TO FILE
-					var recTime = rrand(~minRecDur, ~maxRecDur).round(0.01);
-
-					~recSamp_input = true;
-					{~button_recIn.value = 1;}.defer;
-					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
-					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
-					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
-					("AutoRecRand: -- recTime = " ++ recTime).postln;
-					("---").postln;
-					recTime.yieldAndReset;
-				} , { //else if ~bufRecorder not running, don't record anything
-					"AutoRecRand: -- NO RECORDING - BUF REC NOT ACTIVE".postln;
-					8.yieldAndReset;
-				});
-			}, { //else if (~playSamp == true)
-				5.yieldAndReset;
-			} );
-		}
-	);
-} );
-
-~autoPlay_random = Routine.new( {  //<----- LIL BUGGY, almost there.... sample playback buffer getting lost somehow????
-	if (~playSamp == true,
-		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
-			var time2yield, interpSynth;
-			~playSamp = false;
-
-			if (~bufPlayer.isRunning, {
-				interpSynth = Synth(\LinInterp_num, [\startVal, 0.0, \stopVal, 1.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //turn inStreamLevel back to 1.0 in 0.2 sec (++++\startVal should probs = variable storing current value of inputStreamLevel++++)
-				{~slider_inFlow1_level.value = 1;}.defer;  //update GUI
-				{~numBox_inFlow1_level.value = 1;}.defer; //update GUI
-				//0.2.yield;  //not necessary, since sound's stopped by this point...
-			});
-
-			~audioBuf_play0.free;
-			{~button_playSamp.value = 0;}.defer; //update GUI button
-
-			time2yield = rrand(3, 5).round(0.01);
-			//time2yield = rrand(12, 35); //<-----TIME RANGE - TRIGGER RATE (IN SEC).....
-			("AutoPlayRand: -- time2nextPlay= " ++ time2yield ++ " sec").postln;
-			time2yield.yieldAndReset;
-		},
-		{//if not playing a soundFile, ~playSamp == false
-			if (~recSamp_input == false, //only play back sounds if not currently recording...
-				{
-					if (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback, //if min # of files have been written
-						{//.....currently triggers random sample every time routine is played...DEVELOP....
-
-							//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
-							//---e.g. routines checking machine listening ugen output control busses...
-
-							//PLAYBACK AUDIO FILE FROM DISK
-							//var readDiskSynth, interpSynth, readFileFunc, randFilePick, duration;
-							var interpSynth, randFilePick, fileDir, duration;
-
-							~playSamp = true; //set flag
-
-							if (~bufPlayer.isRunning, { //if playing buffer audio, silence it for audio sample playback
-								//get current signal flow/chain level val from ~inputStreamLevelBus and assign to local variable used for \startVal arg in interpSynth below...
-								interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.2 sec (***startVal should probs = variable storing current value of inputStreamLevel***
-								{~slider_inFlow1_level.value = 0;}.defer;  //update GUI
-								{~numBox_inFlow1_level.value = 0;}.defer; //update GUI
-								("~bufPlayer.isRunning - 0.2.yield").postln;
-								0.2.yield;
-							});
-							("--after checking ~bufPlayer.isRunning").postln;
-
-							randFilePick = rrand(0, (~fileAudio_writeIn_nameNum - 1)); //pick a random file to play (needs to be "current nameNum counter val - 1" b/c current counter value doesn't have a file associated w/ it yet due to counter incrementing after a new file has been written...)
-
-							//<----***could alternatively insert other file picking behaviors or mappings here****
-
-							//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
-							fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath;
-
-							//PLAY SOUND FILE from disk
-							~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
-								//duration = buffer.numFrames/s.sampleRate;
-								duration = buffer.numFrames/buffer.sampleRate;
-								~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-								//NodeWatcher.register(~samp0);
-
-								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
-
-							});
-							{~button_playSamp.value = 1;}.defer; //update GUI
-							("Pre-yield samp Dur = " ++ duration).postln;
-							0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that lon, thought short yield times was causing a "Buffer UGen: buffer data" error, but testing seems to point elsewhere ...
-							("Post-yield samp Dur = " ++ duration).postln;
-							//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
-							(duration + 0.2).round(0.01).yieldAndReset; //<---probs not necessary to add 0.2 sec, experiment
-							//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
-						},
-						{15.yieldAndReset;} //<------------ wait if not enough files have been written yet
-					);
-				},
-				{5.yieldAndReset;} //else if (~recSoundInput == true)
-			);
-		}
-	);
-} );
 
 ~button_autoRecPlay = Button(w, Rect(215, 349, 25, 25))
 .states_( [
@@ -1446,7 +1165,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-
 ~routine_playHeadOffset = Routine.new( {
 	~phaseBusMonRec.get( {
 		arg val;
@@ -1463,590 +1181,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } );
 
 //--------------------
-
-
-
-//--------- GUI UPDATE ROUTINES ----------------
-~updateGUI_rate = Routine.new ( {
-	~rateBus.get( {
-		arg val;
-		var thisVal = val.abs; //in case "Reverse" enabled and rate is negative...   <-----
-		AppClock.sched(0.0, { //this is necessary for some reason...
-			//"pitchBusVal= ".post; val.ratiomidi.round(0.01).postln;
-			//~slider_rate.value_(val.ratiomidi.linlin(-48, 48, 0, 1) );
-			~slider_rate.value_(thisVal.ratiomidi.linlin(-48, 48, 0, 1) );
-			//~numBox_rate.value_(val.ratiomidi.round(0.01));
-			~numBox_rate.value_(thisVal.ratiomidi.round(0.01));
-			nil;
-		} );
-	} );
-	0.1.yieldAndReset;
-} );
-
-~updateGUI_freq = Routine.new ( {
-	~pitchBus.get( {
-		arg val;
-		AppClock.sched(0.0, { //this is necessary for some reason...???????
-			//"pitchBusVal= ".post; val.ratiomidi.round(0.01).postln;
-			~slider_pitch.value_(val.ratiomidi.linlin(-48, 24, 0, 1) );
-			~numBox_pitch.value_(val.ratiomidi.round(0.01));
-			nil;
-		} );
-	} );
-	0.1.yieldAndReset;
-} );
-
-~updateGUI_pitchShiftMix = Routine.new ( {
-	~pitchShiftMixValBus.get( {
-		arg val;
-		AppClock.sched(0.0, { //this is necessary for some reason...??????
-			~slider_pitchShiftMix.value_(val);
-			~numBox_pitchShiftMix.value_((val * 100).round(1));
-			nil;
-		} );
-	} );
-	0.1.yieldAndReset;
-} );
-
-~updateGUI_outMainLevel = Routine.new ( {
-	~outMainLevelBus.get( {
-		arg val;
-		AppClock.sched(0.0, { //this is necessary for some reason...??????
-			~slider_outMainLevel.value_(val);
-			~numBox_outMainLevel.value_(val.round(0.01));
-			nil;
-		} );
-	} );
-	0.1.yieldAndReset;
-} );
-
-~updateGUI_counter_rateT2rand = Routine.new( { //crude somewhat inaccurate way to do this but good enough for now
-	if (~time2NextRandom_rate <= 0, {~time2NextRandom_rate = 0;} );
-	~numBox_counter_rateT2rand.value_(~time2NextRandom_rate);
-	~time2NextRandom_rate = ~time2NextRandom_rate - 0.1;
-	0.1.yieldAndReset;
-} );
-// ------------------
-
-
-//----- RANDOMIZE ROUTINES -------
-~randomRoutine_rate = Routine.new ( { //Automatically randomize playback rate and adjust playHead
-	var time2nextRandomize, randNum4transp, newPitch, pitchCase, pitchInterp, interpTime;
-
-	~rateBus.get( {
-		arg val;
-		//("*****currentRate=" + val).post;
-			~pitchShiftValPrev_rate = val.ratiomidi;
-			//("---prevPitch=" + ~pitchShiftValPrev_rate).postln;
-	} );
-
-	0.1.yield; //<<<<<works, but not ideal b/c of added latency...  HOW CAN I ENABLE THIS ROUTINE TO FUNCTION W/OUT SLIGHT TIME YIELD HERE?
-
-	randNum4transp = rrand(1, 10); //based on random # from 1-10, determine type of pitch transposition
-	//"randNum4transp= ".post; randNum4transp.postln;
-	pitchCase = case
-	{randNum4transp <= 4} { //40% chance of lowering pitch
-		newPitch = rrand(-7.0, -0.2).round(0.01);
-		//("--newPitch=" + newPitch).post;
-	}
-	{randNum4transp >= 5 && randNum4transp <= 8} { //40% chance of no pitch change
-		newPitch = 0.0; //no transposition...
-		//("--newPitch=" + newPitch).post;
-	}
-	{randNum4transp >= 9} { //20% chance of raising pitch
-		newPitch = rrand(1.0, 5.0).round(0.01);
-		//("--newPitch=" + newPitch).post;
-	};
-
-	~pitchShiftValTarget_rate = newPitch; //set target pitch to shift to
-	//(" | targetPitch=" + ~pitchShiftValTarget_rate).postln;
-
-	if (newPitch != ~pitchShiftValPrev_rate, {
-		interpTime = rrand(1.2, 7.0);
-		//("interpTime=" + interpTime).postln;
-
-		//interpolate to new rate, is able to reverse during interpolation
-		pitchInterp = Synth(\LinInterp_rate, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime, \rateMod, ~revRateBusMon.asMap] );
-
-		//pitchInterp = Synth(\LinInterp_pitch, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime] );
-		/*
-		if (~button_rev.value == 1, { //when REVERSE mode enabled  <-----worked, but not during interp-------
-			pitchInterp = Synth(\LinPitchInterpRev, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime] );
-		} , { //when REVERSE mode disabled
-			pitchInterp = Synth(\LinInterp_pitch, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime] );
-		} ); */
-
-		~pitchInterp_rate = true; //flag (currently prevents playRecOffsetAdjust routine from interrupting pitchInterp)
-		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
-		~updateGUI_rate.reset;
-		AppClock.play(~updateGUI_rate);
-
-		(interpTime + 0.1).yield;
-		//1.3.yield; //keep or no!??? <-----
-
-		~pitchInterp_rate = false;
-		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
-		~updateGUI_rate.stop;
-		time2nextRandomize = rrand(13, 22); //if newPitch != prevPitch
-	} , {
-		time2nextRandomize = rrand(5, 10); //reduced possible time2nextRand in case newPitch == prevPitch
-	} );
-	~time2NextRandom_rate = time2nextRandomize; //for populating GUI
-	time2nextRandomize.yieldAndReset;
-} );
-
-
-~randomRoutine_freq = Routine.new ( {
-	//Automatically randomize pitch w/out time change (granular pitch shift)
-	var time2nextRandomize, randNum4transp, newPitch, pitchCase, pitchInterp, interpTime;
-
-	~pitchBus.get( {
-		arg val;
-		//AppClock.sched(0.0, {
-			~pitchShiftValPrev_freq = val.ratiomidi;
-			//("-*-prevFreq=" + ~pitchShiftValPrev_freq).postln;
-			//nil;
-		//} );
-	} );
-
-	0.1.yield; //<<<<<works, but not sure if ideal way...???
-
-	randNum4transp = rrand(1.0, 10.0); //based on random # from 1-10, determine type of pitch transposition
-	pitchCase = case
-	{randNum4transp <= 5} { //50% chance of raising/lowering pitch randomly
-		var thisRandNum = rrand(1, 10);
-		if (thisRandNum <= 5, // 50/50 change pitch is raised or lowered
-			{newPitch = rrand(-24.0, -0.2).round(0.01);},
-			{newPitch = rrand(0.2, 24).round(0.01);} );
-	}
-	{randNum4transp > 5 && randNum4transp <= 8.5} { //35% chance pitch change in response to current rate
-		newPitch = ~pitchShiftValTarget_rate * -1;
-	}
-	{randNum4transp > 8.5} { //15% chance of no pitch change
-		newPitch = ~pitchShiftValPrev_freq;
-	};
-	~pitchShiftValTarget_freq = newPitch; //set target pitch to shift to
-	//(" | targetPitch_freq=" + ~pitchShiftValTarget_freq).postln;
-
-	if (newPitch != ~pitchShiftValPrev_freq, { //if newPitch isn't the same as the last...
-		var thisDangoRandomNum;
-		interpTime = rrand(0.25, 6.0); //===INTERP TIME===
-		//("-*-freq_interpTime=" + interpTime).postln;
-		pitchInterp = Synth(\LinInterp_pitch, [\out, ~pitchBus, \startVal, ~pitchShiftValPrev_freq, \stopVal, ~pitchShiftValTarget_freq, \duration, interpTime] );
-
-		~pitchInterp_freq = true;
-		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
-		~updateGUI_freq.reset;
-		AppClock.play(~updateGUI_freq);
-
-		(interpTime + 0.1).yield; //<----IS IT ALWAYS NECESSARY TO ADD 0.1 to accommodate Synth interp? ?????????????????
-		//1.3.yield; //keep or no!??? <-----
-
-		~pitchInterp_freq = false;
-		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
-		~updateGUI_freq.stop;
-		//var thisDangoRandomNum = rrand(1, 10);
-		thisDangoRandomNum = rrand(1.0, 10.0);
-		if (thisDangoRandomNum <= 4.5, { //45% chance  time2next pitch change is SHORT
-			time2nextRandomize = rrand(0.3, 4.0).round(0.1); //if newPitch != the last pitch
-		}, { //55% chance  time2next pitch change is LONG
-			time2nextRandomize = rrand(4, 17);
-		} );
-	} , { //ELSE
-		time2nextRandomize = rrand(4, 10);  //if newPitch == last pitch
-	} );
-	~time2NextRandom_freq = time2nextRandomize; //for populating GUI
-	time2nextRandomize.yieldAndReset;
-} );
-
-~randomRoutine_pitchShiftMix = Routine.new ( {
-	var time2nextRandomize, randNum, mixCase, interpMix, interpTime;
-
-	~pitchShiftMixValBus.get( {
-		arg val;
-		~pitchShiftMix_prev = val;
-	} );
-
-	//!!!!!CONSIDER ALSO GETTING CURRENT pitchShift value....if == 0 make mixVal = 0
-
-	0.1.yield; //<<<<<works, but not sure if ideal way...
-
-	if (~pitchShiftMix_prev == 0, {  //<-----CONSIDER CHANGING THIS TO CASE INSTEAD BASED ON PRECISE CURRENT VALUE OF PITCH SHIFT MIX TO AVOID NEEDLESS GUI INTERPOLATION ROUTINES-------
-		randNum = rrand(1.0, 10.0);
-		mixCase = case
-		{randNum <= 4} { //set mix to 100%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 1.0, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop;
-		}
-		{randNum > 4 && randNum <= 7} { //set mix to 50%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0.5, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		};
-		//else if randNum > 7, leave mix at 0%
-
-	} , { //else if pitchShiftMix != 0
-		randNum = rrand(1.0, 10.0);
-		mixCase = case
-		{randNum <= 4} { //set mix to 100%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 1.0, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		}
-		{randNum > 4 && randNum <= 7} { //set mix to 50%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0.5, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		}
-		{randNum > 7} { //set mix to 0%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		};
-	} );
-
-	time2nextRandomize = rrand(5, 20);
-	~time2NextRandom_pitchShiftMix = time2nextRandomize;
-	time2nextRandomize.yieldAndReset;
-
-	//------more complicated chance and time based method-------
-
-	//currentTime = Date.localtime;
-	//~pitchShiftMix_prevChangeTime = currentTime.rawSeconds;
-} );
-
-
-~randomRoutine_outputLevel = Routine.new ( {  //randomly adjust main output level
-	var time2nextRandomize, randNum, interpLevel, interpTime;
-	//("***OUTPUTlevl_randomRoutine***").postln;
-
-	~outMainLevelBus.get( { //////method derived from ~randomRoutine_rate and freq....
-		arg val;
-		~outMainLevVal_prev = val;
-		//("--OutputLvlRtn: CURRENTLVL =" + val).postln;
-	} );
-	0.1.yield; //<<<<<works, but not sure if ideal way...
-
-	if (~outMainLevVal_prev < 1.0, { //if outMainLevel is 0 or less than 1, SET LVL BACK TO 1
-		//("--CASE1-SET LVL TO 1: outLevelPrev=" + ~outMainLevVal_prev).postln;
-		randNum = rrand(1, 10);
-		//("randNum1=" + randNum + " | ").post;
-		if (randNum <= 4, //PICK INTERPTIME BASED ON RAND NUM
-			{interpTime = rrand(0.25, 0.75); /* ("interpTime=" + interpTime).postln; */ },
-			{interpTime = rrand(3.25, 6.0); /* ("interpTime=" + interpTime).postln; */ } );
-
-		interpLevel = Synth(\LinInterp_num, [\out, ~outMainLevelBus, \startVal, ~outMainLevVal_prev, \stopVal, 1.0, \duration, interpTime] );
-		~outMainLevInterp = true;
-		~updateGUI_outMainLevel.reset;
-		AppClock.play(~updateGUI_outMainLevel);
-
-		(interpTime + 0.1).yield; //<----IS IT ALWAYS NECESSARY TO ADD 0.1 to accommodate Synth interp?
-
-		~outMainLevInterp = false;
-		~updateGUI_outMainLevel.stop;
-
-		randNum = rrand(1, 10);
-		//("randNum2=" + randNum + " | ").post;
-		//("---outLevel-randNum=" + randNum).postln;
-		if (randNum >= 8,
-			{time2nextRandomize = rrand(8, 20); //80% of time, long time2nextRand
-				//("time2Next=" + time2nextRandomize).postln;
-			} ,
-			{time2nextRandomize = rrand(0.25, 3).round(0.01); //20% of time short time2nextRand
-			//("time2Next=" + time2nextRandomize).postln;
-			}
-		);
-		//("---outLevel-randomTime=" + time2nextRandomize).postln;
-		//time2nextRandomize.yieldAndReset;
-	}, { //else if val >= 1
-		//("--CASE2: outLevelprev=" + ~outMainLevVal_prev).postln;
-		randNum = rrand(1.0, 10.0);
-		//("randNum1=" + randNum + " | ").post;
-		//("---outLevel-randNum=" + randNum).postln;
-		if (randNum <= 8.8, { //88% of time keep level at 1
-			//~outMainLevelBus.set(1);
-			//~slider_outMainLevel.value_(1);
-			time2nextRandomize = rrand(12, 18);
-			//("--NO LEVEL CHANGE...time2next=" + time2nextRandomize).postln;
-		},
-		{ //12% of time set level to 0
-			interpTime = rrand(0.1, 0.35).round(0.01);
-			//("--SET LVL to 0...interpTime=" + interpTime).postln;
-			interpLevel = Synth(\LinInterp_num, [\out, ~outMainLevelBus, \startVal, ~outMainLevVal_prev, \stopVal, 0.0, \duration, interpTime] );
-			~outMainLevInterp = true;
-			~updateGUI_outMainLevel.reset;
-			AppClock.play(~updateGUI_outMainLevel);
-
-			(interpTime + 0.1).yield; //<----IS IT ALWAYS NECESSARY TO ADD 0.1 to accommodate Synth interp?
-
-			~outMainLevInterp = false;
-			~updateGUI_outMainLevel.stop;
-
-			/*  //ORIG randomization to pick time2nextRandomize
-			randNum = rrand(1, 10);
-			if (randNum <= 4, {
-				time2nextRandomize = rrand(3.0, 5.0).round(0.01);
-			}, {
-				time2nextRandomize = rrand(5.0, 10.0).round(0.01);
-			} );
-			*/
-			time2nextRandomize = rrand(2.5, 4.0).round(0.01);
-			//("--SET LVL TO 0 | time2nextRand=" + time2nextRandomize).postln;
-		} );
-		//("---outLevel-randomTime=" + time2nextRandomize).postln;
-		//time2nextRandomize.yieldAndReset;
-	} );
-	//("---outLevel-randomTime=" + time2nextRandomize).postln;
-	time2nextRandomize.yieldAndReset;
-} );
-
-~randomRoutine_reverse = Routine.new ( {
-	var time2nextRandomize, thisRandomNum;
-	thisRandomNum = rrand(1.0, 10.0);
-	//("randRoutine: randNum=" + thisRandomNum).postln;
-	if (~button_rev.value == 0, { //if REVERSE disabled
-		if (thisRandomNum <= 3.2, { //32% chance REVERSE enabled
-			~button_rev.valueAction_(1);
-			//~revRateBusMon.set(-1); // <--DO THIS instead of valueAction !!!!!!!!!!
-			//~button_rev.value_(1); // <--DO THIS instead of valueAction !!!!!!!!!!!!
-			thisRandomNum = rrand(1, 10);
-			//("***thisRandNum-reroll" + thisRandomNum).postln;
-			if (thisRandomNum <= 8,
-				{time2nextRandomize = rrand(3.5, 6.0);},
-				{time2nextRandomize = rrand(6.0, 10.0);} );
-			//("time2NextRand=" + time2nextRandomize).postln;
-			time2nextRandomize.yieldAndReset;
-		}, { //71% chance REVERSE remains disabled
-			time2nextRandomize = rrand(9, 20);
-			//("time2NextRand=" + time2nextRandomize).postln;
-			time2nextRandomize.yieldAndReset;
-		} );
-	}, { //if REVERSE enabled
-		if (thisRandomNum <= 9, {
-			~button_rev.valueAction_(0); //90% chance REVERSE disabled
-			//~revRateBusMon.set(1); // <--DO THIS instead of valueAction !!!!!!!!!!
-			//~button_rev.value_(0); // <--DO THIS instead of valueAction !!!!!!!!!!!!
-
-			time2nextRandomize = rrand(9, 20);
-			//("time2NextRand=" + time2nextRandomize).postln;
-			time2nextRandomize.yieldAndReset;
-		}, {
-			time2nextRandomize = rrand(3.0, 5.0); //20% chance REVERSE remains enabled
-			//("time2NextRand=" + time2nextRandomize).postln;
-			time2nextRandomize.yieldAndReset;
-		} );
-	} );
-} );
-
-
-~randomRoutine_playHeadBehavior = Routine.new ( { //Randomize playHead behavior (Following or Random)
-
-//CONSIDER AUGMENTING EVENTUALLY to be aware of current rate and pitchShift values (so it can avoid feedback if randomRate or randomPitch routines not enabled by disabling playRecOffset if this is the case, for example) AAAANNDD ALSO BE AWARE OF previous and current playBehavior states to more intelligently govern probability of transitioning to new state (e.g. if previously was at randomState, increase the chances of reverting back to followPlayhead state upon next state change)
-
-	var time2nextRandomize, thisRandomNum, selectedBehavior, behaviorCase, newPos, offsetSec, minOffsetSec = 12, maxOffsetSec = 55;
-
-	thisRandomNum = rrand(1.0, 10.0);
-	if (((~randPlayPos_flag == false) && (thisRandomNum <= 8)) || (~randPlayPos_flag == true), { //80% chance playHead will follow recHead if randomPos not previously active
-		~randPlayPos_flag = false; //reset flag to remember randomPos no longer active after routine reset
-		~playHeadFollowRecHead.reset;
-		AppClock.play(~playHeadFollowRecHead);
-		time2nextRandomize = rrand(12, 20);
-		("***FOLLOW RECHEAD behavior running for " + time2nextRandomize + " secs...").postln;
-		time2nextRandomize.yieldAndReset;
-	}, { //else 25% chance playHead moved to random position...
-		//("***RANDOM POSITION***").postln;
-		~randPlayPos_flag = true;  //set flag to remember randomPos triggered after this routine is reset
-		~playHeadFollowRecHead.stop;
-
-		~phaseBusMonRec.get( {
-			arg recPos;
-			~lastRecPhasePos = recPos;
-			//("recPos="+recPos).post;
-			//(" | lastRecPhasePos=" + ~lastRecPhasePos).postln;
-		} );
-
-		~phaseBusMonPly.get( {
-			arg playPos;
-			//~lastPlayPhasePos = playPos;
-			~lastPlayPhasePos = playPos;
-			//("playPos=" + playPos).post;
-			//(" | lastPlayPhasePos=" + ~lastPlayPhasePos).postln;
-		} );
-
-		0.1.yield;
-
-		offsetSec = rrand(minOffsetSec, maxOffsetSec); //generate random offset value (in seconds)
-		//("offsetSec=" + offsetSec).postln;
-		thisRandomNum = rrand(1, 2);
-		if (thisRandomNum == 1,
-			{ //50% chance playHead offset backwards in time
-				//newPos = rrand(0, ~lastPlayPhasePos);
-
-				//("--BACKWARDS--").postln;
-				newPos = ~lastPlayPhasePos - (offsetSec * s.sampleRate);
-				if (newPos < 0, {newPos = (~audioBuf0.numFrames - 1) + newPos;} ); //wrap around if newPos initially less than 0
-				//("lastPlayPhaseFrame=" + ~lastPlayPhasePos + " | lastPlaySec=" + (~lastPlayPhasePos/s.sampleRate) ).postln;
-				//("newPos=" + newPos + " | " + (newPos/s.sampleRate) + "sec").postln;
-			},
-			{ //50% chance playHead offset forwards in time
-				//newPos = rrand(~lastPlayPhasePos, ~audioBuf0.numFrames - 1);
-
-				//("--FORWARDS--").postln;
-				newPos = ~lastPlayPhasePos + (offsetSec * s.sampleRate);
-				if (newPos > (~audioBuf0.numFrames - 1), {newPos = (newPos % ~audioBuf0.numFrames) - 1;} ); //wrap around if newPos greater than buffer length
-
-				if ( ((~lastRecPhasePos - newPos) <= (2 * s.sampleRate) ) && ((~lastRecPhasePos - newPos) >= 0), {
-					//("---AVOIDING FEEDBACK---").postln;
-					//("lastRecHeadPos =" + (~lastRecPhasePos/s.sampleRate) + " | ").post;
-					//("newPos WAS: " + (newPos/s.sampleRate).round(0.01) + "sec").postln;
-					newPos = ~lastRecPhasePos + (1.5 * s.sampleRate); //reset newPos to 1.5 seconds AFTER recHead to avoid inducing rapid feedback (only would happen if rate and pitch shift == 0)
-					if (newPos > (~audioBuf0.numFrames - 1), {newPos = (newPos % ~audioBuf0.numFrames) - 1;} ); //wrap around if newPos greater than buffer length
-					//("newPos IS NOW: " + (newPos/s.sampleRate).round(0.01) + "sec").postln;
-				} ); //to avoid landing too close to recHead and causing rapid audio feedback
-
-				//("lastPlayPhaseFrame=" + ~lastPlayPhasePos + " | lastPlaySec=" + (~lastPlayPhasePos/s.sampleRate) ).postln;
-				//("newPos=" + newPos + " | " + (newPos/s.sampleRate) + "sec").postln;
-			}
-		);
-		~phasor_play.set(\resetPos, newPos, \trig, 1); //set new position of playPhase (move playHead)
-		time2nextRandomize = rrand(4.5, 10.0).round(0.01);
-		("***RANDOM POSITION behavior running for " + time2nextRandomize + " secs...").postln;
-		time2nextRandomize.yieldAndReset;
-	} );
-
-
-
-/*	behaviorCase = case  //<------REINCORPORATE
-	{~playBehavior == 0} { //"follow recHead" behavior
-		~playHeadFollowRecHead.reset;
-		AppClock.play(~playHeadFollowRecHead);
-		if (thisRandomNum <= 7.5, {
-			time2nextRandomize = rrand(12.0, 25.0);
-			("***FOLLOW RECHEAD behavior running next " + time2nextRandomize + " secs...").postln;
-			time2nextRandomize.yieldAndReset;
-		}, {
-			/////////////////
-		} );
-	}
-	{  } { //"random play" behavior
-
-	}
-	{  } {//"random loop" behavior
-
-	}; */
-} );
-
-~playHeadFollowRecHead = Routine.new( {  //set playhead based on current RecHead-PlayHead offset AND playback Rate value --- used in ~randomRoutine_playHeadBehavior
-	//"**playRecOffsetIsGoing**  ".post;
-	//("revFlag=" + ~reverseFlag).postln;
-	if ((~pitchInterp_rate == false) && (~button_rev.value == 0) /*&& (~pitchInterp_freq == false) */, { //<---ADDED reverse & pitchInterp detection---
-		var currentTimeOffset, newOffsetPos, newOffsetAmount, pitchCase;
-
-		~phaseBusMonRec.get( {
-			arg recPos;
-			~lastRecPhasePos = recPos;
-			//("recPos="+recPos).post;
-			//(" | lastRecPhasePos=" + ~lastRecPhasePos).postln;
-		} );
-
-		~phaseBusMonPly.get( {
-			arg playPos;
-			//~lastPlayPhasePos = playPos;
-			~lastPlayPhasePos = playPos;
-			//("playPos=" + playPos).post;
-			//(" | lastPlayPhasePos=" + ~lastPlayPhasePos).postln;
-		} );
-
-		0.1.yield; //<--not sure if needed...not ideal and crude
-
-		if (~lastRecPhasePos < ~lastPlayPhasePos, //measure distance between rec and play - if rec's wrapped around to start of buffr before play
-			{currentTimeOffset = ( (~playOutFrame - ~playInFrame) - (~lastPlayPhasePos - ~lastRecPhasePos) ) / (s.sampleRate); } ,
-			{currentTimeOffset = (~lastRecPhasePos - ~lastPlayPhasePos)/(s.sampleRate); } //else measure offset if no wrap around has occured (will happen most of the time)
-		);
-		currentTimeOffset = currentTimeOffset.round(0.01);
-		//("!!!currentTimeOffset=" + currentTimeOffset).postln;
-
-		pitchCase = case
-		{~pitchShiftValTarget_rate > 0} {
-			if ( (currentTimeOffset <= 0.3) || (currentTimeOffset >= 6.5), { //MAINTAIN fixed PlayHead offset range BEHIND RecHead if ~pitchShiftValTarget_rate > 0 --- not too far behind, never surpassing
-				newOffsetAmount = rrand(2.7, 4.0); //generate random offset amount (in seconds)
-				newOffsetPos = ~lastRecPhasePos - ((newOffsetAmount * s.sampleRate).round(1)); //deduce new playPhase position based on newOffsetAmount (converted to frames)
-
-				/*if (newOffsetPos < 0, //orig simple safe driving
-				{newOffsetPos = (~audioBuf0.numFrames - 1) + newOffsetPos;} //wrap around buffer if negative position generated
-				); */
-
-				if ( (~playInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
-					newOffsetPos = ~playOutFrame + newOffsetPos; //wrap around buffer if negative position generated
-					if (newOffsetPos < 0, {
-						/*newOffsetPos = 0;*/ //think this could potentially cause issues if current recPos = 0 too...
-						newOffsetPos = ~lastRecPhasePos + 1000;} ); //to avoid never ending loop if result is still < 0
-				} );
-
-				if ( (~playInFrame > 0) && (newOffsetPos < ~playInFrame), { //safe driving: case 2
-					newOffsetPos = newOffsetPos + (~playOutFrame - ~playInFrame);
-					if (newOffsetPos < ~playInFrame, {newOffsetPos = ~lastRecPhasePos + 1000;}); //to avoid never-ending loop
-				} );
-
-				~phasor_play.set(\resetPos, newOffsetPos, \trig, 1); //set new position of playPhase (move playHead)
-			} );
-		}
-		{~pitchShiftValTarget_rate <= 0} {
-			if ( (currentTimeOffset >= 6.0) || (currentTimeOffset <= 0.3),
-			{//MAINTAIN fixed PlayHead offset range BEHIND RecHead if ~pitchShiftValTarget_rate <= 0 --- not too far behind, never surpassing
-				newOffsetAmount = rrand(0.5, 2.75); //generate random offset amount (in seconds)
-				newOffsetPos = ~lastRecPhasePos - ((newOffsetAmount * s.sampleRate).round(1)); //deduce new playPhase position based on newOffsetAmount (convert to frames)
-
-				if ( (~playInFrame == 0) && (newOffsetPos < 0), { //safe driving: case 1
-					newOffsetPos = ~playOutFrame + newOffsetPos; //wrap around buffer if negative position generated
-					if (newOffsetPos < 0, {
-						/*newOffsetPos = 0;*/ //think this could potentially cause issues if current recPos = 0 too...
-						newOffsetPos = ~lastRecPhasePos + 1000;} ); //to avoid never ending loop if result is still < 0
-				} );
-
-				if ( (~playInFrame > 0) && (newOffsetPos < ~playInFrame), { //safe driving: case 2
-					newOffsetPos = newOffsetPos + (~playOutFrame - ~playInFrame);
-					if (newOffsetPos < ~playInFrame, {newOffsetPos = ~lastRecPhasePos + 1000;}); //to avoid never-ending loop
-				} );
-
-				~phasor_play.set(\resetPos, newOffsetPos, \trig, 1); //set new position of playPhase (move playHead)
-			} );
-		};
-	} );
-
-	2.0.yieldAndReset;
-} );
 
 //-------------- BEHAVIOR BUTTONS ------------
 
@@ -2150,44 +1284,210 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	);
 } )
 .value_(0);
-
 //--------------------
 
 
 //------- SCOPE VIEW (AUDIO BUF0) ------------
 
-~scopeView = ScopeView(w.view, Rect(15, 10, 665, 170) );
+//~scopeView = ScopeView(w.view, Rect(15, 10, 665, 170) );
+~scopeView = ScopeView(w, Rect(15, 10, 665, 170) );
 ~scopeView.server_(s);
-~scopeView.xZoom = 1.0;  //changing these values doesn't seem to effect display
-~scopeView.x = 0;  //changing these values doesn't seem to effect display
+~scopeView.xZoom = 1;  //changing these values doesn't seem to effect display
+//~scopeView.x = 0;  //changing these values doesn't seem to effect display
 ~scopeView.yZoom = 1.0;
 
 
-//PLOTTER//
+/*
+//-------- PLOTTER ----------//
+GUI.skin.plot.fontColor = Color.red;
+GUI.skin.plot.plotColor = Color.blue;
+GUI.skin.plot.background = Color.black;
+GUI.skin.plot.gridColorX = Color.white;
+GUI.skin.plot.gridColorY = Color.cyan;
+//GUI.skin.plot.gridOnY = false;
+//GUI.skin.plot.gridOnX = false;
+
+~bufView = CompositeView(w, Rect(15, 10, 665, 170)).background_(Color.gray).resize_(5);
+
+~bufPlot = Plotter.new("Buffer", parent: ~bufView); //CREATE PLOTTER
+//~bufPlot = Plotter.new("BufferPlot", Rect(15, 10, 665, 170), parent: w);
+
+~audioBuf0.loadToFloatArray(action: {arg array;
+	{~bufPlot.value = array}.defer;
+});
 
 /*
-~bufPlot = Plotter.new("Buffer", Rect(15, 10, 665, 170), w); //CREATE PLOTTER
-~bufPlot.value = 0; //initialize w/ value of 0
-//~bufPlot.value = ~audioBuf0;
-~bufPlot.setProperties(
-	\fontColor, Color.red,
-	\plotColor, Color.blue,
-	\backgroundColor, Color.black,
-	\gridColorX, Color.white,
-	\gridColorY, Color.cyan,
-	\gridOnY, true,
-	\gridOnX, true
-);
+//<-------RESUME FROME HERE!!!!!!!!!!!!!
+//TESTING --- these funcs work...but refreshing is not working for some reason....
+~audioBuf0.loadToFloatArray(index: 88000, count: 120000, action: {arg array;
+	//{~bufPlot.value[88200..132300] = array}.defer;
+	{
+		array.collect({|item, i| ~bufPlot.value[88000 + i] = item;});
+		~bufPlot.refresh;  //<--doesn't work
+		//~bufView.refresh;  //<--doesn't work
+		//w.refresh; //<--doesn't work
+	}.defer;
+	//}.defer(0.5) //<---no change
+});
+~audioBuf0.get(0, {|val| val.postln;});
+~bufPlot.value[0];
+
+~bufPlot.value = Array.fill(~bufPlot.value.size, { rrand(-1.0, 1.0) });
+//~bufPlot.value;
+//~bufPlot.value.collect({|item| if (item != 0, {item;}); });
+//~bufPlot.value[1] = 1;
+~bufPlot.value[0..100000] = rrand(-1.0, 1.0);
+~bufPlot.value[0..300000] = 0.7;
+w.refresh;
+//~bufView.refresh;
 ~bufPlot.refresh;
+//w.refresh;
+
+~testViewUpdate = Routine({
+	//~bufPlot.value[0..300000] = rrand(-1.0, 1.0);
+	~bufPlot.value = Array.fill(~bufPlot.value.size, { rrand(-1.0, 1.0) });
+	//~bufPlot.domainSpecs = ControlSpec(0, ~audioBuf0_dur);
+	~bufPlot.refresh;
+	//w.refresh;
+	"Update?".postln;
+	0.5.yieldAndReset;
+});
+
+AppClock.play(~testViewUpdate);
+~testViewUpdate.stop;
+~testViewUpdate.reset;
+
 */
+
+{
+	~bufPlot.setProperties(
+		\gridOnY, false,
+		\gridOnX, true
+	);
+	~bufPlot.domainSpecs = ControlSpec(0, ~audioBuf0_dur);
+	~bufPlot.refresh;
+	//w.refresh;
+}.defer(0.2); //<--if this is any shorter, these properties won't be set for some reason....
+*/
+
+
+/*
+~updateBufView_prevPhase = 0;
+~updateBufView_plotWindowDur = 0.6;
+
+~updateBufView = Routine({ //<----NEW approach
+	//var initRecPhase;
+
+	~phaseBusMonRec.get({|val|
+		var plotStartFrame = val - (~updateBufView_plotWindowDur * s.sampleRate);
+
+		("Rec Phase:" + val + "|" + Main.elapsedTime.round(0.01)).postln;
+
+		if (plotStartFrame >= 0,
+			{
+
+			},
+			{
+
+			}
+		);
+	});
+
+	0.5.yield;
+
+	//("Rec Phase (post yield):" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+	("--Rec Phase (py):" + ~updateBufView_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+
+	~phaseBusMonRec.get({|val|
+		var frameCount;
+		("--Current Phase =" + val).postln;
+		if (val > ~updateBufView_prevPhase,
+			{frameCount = (val - ~updateBufView_prevPhase) + 1;
+				(">>>NO WRAP:" + "frameCount =" + frameCount).postln;
+				("---").postln;
+			}, //inclusive frame count between init frame and current frame
+			{//else current frame < initRecPhase – we've wrapped around buffer...
+				var chunk1, chunk2;
+				chunk1 = val + 1; //to be inclusive of frame 0
+				chunk2 = ~audioBuf0.numFrames - ~updateBufView_prevPhase; //prev frame to last frame of buffer
+				frameCount = chunk1 + chunk2;
+				(">>>WRAP AROUND:" + "frameCount =" + frameCount).postln;
+				("---").postln;
+			}
+		);
+
+	});
+	0.1.yieldAndReset;
+}); */
+
+~updateBufView = Routine({ //<----NEW approach
+	//var initRecPhase;
+
+	~phaseBusMonRec.get({|val|
+		//initRecPhase = val;
+		~updateBufView_prevPhase = val;
+		//("Rec Phase:" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+		("Rec Phase:" + ~updateBufView_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+		/*~audioBuf0.get(val, {|bufVal|
+			("In bufGet |" + "recPhase =" + val + "bufVal =" + bufVal).postln;
+			//~bufPlot.value[val] = bufVal;
+			~bufPlot.value[val] = 0.5;
+			("--bufPlot[val] =" + ~bufPlot.value[val]).postln;
+			//~bufPlot.refresh;
+		});  */
+	});
+
+	0.5.yield;
+
+	//("Rec Phase (post yield):" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+	("--Rec Phase (py):" + ~updateBufView_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+
+	~phaseBusMonRec.get({|val|
+		var frameCount;
+		("--Current Phase =" + val).postln;
+		if (val > ~updateBufView_prevPhase,
+			{frameCount = (val - ~updateBufView_prevPhase) + 1;
+				(">>>NO WRAP:" + "frameCount =" + frameCount).postln;
+				("---").postln;
+			}, //inclusive frame count between init frame and current frame
+			{//else current frame < initRecPhase – we've wrapped around buffer...
+				var chunk1, chunk2;
+				chunk1 = val + 1; //to be inclusive of frame 0
+				chunk2 = ~audioBuf0.numFrames - ~updateBufView_prevPhase; //prev frame to last frame of buffer
+				frameCount = chunk1 + chunk2;
+				(">>>WRAP AROUND:" + "frameCount =" + frameCount).postln;
+				("---").postln;
+			}
+		);
+
+	});
+
+	/*if (recPhase != nil, {
+		("Last Rec Phase (after yield):" + recPhase).postln;
+
+		~audioBuf0.loadToFloatArray(index: recPhase, count: (s.sampleRate * 0.4), action: {
+			arg array;
+			{~bufPlot.value = array}.defer;
+		});
+		/*
+		//~bufPlot.value[recPhase] = 0.7; //<--this only sets first value in ~bufPlot and no others for some reason....??????????
+		~bufPlot.value[0..100000] = rrand(-0.7, 0.7);
+		//~bufPlot.value[recPhase].set(0.5);
+		//~bufView.refresh;
+		//~bufPlot.refresh;
+		w.refresh;
+		*/
+	}); */
+
+	0.1.yieldAndReset;
+});
+
 //----------
 
 /*~phaseBusMonRec.get({|val| (val/s.sampleRate).postln;});  //junk for monitoring
 ~phaseBusMonRec.get({|val| val.postln;});
 ~phaseBusMonPly.get({|val| (val/s.sampleRate).postln;});  //<----this is where to get phasor value....
-~phasor_play.get(\end, {|val| val.postln;});
-~phasor_rec.get(\end, {|val| val.postln;});
-~phasor_rec.get(\start, {|val| (val/s.sampleRate).postln;}); */
+*/
 
 
 ////---------------RECORD TO BUFFER BUTTON--------------////
@@ -2218,21 +1518,29 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 			//~lastRecPhasePos.value.postln;
 
-			//////////////SCOPE
+			//////PLOTTER ----------
+			//~updateBufView.reset;
+			//AppClock.play(~updateBufView);
 
+
+			//////////////SCOPE
 			~scopeBuf_audioBuf0 = Buffer.alloc(s, ~audioBuf0.numFrames, 1); //create additional buffer for displaying contents of audio buffer...is this the only way to do this?? what happens if I 'scopeOut' to ~audioBuf0?
 			~scopeView.bufnum = ~scopeBuf_audioBuf0.bufnum; //<----
+			//~scopeView.bufnum = ~audioBuf0.bufnum; //<----this will also work (no addtl buffer needed)...
 			~scopeOut = Synth.tail(s, \scopeOut, [\inBus, ~inputSendBus, \buf, ~scopeBuf_audioBuf0]); //<----
+			//~scopeOut = Synth.tail(s, \scopeOut, [\inBus, ~inputSendBus, \buf, ~audioBuf0]); //<--this works also
 			~scopeView.start; //<----
-			//note to self: check out ScopeBuffer as a way to scope entire buffer
-
 			//////////
+
 		},
 		{ //when REC button disabled (when recording stops)
 			~phaseBusMonRec.get( {arg val; ~lastRecPhasePos = val;} ); //store last pos of recPhase
 			~phasor_rec.free;
 			~a2k_rec.free;
 			~bufRecorder.free; //stop recording to buffer and free RecBuf_loop synth
+
+			//~updateBufView.stop;  //PLOTTER
+
 
 			 ///FOR SCOPE
 			~scopeView.stop; //<----
@@ -2706,10 +2014,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //--------- GUI UPDATER (turn into routine?) ---------------
 
 AppClock.sched(0.0, { //AppClock scheduler increments slider positions...
-	//THIS DOUBLE APPCLOCK ENCAPS IS NECESSARY FOR SOME REASON (otherwise errors thrown)
 	~phaseBusMonPly.get( {
 		arg val;
-		AppClock.sched(0.0, { //<--1111111BBBBBB??????????????????
+		AppClock.sched(0.0, {
 			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1 (debugging)
 			~slider_playPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
 			~numBox_playPos.value = (val.round(1)/s.sampleRate).round(0.1); //convert frames to seconds and display
@@ -2719,31 +2026,30 @@ AppClock.sched(0.0, { //AppClock scheduler increments slider positions...
 
 	~phaseBusMonRec.get( {
 		arg val;
-		AppClock.sched(0.0, { //<--errors thrown w/out this but still functions properly for some reason...why?
+		AppClock.sched(0.0, {
 			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1
+			//val.postln;
 			~slider_recPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
 			~numBox_recPos.value = (val.round(1)/s.sampleRate).round(0.01) ; //convert frames to seconds and display
 
-			/* PLOTTER UPDATE CODE IN PROGRESS.........<<<<<<<<<<<<!!!!!!!!!!#########!!!!!!!!!!###########!!!!!!!!
-
-			//~audioBuf0.getToFloatArray(wait:0.01, action: {arg array; a = array; ~bufPlot.value = a; ~bufPlot.refresh;} );
-			if (~button_audioBuf_0.value == 1, {
-				//var bufCurrent;
-				AppClock.sched(0.0, {
-					~audioBuf0.get(val, {
-						|bufVal|
-						~bufPlot.value = (0..(~audioBuf0.numFrames - 1)).normalize(0, rrand(2,50)).sin;
-						//~bufPlot.value = bufVal.(0..(~audioBuf0.numFrames - 1)).normalize;
-						~bufPlot.refresh;
-					} ); //<----------??????
-					nil;
+			/*
+			// PLOTTER UPDATE CODE IN PROGRESS.........  <------------------
+			if (~button_recBuf.value == 1, {
+				~audioBuf0.get(val, {|bufVal|
+					//(val + " | " +  bufVal).postln;
+					{
+						val.postln;
+						(~bufPlot.value[val] + "before").postln;
+						~bufPlot.value[val] = bufVal; //<---tests indicate this isn't writing values to ~bufPlot, only first index gets value, nothing else ...... WHY?
+						(~bufPlot.value[val] + "after").postln;
+						//~bufPlot.refresh;
+						//~bufView.refresh;
+						w.refresh;
+						//"update plotter?".postln;
+					}.defer;
 				} );
-			} );
-			//~bufPlot.value = ~audioBuf0.read;
+			} ); */
 			//~bufPlot.refresh;
-			*/
-			//<<<<<<<<<<<<!!!!!!!!!!#########!!!!!!!!!!###########!!!!!!!!
-
 			nil;
 		} );
 	} );

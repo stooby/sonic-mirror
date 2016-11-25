@@ -50,7 +50,9 @@ SynthDef(\a2k_patch, {
 }).add;
 
 SynthDef.new(\pitchShifter, {
-	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.002, amp = 1;
+	//arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.002, amp = 1; //<--orig
+	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1;
+	//arg inBus, outBus, windowSize = 0.005, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //<--decent settings for piezo....
 	var sigIn, sigOut;
 	sigIn = In.ar(inBus, 1);
 	//sigIn = InFeedback.ar(inBus, 1);
@@ -104,10 +106,15 @@ SynthDef.new(\mainOut, { //w/ Lo-cut
 } ).add;
 
 SynthDef.new(\scopeOut, { //<------NEW
+	//|inBus, buf, frames = 4096|
 	|inBus, buf|
 	var sig;
 	sig = In.ar(inBus, 1);
 	ScopeOut2.ar(sig, buf);
+	//ScopeOut2.ar(sig, buf, BufFrames.kr(buf));
+	//ScopeOut2.ar(sig, buf, 262144, 524288);
+	//ScopeOut2.ar(sig, buf, 2641920, 2641920);
+	//ScopeOut2.ar(sig, buf, frames);
 } ).add;
 
 SynthDef(\write2Disk, {arg buf, inBus = 0; //record audio file to disk - mono
@@ -221,149 +228,5 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 	var sig = SoundIn.ar(bus: inChannel, mul: amp); //defaults to first channel of system audio input
 	OffsetOut.ar(outBus, sig);
 }).add;
-
-
-
-
-
-//---------
-
-//FUNCS (putting these here for now......)  ----------------------
-
-~sumFunc_xin = {arg busArray;  //bus val concat function for variable size arg array of feat busses
-	var numCh = 0, busCol, outArray, outBus;
-	busArray.do({|item| numCh = numCh + item.numChannels}); //calculate total # bus channels
-	outBus = Bus.control(s, numCh);
-	busCol = Array.newClear(busArray.size);
-
-	~sumSyn_xin = SynthDef(\sumSyn_xin, {
-		busArray.do({|item, i| busCol[i] = In.kr(item, item.numChannels); }); //input bus vals to var array
-		busCol.do({|item| //concat all bus vals into single out array
-			if (item.numChannels == 1,
-				{outArray = outArray ++ [item]},
-				{outArray = outArray ++ (item.numChannels.collect( {|i| item[i]} ))}
-			);
-		});
-		Out.kr(outBus, outArray);
-	}).play(addAction: \addToTail);
-
-	outBus; //return new bus w/ concat values of all input busses in arg array
-};
-
-~get_busSum = {|bus, post = 1|
-	var numCh = bus.numChannels;
-	bus.get( {arg val; //<---changing to getSynchronous prevents OSC output for some reason...?
-		if (post == 1, {//monitor feature vals in SC post window
-			switch (bus,
-				~busSum_ldns_mfcc, {
-					("Loudness:" + val[0].round(0.0001)).postln;
-					("MFCC:" + val[1..13].round(0.0001)).postln;
-					("-------").postln;
-				},
-				~busSum_ldns_sFlat_sCent, {
-					("Loudness:" + val[0].round(0.0001)).postln;
-					("Flatness:" + val[1].round(0.0001)).postln;
-					("Centroid:" + val[2].round(0.0001)).postln;
-					("-------").postln;
-				},
-				~busSum_ldns_pitch, {
-					("Loudness:" + val[0].round(0.0001)).postln;
-					("Pitch-freq:" + val[1].round(0.01)).postln;
-					("Pitch-hasFreq?:" + val[2]).postln;
-					("Pitch-MIDInote:" + val[3]).postln;
-					("-------").postln;
-				},
-				~busSum_ldns_sFlat_onset, {
-					("Loudness:" + val[0].round(0.0001)).postln;
-					("Flatness:" + val[1].round(0.0001)).postln;
-					("Onset Detected:" + val[2]).postln;
-					("-------").postln;
-				},
-				{//all other busses (cases)
-					if (numCh > 1,
-						{
-							numCh.do({arg item; ("Feature_" ++ (item + 1) ++ ":" + val[item].round(0.0001)).postln;});
-							("-------").postln;
-						},
-						{("Feature_1:" + val.round(0.0001)).postln;} //else
-					);
-				}
-			);
-		});
-
-		//INSERT SWITCH CASE HERE FOR EACH DIFFERENT SUM BUS
-		//....W/ NESTED CONDITIONALS SETTING ~currentSound based on extracted audio...
-
-
-		//push ~currentSound into "sound memory array / buffer" periodically  <--put this in ~autoRec routine?
-		//update ~currentScene based on "sound memory array" periodically <--put this in ~autoRec routine?
-
-	});
-};
-
-~streamFeatures = {
-	|bus, rate = 0.1, post = 1|
-	Routine ( {
-		~get_busSum.value(bus, post);
-		rate.yieldAndReset;
-	} );
-};
-
-~writeSampFromBufCopy_input = {
-	("-----...........------").postln;
-	(">>>SAMPLING ~audioBuf0......<<<").postln;
-
-	if (~recSamp_input_startFrame < ~recSamp_input_stopFrame,
-		{//SIMPLE BUF WRITE
-
-			var recFrames = (~recSamp_input_stopFrame - ~recSamp_input_startFrame) + 1; //+1 to include stopFrame in frame count
-
-			~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", startFrame: ~recSamp_input_startFrame, numFrames: recFrames); // write sampled buffer to audio file - directly from original buffer...
-
-			//~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
-
-			("--SIMPLE Write--").postln;
-			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
-			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
-		}, { //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
-			var recFrames, bufChunk1frames, bufChunk2frames;
-			bufChunk1frames = ~audioBuf0.numFrames - ~recSamp_input_startFrame; //inclusive frame count from "startFrame" to last frame in buffer
-			bufChunk2frames = ~recSamp_input_stopFrame + 1; //inclusive frame count (b/c buffers start at frame 0)
-			recFrames = bufChunk1frames + bufChunk2frames; //total # of frames to sample
-
-			~audioBuf_inMainWrite = Buffer.alloc(s, recFrames, 1);
-
-			//copy chunk 1 to new buf from ~recSamp_startFrame to last frame of ~audioBuf0
-			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: 0, srcStartAt: ~recSamp_input_startFrame, numSamples: bufChunk1frames); //<---if "NO BUF data" errors thrown, try reducing bufChunk1frames by 1, not sure if this method counts samples inclusive or exclusive of start frame
-
-			//copy chunk 2 to new buf from first frame of ~audioBuf0 to ~recSamp_stopFrame
-			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: (bufChunk1frames - 1), srcStartAt: 0, numSamples: bufChunk2frames);
-
-			//write ~audioBuf_inMainWrite to an audio file
-			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24");
-
-			//~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
-
-			("--WRAP AROUND 2-STEP WRITE--").postln;
-			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
-			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
-			~audioBuf_inMainWrite.free;
-	});
-
-	~recSamp_input = false; //EXIT THIS HALF OF ROUTINE, resume listening for sound...
-	{~button_recIn.value = 0}.defer; //update GUI
-
-	~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
-	~autoRecPlay_state = 1; //<------NEW --- (advance state to trigger ~autoPlay before next ~autoRec)
-	("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
-
-	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
-	if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
-		~fileAudio_writeIn_nameNum = 0;
-	});
-
-	(">>>RECORDING COMPLETE<<<").postln;
-	("---.....---").postln;
-};
 
 );

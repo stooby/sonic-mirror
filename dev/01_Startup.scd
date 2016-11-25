@@ -12,12 +12,18 @@ o.blockSize = 512;
 s.latency = 0.05; //0.2 is SC default
 
 //o.inDevice = "Built-in Microph";
+//o.inDevice = "iConnectAudio4+";
+//o.outDevice = "Built-in Output";
+
 o.inDevice = nil; //use system default audio input (change value to manually configure input)
-//o.inDevice = "C-Media USB Headphone Set";
-//o.outDevice = "C-Media USB Headphone Set";
 o.outDevice = nil; //use system default audio output (change value to manually configure output)
 
+//o.inDevice = "C-Media USB Headphone Set";
+//o.outDevice = "C-Media USB Headphone Set";
+
 //o.inDevice = "MiC";  //external USB mic
+
+
 //o.outDevice = "iConnectAudio4+"; //external audio interface
 
 s.boot;
