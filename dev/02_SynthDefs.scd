@@ -43,8 +43,8 @@ SynthDef(\phasor, {
 	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
 }).add;
 
-// Needed to monitor phasor
-SynthDef(\a2k_patch, {
+
+SynthDef(\a2k_patch, {// Needed to monitor phasor val (don't fully understand why / how this works)
   arg in, out;
   Out.kr(out, A2K.kr(InFeedback.ar(in) ) ); //is InFeedback necessary?
 }).add;

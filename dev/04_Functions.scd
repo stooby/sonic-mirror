@@ -145,12 +145,65 @@
 
 //====== ROUTINES ==========================
 
-//--------- GUI UPDATE ROUTINES ---------
+//--------- BUS GET / GUI UPDATE ROUTINES ---------
+~getBus_updateGUI_playPhase = Routine({
+	~phaseBusMonPly.get({|val|
+		~lastPlayPhasePos = val.round(1);
+		{
+			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1 (debugging)
+			~slider_playPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
+			~numBox_playPos.value = (val.round(1)/s.sampleRate).round(0.01); //convert frames to seconds and display
+		}.defer;
+	} );
+
+	if (~playPosLatchTrig == true,
+		{
+			~playPosLatchTrig = false;
+			{
+				~phasor_play.set(\start, ~playInPosBus.asMap); //reset phasor start to ~playInPos after initalizing at ~lastPlayPhasePos (permits resuming playback from last read pos in buffer)
+			}.defer(0.15); //<----NOTE TO SELF: in the unlikely event the user stops playing and then later resumes from within less than 0.15 seconds of the ~playOutPosBus value, this may cause the play phasor to jump back to its start position initalized at ~lastPlayPhasePos when this routine starts. Haven't test enough. Low priority....
+		} ,
+		{ //else
+			~phasor_play.get(\trig, {|trigval| if (trigval > 0, {~phasor_play.set(\trig, 0);}); }); //reset trigger val to 0 if prev triggered
+		}
+	);
+	0.1.yieldAndReset;
+});
+
+
+~getBus_updateGUI_recPhase = Routine({
+	//(">>>updateRecSliderRoutine: outside get -" + Main.elapsedTime.round(0.01)).postln;
+	~phaseBusMonRec.get({|val|
+		~lastRecPhasePos = val.round(1); //log phase pos in env variable <----NEW
+		{
+			//(">>>>updateRecSliderRoutine: inside get -" + Main.elapsedTime.round(0.01)).postln;
+			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1
+			~slider_recPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
+			~numBox_recPos.value = (val.round(1)/s.sampleRate).round(0.01) ; //convert frames to seconds and display
+		}.defer;
+	});
+
+	if (~recPosLatchTrig == true,
+		{
+			~recPosLatchTrig = false;
+			{
+				~phasor_rec.set(\start, ~recInPosBus.asMap);  //reset phasor start to ~recInPos after initially starting phasor synth (permits resuming recording from last read pos in buffer)
+			//("---reset phasor startPos to recInPosBus:" + Main.elapsedTime.round(0.01)).postln;
+			}.defer(0.15); //<----NOTE TO SELF: in the unlikely event the user stops recording and then later resumes from within less than 0.15 seconds of the ~recOutPosBus value, this may cause the rec phasor to jump back to its start position initalized at ~lastRecPhasePos when this routine starts. Haven't test enough. Low priority....
+		},
+		{//else
+			~phasor_rec.get(\trig, {|trigval| if (trigval > 0, {~phasor_rec.set(\trig, 0);}); }); //reset trigger val to 0 if prev triggered by slider .action (i.e. clicked transport slider)
+		}
+	);
+	0.1.yieldAndReset;
+});
+
+
 ~updateGUI_rate = Routine.new ( {
 	~rateBus.get( {
 		arg val;
 		var thisVal = val.abs; //in case "Reverse" enabled and rate is negative...   <-----
-		AppClock.sched(0.0, { //this is necessary for some reason...
+		AppClock.sched(0.0, { //this is necessary for some reason... I think can be replaced by .defer
 			//"pitchBusVal= ".post; val.ratiomidi.round(0.01).postln;
 			//~slider_rate.value_(val.ratiomidi.linlin(-48, 48, 0, 1) );
 			~slider_rate.value_(thisVal.ratiomidi.linlin(-48, 48, 0, 1) );

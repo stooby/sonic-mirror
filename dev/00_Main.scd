@@ -23,6 +23,7 @@ Buffer.freeAll; //for cleanup
 
 ~delayTime = 1.23;
 ~play2recOffset; //displacement of playhead pos from rec pos (in frames/samples)
+
 ~lastPlayPhasePos = 0; //for resume functionality - stores last pos (frame) of play head before playback disabled
 ~lastRecPhasePos = 0; //for resume functionality - stores last pos (frame) of rec head before recording disabled
 ~playPosLatchTrig = false;
@@ -299,7 +300,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				SystemClock.play(~listenPost);
 			});
 
-			~hearSound = false; //<---managing this flag entirely w/in this function now....
+			~hearSound = false;
 			~listening = true;
 			"====LISTENING NOW====".postln;
 		}, {
@@ -494,7 +495,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					{
 						featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
 							if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
-								//if (( (val[0] >= ~loudnessThresh) || (val[3] >= ~pitchThresh) ),
 								{//SOUND DETECTED
 									~hearSound = true;
 									//CONTINUE RECORDING / DO NOTHING....
@@ -1356,7 +1356,6 @@ w.refresh;
 AppClock.play(~testViewUpdate);
 ~testViewUpdate.stop;
 ~testViewUpdate.reset;
-
 */
 
 {
@@ -1368,66 +1367,23 @@ AppClock.play(~testViewUpdate);
 	~bufPlot.refresh;
 	//w.refresh;
 }.defer(0.2); //<--if this is any shorter, these properties won't be set for some reason....
-*/
 
 
-/*
-~updateBufView_prevPhase = 0;
-~updateBufView_plotWindowDur = 0.6;
+~updateBufPlot_prevPhase = 0;
+~updateBufPlot_plotWindowDur = 0.6; //not being used
 
-~updateBufView = Routine({ //<----NEW approach
-	//var initRecPhase;
+~updateBufPlot_prevUpdateFrame = nil;
+~updateBufPlot_prevUpdateTime = nil;
+~updateBufPlot_plottingActive = false;
 
-	~phaseBusMonRec.get({|val|
-		var plotStartFrame = val - (~updateBufView_plotWindowDur * s.sampleRate);
-
-		("Rec Phase:" + val + "|" + Main.elapsedTime.round(0.01)).postln;
-
-		if (plotStartFrame >= 0,
-			{
-
-			},
-			{
-
-			}
-		);
-	});
-
-	0.5.yield;
-
-	//("Rec Phase (post yield):" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-	("--Rec Phase (py):" + ~updateBufView_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-
-	~phaseBusMonRec.get({|val|
-		var frameCount;
-		("--Current Phase =" + val).postln;
-		if (val > ~updateBufView_prevPhase,
-			{frameCount = (val - ~updateBufView_prevPhase) + 1;
-				(">>>NO WRAP:" + "frameCount =" + frameCount).postln;
-				("---").postln;
-			}, //inclusive frame count between init frame and current frame
-			{//else current frame < initRecPhase – we've wrapped around buffer...
-				var chunk1, chunk2;
-				chunk1 = val + 1; //to be inclusive of frame 0
-				chunk2 = ~audioBuf0.numFrames - ~updateBufView_prevPhase; //prev frame to last frame of buffer
-				frameCount = chunk1 + chunk2;
-				(">>>WRAP AROUND:" + "frameCount =" + frameCount).postln;
-				("---").postln;
-			}
-		);
-
-	});
-	0.1.yieldAndReset;
-}); */
-
-~updateBufView = Routine({ //<----NEW approach
+~updateBufPlot = Routine({ //<---attempt 1
 	//var initRecPhase;
 
 	~phaseBusMonRec.get({|val|
 		//initRecPhase = val;
-		~updateBufView_prevPhase = val;
+		~updateBufPlot_prevPhase = val;
 		//("Rec Phase:" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-		("Rec Phase:" + ~updateBufView_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+		("Rec Phase:" + ~updateBufPlot_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
 		/*~audioBuf0.get(val, {|bufVal|
 			("In bufGet |" + "recPhase =" + val + "bufVal =" + bufVal).postln;
 			//~bufPlot.value[val] = bufVal;
@@ -1440,20 +1396,20 @@ AppClock.play(~testViewUpdate);
 	0.5.yield;
 
 	//("Rec Phase (post yield):" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-	("--Rec Phase (py):" + ~updateBufView_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+	("--Rec Phase (py):" + ~updateBufPlot_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
 
 	~phaseBusMonRec.get({|val|
 		var frameCount;
-		("--Current Phase =" + val).postln;
-		if (val > ~updateBufView_prevPhase,
-			{frameCount = (val - ~updateBufView_prevPhase) + 1;
+		("--Current Phase =" + val + "|" + Main.elapsedTime.round(0.01)).postln;
+		if (val > ~updateBufPlot_prevPhase,
+			{frameCount = (val - ~updateBufPlot_prevPhase) + 1;
 				(">>>NO WRAP:" + "frameCount =" + frameCount).postln;
 				("---").postln;
 			}, //inclusive frame count between init frame and current frame
 			{//else current frame < initRecPhase – we've wrapped around buffer...
 				var chunk1, chunk2;
 				chunk1 = val + 1; //to be inclusive of frame 0
-				chunk2 = ~audioBuf0.numFrames - ~updateBufView_prevPhase; //prev frame to last frame of buffer
+				chunk2 = ~audioBuf0.numFrames - ~updateBufPlot_prevPhase; //prev frame to last frame of buffer
 				frameCount = chunk1 + chunk2;
 				(">>>WRAP AROUND:" + "frameCount =" + frameCount).postln;
 				("---").postln;
@@ -1461,30 +1417,15 @@ AppClock.play(~testViewUpdate);
 		);
 
 	});
-
-	/*if (recPhase != nil, {
-		("Last Rec Phase (after yield):" + recPhase).postln;
-
-		~audioBuf0.loadToFloatArray(index: recPhase, count: (s.sampleRate * 0.4), action: {
-			arg array;
-			{~bufPlot.value = array}.defer;
-		});
-		/*
-		//~bufPlot.value[recPhase] = 0.7; //<--this only sets first value in ~bufPlot and no others for some reason....??????????
-		~bufPlot.value[0..100000] = rrand(-0.7, 0.7);
-		//~bufPlot.value[recPhase].set(0.5);
-		//~bufView.refresh;
-		//~bufPlot.refresh;
-		w.refresh;
-		*/
-	}); */
-
-	0.1.yieldAndReset;
+	0.5.yieldAndReset;
 });
+*/
 
 //----------
 
 /*~phaseBusMonRec.get({|val| (val/s.sampleRate).postln;});  //junk for monitoring
+~phaseBusRec.get({|val| val.postln;});
+~phaseBusMonRec.get({|val| val.postln;});
 ~phaseBusMonRec.get({|val| val.postln;});
 ~phaseBusMonPly.get({|val| (val/s.sampleRate).postln;});  //<----this is where to get phasor value....
 */
@@ -1510,7 +1451,7 @@ AppClock.play(~testViewUpdate);
 				~phasor_rec = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~audioBuf0, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap] ).moveToHead;  //have phasor start at ~recInFrame
 			} );
 
-			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec);
+			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec); //<--don't fully understand why this allows me to monitor phasor value and why I can't do so by getting value of ~phaseBusRec (doing so always outputs 1)...
 
 			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
 
@@ -1518,9 +1459,13 @@ AppClock.play(~testViewUpdate);
 
 			//~lastRecPhasePos.value.postln;
 
+			//START REC SLIDER UPDATE ROUTINE...
+			~getBus_updateGUI_recPhase.reset;
+			AppClock.play(~getBus_updateGUI_recPhase);
+
 			//////PLOTTER ----------
-			//~updateBufView.reset;
-			//AppClock.play(~updateBufView);
+			//~updateBufPlot.reset;
+			//	AppClock.play(~updateBufPlot);
 
 
 			//////////////SCOPE
@@ -1532,14 +1477,20 @@ AppClock.play(~testViewUpdate);
 			~scopeView.start; //<----
 			//////////
 
+
 		},
 		{ //when REC button disabled (when recording stops)
-			~phaseBusMonRec.get( {arg val; ~lastRecPhasePos = val;} ); //store last pos of recPhase
+			~phaseBusMonRec.get( {arg val;
+				~lastRecPhasePos = val.round(1); //store last pos of recPhase
+				//("LastRecPhasePos = " ++ ~lastRecPhasePos).postln;
+			} );
 			~phasor_rec.free;
 			~a2k_rec.free;
 			~bufRecorder.free; //stop recording to buffer and free RecBuf_loop synth
 
-			//~updateBufView.stop;  //PLOTTER
+			//~updateBufPlot.stop;  //PLOTTER
+
+			~getBus_updateGUI_recPhase.stop;
 
 
 			 ///FOR SCOPE
@@ -1608,12 +1559,12 @@ AppClock.play(~testViewUpdate);
 				~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap] );  //have phasor start at ~playInFrame
 			} );
 
-			if (~bufRecorder.isRunning, {~phasor_play.moveAfter(~bufRecorder);}); //safer node-tree order
+			if (~bufRecorder.isRunning, {~phasor_play.moveAfter(~bufRecorder);}); //regulate node-tree order
 
 			~a2k_play = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]).moveAfter(~phasor_play); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
-
 			~bufPlayer = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly, \buf, ~audioBuf0] ).moveAfter(~a2k_play);
-			NodeWatcher.register(~bufPlayer);
+
+			NodeWatcher.register(~bufPlayer);  //<---not currently being monitored anymore....
 
 			~pShift = Synth(\pitchShifter,
 				[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]).moveAfter(~bufPlayer);
@@ -1626,19 +1577,17 @@ AppClock.play(~testViewUpdate);
 			\amp, ~inputStreamLevelBus.asMap //<--NEW
 			] ).moveAfter(~pShift);
 
-			//~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);  //<----MOVE THIS OUTTA HERE.... init on startup......
+			~getBus_updateGUI_playPhase.reset;
+			AppClock.play(~getBus_updateGUI_playPhase);
 		} ,
 		{
-			//"-PlayBackOff-".postln;
-			~phaseBusMonPly.get( {|val| ~lastPlayPhasePos = val;} );
+			~phaseBusMonPly.get( {|val| ~lastPlayPhasePos = val.round(1);} );
 			~phasor_play.free;
 			~a2k_play.free;
 			~bufPlayer.free;
-			//~slider_playPos.value_(0.0);
-
 			~pShift.free;
 			~pShiftMix.free;
-			//~mainOut.free;
+			~getBus_updateGUI_playPhase.stop;
 		} );
 } );
 
@@ -1687,16 +1636,24 @@ AppClock.play(~testViewUpdate);
 .action_( {
 	arg obj;
 	var pos;
-	//pos = obj.value.linlin(0, 1, 0, ((s.sampleRate * ~audioBuf0_dur) - 1)).round(1); //convert slider value to frame
-	pos = obj.value.linlin(0, 1, 0, ~audioBuf0.numFrames - 1); //convert slider value to frame
-	~phasor_rec.set ( //update ~phasor_rec phasor synth position....
-		\resetPos, pos,
-		\trig, 1
+	pos = obj.value.linlin(0, 1, 0, ~audioBuf0.numFrames - 1).round(1); //convert slider value to frame
+
+	if (~button_recBuf.value == 1,
+		{//update ~phasor_rec phasor synth position when actively recording to buffer
+			~phasor_rec.set (
+				\resetPos, pos,
+				\trig, 1
+			);
+		},
+		{//update phasor pos when not actively recording to buffer
+			~lastRecPhasePos = pos;
+		}
 	);
-	//~numBox_recPos.value_(pos/s.sampleRate).round(0.1); //convert frames to seconds and display
+
 	~numBox_recPos.value = (pos/s.sampleRate).round(0.01); //convert frames to seconds and display
 
-	//SYNC functionality----------------
+	/*
+	//SYNC functionality---------------- (double check and debug, haven't worked with this in awhile)
 	if (~fixPlayRecOffset == true, //<-----
 		{
 			~play2recOffset = pos - ((~delayTime * s.sampleRate).round(1));
@@ -1704,7 +1661,8 @@ AppClock.play(~testViewUpdate);
 				{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
 				{~lastPlayPhasePos = ~play2recOffset; }
 			);
-				if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); //is this best way to do it or should I create a flag indicating whenever recPhase position is updated w/ click so that playPhase is updated w/ clock instead???
+
+			if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); //is this best way to do it or should I create a flag indicating whenever recPhase position is updated w/ click so that playPhase is updated w/ clock instead???
 		} ,
 	    { //else
 			~phaseBusMonPly.get( {
@@ -1725,6 +1683,8 @@ AppClock.play(~testViewUpdate);
 		}
 	 );
 	//SYNC functionality----------------
+	*/
+
 } )
 .value_(0.0);
 
@@ -1751,7 +1711,18 @@ AppClock.play(~testViewUpdate);
 	arg obj;
 	var pos;
 	pos = obj.value.linlin(0, 1, 0, ~audioBuf0.numFrames - 1).round(1); //convert slider value to frame
-	~phasor_play.set (\resetPos, pos, \trig, 1);
+	//~phasor_play.set (\resetPos, pos, \trig, 1);
+	if (~button_playBuf.value == 1,
+		{//update ~phasor_play phasor synth position when actively playing from buffer
+			~phasor_play.set(
+				\resetPos, pos,
+				\trig, 1
+			);
+		},
+		{//update phasor pos when not actively playing from buffer
+			~lastPlayPhasePos = pos;
+		}
+	);
 	~numBox_playPos.value = (pos/s.sampleRate).round(0.01); //convert frames to seconds and display
 } )
 .value_(0.0);
@@ -2010,85 +1981,5 @@ AppClock.play(~testViewUpdate);
 .align_(\left);
 
 //----------
-
-//--------- GUI UPDATER (turn into routine?) ---------------
-
-AppClock.sched(0.0, { //AppClock scheduler increments slider positions...
-	~phaseBusMonPly.get( {
-		arg val;
-		AppClock.sched(0.0, {
-			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1 (debugging)
-			~slider_playPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
-			~numBox_playPos.value = (val.round(1)/s.sampleRate).round(0.1); //convert frames to seconds and display
-			nil;
-		} );
-	} );
-
-	~phaseBusMonRec.get( {
-		arg val;
-		AppClock.sched(0.0, {
-			//(val / (s.sampleRate * ~audioBuf0_dur)).postln; //uncomment to view sliderPlayPos from 0-1
-			//val.postln;
-			~slider_recPos.value = val / (s.sampleRate * ~audioBuf0_dur); //update slider position
-			~numBox_recPos.value = (val.round(1)/s.sampleRate).round(0.01) ; //convert frames to seconds and display
-
-			/*
-			// PLOTTER UPDATE CODE IN PROGRESS.........  <------------------
-			if (~button_recBuf.value == 1, {
-				~audioBuf0.get(val, {|bufVal|
-					//(val + " | " +  bufVal).postln;
-					{
-						val.postln;
-						(~bufPlot.value[val] + "before").postln;
-						~bufPlot.value[val] = bufVal; //<---tests indicate this isn't writing values to ~bufPlot, only first index gets value, nothing else ...... WHY?
-						(~bufPlot.value[val] + "after").postln;
-						//~bufPlot.refresh;
-						//~bufView.refresh;
-						w.refresh;
-						//"update plotter?".postln;
-					}.defer;
-				} );
-			} ); */
-			//~bufPlot.refresh;
-			nil;
-		} );
-	} );
-
-	if (~button_playBuf.value == 1, {
-		if (~playPosLatchTrig == true,
-			{
-				~phasor_play.set(\start, ~playInPosBus.asMap); //reset phasor \start to ~playInPosBus.asMap after initalizing at ~lastPlayPhasePos (permits resuming playback from last read pos in buffer when playHead still w/in play In/Out range after buff playback turned off)
-				~playPosLatchTrig = false;
-			} , { //else
-				~phasor_play.get(\trig, { |trigval| if (trigval > 0) {~phasor_play.set(\trig, 0) ;} } ); //reset trigger val to 0 if prev triggered
-			}
-		);
-	} );
-
-	if (~button_recBuf.value == 1, {
-		if (~recPosLatchTrig == true,
-			{
-				~phasor_rec.set(\start, ~recInPosBus.asMap);  //reset phasor start to ~recInPos after initially starting phasor synth (permits resuming recording from last read pos in buffer)
-				~recPosLatchTrig = false;
-			} ,
-			{ //else
-				~phasor_rec.get(\trig, { |trigval| if (trigval > 0) {~phasor_rec.set(\trig, 0) ;} } ); //reset trigger val to 0 if prev triggered
-			}
-		);
-	} );
-
-	/*~rateBus.get( {
-		arg val;
-		AppClock.sched(0.0, {
-			if (val != 1, {
-				//calculate distance between rec and play heads and delay time
-			});
-		} );
-	} );*/
-
-	//d = ~slider_recPos.value - ~slider_playPos.value; //to check jitter distance between playheads (fairly consistent)
-	//d.postln;
-	0.1;
-});
 
 )
