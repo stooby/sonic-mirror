@@ -98,7 +98,8 @@ Buffer.freeAll; //for cleanup
 
 ////
 Window.closeAll;
-w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
+//w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
+w = Window.new("SonicMirror", Rect.new(335, 330, 880, 405))
 .front
 .alwaysOnTop_(true);
 
@@ -108,7 +109,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //------ Main In/Out Controls (Levels & Lo-Cut) -----------
 
 //Main Input Level --
-~slider_inMainLevel = Slider(w, Rect(684, 8, 17, 173) )
+//~slider_inMainLevel = Slider(w, Rect(684, 8, 17, 173) )
+~slider_inMainLevel = Slider(w, Rect(15, 8, 17, 173) )
 .background_(Color(0.9, 0.0, 0.0, 0.2))
 .value_(1.0)
 .action_( {
@@ -122,7 +124,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	//~inputLevelBus.get({arg val; val.postln;} );
 } );
 
-~numBox_inMainLevel = NumberBox(w, Rect(682, 183, 26, 15))
+~numBox_inMainLevel = NumberBox(w, Rect(10, 183, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -137,13 +139,14 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_inMainLevel.value_(val);
 } );
 
-~label_inMainLevel = StaticText(w, Rect(687, 195, 12, 20) )
+~label_inMainLevel = StaticText(w, Rect(17, 195, 12, 20) )
 .string_("IN")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
 //Main Out Level --
-~slider_outMainLevel = Slider(w, Rect(733, 8, 17, 173) )
+//~slider_outMainLevel = Slider(w, Rect(733, 8, 17, 173) )
+~slider_outMainLevel = Slider(w, Rect(50, 8, 17, 173) )
 .background_(Color(0.0, 0.8, 0.2, 0.01))
 .value_(1.0)
 .action_( {
@@ -154,7 +157,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_outMainLevel.value_(val);
 } );
 
-~numBox_outMainLevel = NumberBox(w, Rect(728, 183, 26, 15))
+~numBox_outMainLevel = NumberBox(w, Rect(45, 183, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -169,13 +172,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_outMainLevel.value_(val);
 } );
 
-~label_outMainLevel = StaticText(w, Rect(730, 195, 20, 20) )
+~label_outMainLevel = StaticText(w, Rect(48, 195, 20, 20) )
 .string_("OUT")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
 //Main In / Out Lo-Cuts --
-~numBox_inMainLoCut = NumberBox(w, Rect(680, 216, 32, 14))//<---
+~numBox_inMainLoCut = NumberBox(w, Rect(10, 216, 32, 14))//<---
 .value_(~loCutVal_in)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
@@ -189,7 +192,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_in=" ++ ~loCutVal_in ++ "Hz").postln;
 } );
 
-~numBox_outMainLoCut= NumberBox(w, Rect(724, 216, 32, 14))//<---
+~numBox_outMainLoCut= NumberBox(w, Rect(44, 216, 32, 14))//<---
 .value_(~loCutVal_out)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
@@ -203,7 +206,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_out=" ++ ~loCutVal_out ++ "Hz").postln;
 } );
 
-~label_inoutMainLoCut = StaticText(w, Rect(693, 226, 48, 20) )//<---
+~label_inoutMainLoCut = StaticText(w, Rect(20, 226, 48, 20) )//<---
 .string_("LoCut-Hz")
 .font_(Font("Monaco", 10) )
 .align_(\left);
@@ -211,7 +214,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //----- AUDIO BUFFER --------
 
-~button_audioBuf_0 = Button(w, Rect(400, 377, 85, 25)) //Activate / Deactivate audio buffer
+~button_audioBuf_0 = Button(w, Rect(715, 10, 65, 25)) //Activate / Deactivate audio buffer
 .states_( [
 	["BUF_ACT", Color.black, Color.gray(0.8)] ,
 	["BUF_ACT", Color.white, Color(0.8,0.8, 0)]
@@ -229,7 +232,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	);
 } );
 
-~numBox_audioBuf0_dur = NumberBox(w, Rect(490, 377, 75, 25))
+~numBox_audioBuf0_dur = NumberBox(w, Rect(783, 10, 65, 25))
 .value_(~audioBuf0_dur)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(120) //longest possible length of buffer (in seconds)
@@ -241,9 +244,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***Buffer Length=" + ~audioBuf0_dur + "seconds.").postln;
 } );
 
-~label_audioBuf0_dur = StaticText(w, Rect(568, 380, 200, 20) )
-.string_("Buf(sec)")
-.font_(Font("Monaco", 12) )
+~label_audioBuf0_dur = StaticText(w, Rect(850, 12, 200, 20) )
+.string_("DUR
+(sec)")
+.font_(Font("Monaco", 8) )
 .align_(\left);
 
 //--------------------------------
@@ -803,7 +807,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-~button_autoRecPlay = Button(w, Rect(215, 349, 25, 25))
+~button_autoRecPlay = Button(w, Rect(135, 349, 25, 25))
 .states_( [
 	["^v", Color.black, Color(0.6, 0.9, 0.4, 0.3)] ,
 	["^v", Color.white, Color(0.8, 1.0, 0.4)]
@@ -1002,7 +1006,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ///---------- LEVELS ----------///
 
-~slider_inFlow1_level = Slider(w, Rect(684, 242, 12, 73) )
+~slider_inFlow1_level = Slider(w, Rect(19, 244, 12, 73) )
 .background_(Color(0.0, 0.5, 0.9))
 .value_(1.0)
 .action_( {
@@ -1013,7 +1017,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_inFlow1_level.value_(val);
 } );
 
-~numBox_inFlow1_level = NumberBox(w, Rect(678, 315, 26, 15))
+~numBox_inFlow1_level = NumberBox(w, Rect(12, 317, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -1028,12 +1032,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_inFlow1_level.value_(val);
 } );
 
-~label_inFlow1_level = StaticText(w, Rect(670, 332, 40, 8) )
+~label_inFlow1_level = StaticText(w, Rect(6, 334, 40, 8) )
 .string_("IN+FX")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
-~slider_sampOut_level = Slider(w, Rect(715, 242, 12, 73) )
+~slider_sampOut_level = Slider(w, Rect(54, 244, 12, 73) )
 .background_(Color(0.0, 0.8, 0.2))
 .value_(1.0)
 .action_( {
@@ -1044,7 +1048,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_sampOut_level.value_(val);
 } );
 
-~numBox_sampOut_level = NumberBox(w, Rect(709, 315, 26, 15))
+~numBox_sampOut_level = NumberBox(w, Rect(46, 317, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -1059,7 +1063,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_sampOut_level.value_(val);
 } );
 
-~label_sampOut_level = StaticText(w, Rect(707, 332, 32, 8) )
+~label_sampOut_level = StaticText(w, Rect(44, 334, 32, 8) )
 .string_("FILE")
 .font_(Font("Monaco", 10) )
 .align_(\center);
@@ -1068,7 +1072,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 
 //------ DELAY OFFSET -------
-~numBox_delay = NumberBox(w, Rect(610, 349, 75, 25))  //WORKS but a little buggy....
+~numBox_delay = NumberBox(w, Rect(772, 64, 55, 25))  //WORKS but a little buggy....
 .value_(~delayTime)
 .clipLo_(0)
 .clipHi_(~audioBuf0_dur - 0.01)
@@ -1106,9 +1110,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 } );
 
-~label_delayTime = StaticText(w, Rect(688, 352, 78, 20) )
-.string_("Offset(sec)")
-.font_(Font("Monaco", 12) )
+~label_delayTime = StaticText(w, Rect(829, 67, 78, 20) )
+.string_("Offset
+(sec)")
+.font_(Font("Monaco", 8) )
 .align_(\left);
 
 /*~slider_delay = Slider(w, Rect(489, 332, 180, 15))
@@ -1122,7 +1127,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_delay.valueAction_(pos); //so we don't have to duplicate calc code from numBoxDel here
 } ); */
 
-~button_delaySync = Button(w, Rect(550, 349, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
+~button_delaySync = Button(w, Rect(715, 64, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
 .states_( [
 	["SYNC", Color.black, Color(0.7, 0.7, 0, 0.3)] ,
 	["SYNC", Color.white, Color(0.8, 0.8, 0)]
@@ -1184,7 +1189,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //-------------- BEHAVIOR BUTTONS ------------
 
-~button_Behavior1 = Button(w, Rect(314, 349, 55, 25)) //randomize rate control
+~button_Behavior1 = Button(w, Rect(715, 90, 55, 25)) //randomize rate control
 .states_( [
 	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
 	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
@@ -1212,6 +1217,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
+/*
 //Monitoring support GUI objects for ~button_Behavior1 activity
 ~numBox_counter_rateT2rand = NumberBox(w, Rect(313, 378, 50, 25))
 .value_(0.0)
@@ -1224,10 +1230,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .string_("T2R")
 .font_(Font("Monaco", 12) )
 .align_(\left);
-//
+*/
 
-
-~button_Behavior2 = Button(w, Rect(271, 349, 40, 25)) //Randomize pitch shift, pitch shift mix, and output level control
+~button_Behavior2 = Button(w, Rect(772, 90, 40, 25)) //Randomize pitch shift, pitch shift mix, and output level control
 .states_( [
 	["!!", Color.black, Color(0.0, 0.3, 0.9, 0.3)] ,
 	["!!", Color.white, Color(0.8, 0.3, 0.8)]
@@ -1260,7 +1265,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~button_Behavior3 = Button(w, Rect(243, 349, 25, 25)) //randomize Reverse and PlayHead Behavior control
+~button_Behavior3 = Button(w, Rect(814, 90, 25, 25)) //randomize Reverse and PlayHead Behavior control
 .states_( [
 	["!", Color.black, Color(0.6, 0.9, 0.0, 0.3)] ,
 	["!", Color.white, Color(0.8, 1.0, 0.0)]
@@ -1307,7 +1312,8 @@ GUI.skin.plot.gridColorY = Color.cyan;
 //GUI.skin.plot.gridOnY = false;
 //GUI.skin.plot.gridOnX = false;
 
-~bufView = CompositeView(w, Rect(15, 10, 650, 170)).background_(Color.gray).resize_(5);
+//~bufView = CompositeView(w, Rect(15, 10, 650, 170)).background_(Color.gray).resize_(5);
+~bufView = CompositeView(w, Rect(90, 10, 620, 170)).background_(Color.gray).resize_(5);
 
 ~bufPlot = Plotter.new("Buffer", parent: ~bufView); //CREATE PLOTTER
 
@@ -1420,7 +1426,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 
 ////---------------RECORD TO BUFFER BUTTON--------------////
-~button_recBuf = Button(w, Rect(372, 349, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer
+~button_recBuf = Button(w, Rect(715, 37, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer
 .states_( [
 	["REC", Color.black, Color(0.95, 0, 0, 0.3)] ,
 	["REC", Color.white, Color(0.95, 0, 0)]
@@ -1493,7 +1499,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 ////------------ PLAY FROM BUFFER BUTTON -----------////
 
-~button_playBuf = Button(w, Rect(430, 349, 55, 25)) //activate / deactivate playback output
+~button_playBuf = Button(w, Rect(772, 37, 55, 25)) //activate / deactivate playback output
 .states_( [
 	["PLAY", Color.black, Color(0.0, 0.8, 0.2, 0.3)] ,
 	["PLAY", Color.white, Color(0.0, 0.8, 0.2)]
@@ -1581,7 +1587,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 //--------REVERSE BUTTON ---------
 
-~button_rev = Button(w, Rect(490, 349, 45, 25)) //Reverse playback
+~button_rev = Button(w, Rect(829, 37, 45, 25)) //Reverse playback
 .states_( [
 	["REV", Color.black, Color(0.8, 0.5, 0, 0.3)] ,
 	["REV", Color.white, Color(0.85, 0.5, 0)]
@@ -1619,7 +1625,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 // ------------- REC HEAD / PLAY HEAD ----------
 
-~slider_recPos = Slider(w, Rect(15, 212, 470, 20))
+~slider_recPos = Slider(w, Rect(95, 212, 610, 20))
 .background_(Color(0.95, 0.0, 0.0))
 .action_( {
 	arg obj;
@@ -1676,7 +1682,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 } )
 .value_(0.0);
 
-~numBox_recPos = NumberBox(w, Rect(490, 208, 75, 25)) //numBox PlayPos
+~numBox_recPos = NumberBox(w, Rect(715, 208, 65, 25)) //numBox PlayPos
 .value_(0)
 .clipLo_(0)
 //.clipHi_(~audioBuf0_dur) //HOW COME UNCOMMENTING THIS MESSES UP THE GUI??????
@@ -1687,13 +1693,13 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	//~slider_recPos.valueAction = obj.value / ~audioBuf0_dur; //<---
 //} );
 
-~label_recPos = StaticText(w, Rect(568, 182, 100, 80) )
+~label_recPos = StaticText(w, Rect(782, 182, 100, 80) )
 .string_("RecPos(sec)")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
 
-~slider_playPos = Slider(w, Rect(15, 237, 470, 20))
+~slider_playPos = Slider(w, Rect(95, 237, 610, 20))
 .background_(Color(0, 0.8, 0.2))
 .action_( {
 	arg obj;
@@ -1716,19 +1722,19 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .value_(0.0);
 
 
-~numBox_playPos = NumberBox(w, Rect(490, 234, 75, 25))
+~numBox_playPos = NumberBox(w, Rect(715, 234, 65, 25))
 .value_(0)
 .clipLo_(0)
 //.clipHi_(~audioBuf0.numFrames-1)
 .font_(Font("Monaco", 14) )
 .decimals_(2);
 
-~label_playPos = StaticText(w, Rect(568, 207, 100, 80) )
+~label_playPos = StaticText(w, Rect(782, 207, 100, 80) )
 .string_("PlayPos(sec)")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
-~slider_recInOut = RangeSlider(w, Rect(15, 187, 470, 20)) //SLIDER => Play In/Out
+~slider_recInOut = RangeSlider(w, Rect(95, 187, 610, 20)) //SLIDER => Play In/Out
 .lo_(0.0)
 .hi_(1.0)
 //.background_(Color(0.0, 0.5, 0.2))
@@ -1757,7 +1763,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_recOut.value_( (recOut / s.sampleRate).round(0.01) );
 } );
 
-~numBox_recIn = NumberBox(w, Rect(490, 187, 46, 20))
+~numBox_recIn = NumberBox(w, Rect(715, 187, 46, 20))
 .value_(0.0)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1770,7 +1776,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } ); */
 
-~numBox_recOut = NumberBox(w, Rect(535, 187, 46, 20))
+~numBox_recOut = NumberBox(w, Rect(762, 187, 46, 20))
 .value_(~audioBuf0_dur)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1783,12 +1789,12 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } )*/
 
-~label_recInOut = StaticText(w, Rect(582, 189, 90, 20) )
+~label_recInOut = StaticText(w, Rect(810, 189, 90, 20) )
 .string_("In/Out-Rec")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
-~slider_playInOut = RangeSlider(w, Rect(15, 259, 470, 20)) //SLIDER => Play In/Out
+~slider_playInOut = RangeSlider(w, Rect(95, 259, 610, 20)) //SLIDER => Play In/Out
 .lo_(0.0)
 .hi_(1.0)
 //.background_(Color(0.0, 0.5, 0.2))
@@ -1821,12 +1827,12 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_playOut.value_( (playOut / s.sampleRate).round(0.01) );
 } );
 
-~label_playInOut = StaticText(w, Rect(584, 259, 90, 20) )
+~label_playInOut = StaticText(w, Rect(810, 259, 90, 20) )
 .string_("In/Out-Play")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
-~numBox_playIn = NumberBox(w, Rect(490, 260, 46, 20))
+~numBox_playIn = NumberBox(w, Rect(715, 260, 46, 20))
 .value_(0.0)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1839,7 +1845,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } ); */
 
-~numBox_playOut = NumberBox(w, Rect(535, 260, 46, 20))
+~numBox_playOut = NumberBox(w, Rect(762, 260, 46, 20))
 .value_(~audioBuf0_dur)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1857,7 +1863,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 // ------- OTHER PLAYBACK CONTROLS ------
 
 //RATE --
-~slider_rate = Slider(w, Rect(15, 280, 470, 20))
+~slider_rate = Slider(w, Rect(406, 280, 300, 20))
 .background_(Color(0.0, 0.5, 0.9))
 .value_(0.5)
 .action_( {
@@ -1872,7 +1878,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_rate.value_(pos); //update numBoxPitch value
 } ) ;
 
-~numBox_rate = NumberBox(w, Rect(490, 280, 48, 20))
+~numBox_rate = NumberBox(w, Rect(715, 280, 48, 20))
 .value_(0)
 .clipLo_(-48)
 .clipHi_(48)
@@ -1889,14 +1895,14 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_rate.value_(pos);
 } );
 
-~label_rate = StaticText(w, Rect(541, 270, 135, 40) )
+~label_rate = StaticText(w, Rect(765, 270, 135, 40) )
 .string_("Rate(semi)")
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
 
 //PITCH SHIFT --
-~slider_pitch = Slider(w, Rect(15, 301, 470, 20))
+~slider_pitch = Slider(w, Rect(406, 301, 300, 20))
 .background_(Color(0.0, 0.7, 0.9))
 .value_(0.linlin(-48, 24, 0.0, 1.0))
 .action_( {
@@ -1907,7 +1913,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_pitch.value_(pos);
 } );
 
-~numBox_pitch = NumberBox(w, Rect(490, 301, 48, 20))
+~numBox_pitch = NumberBox(w, Rect(715, 301, 48, 20))
 .value_(0)
 .clipLo_(-48)
 .clipHi_(24)
@@ -1924,14 +1930,14 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_pitch.value_(pos);
 } );
 
-~label_pitch = StaticText(w, Rect(541, 290, 135, 40) )
+~label_pitch = StaticText(w, Rect(765, 290, 135, 40) )
 .string_("Pitch(semi)")
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
 
 // PITCH SHIFT MIX --
-~slider_pitchShiftMix = Slider(w, Rect(350, 322, 135, 15))
+~slider_pitchShiftMix = Slider(w, Rect(572, 322, 135, 15))
 .background_(Color(0.0, 0.6, 0.8, 0.2))
 .value_(0.0)
 .action_( {
@@ -1944,7 +1950,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_pitchShiftMix.value_(mixAmount * 100);
 } );
 
-~numBox_pitchShiftMix = NumberBox(w, Rect(490, 322, 48, 20))
+~numBox_pitchShiftMix = NumberBox(w, Rect(715, 322, 48, 20))
 .value_(0)
 .clipLo_(0)
 .clipHi_(100)
@@ -1963,7 +1969,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_pitchShiftMix.value_(mixVal);
 } );
 
-~label_pitchShiftMix = StaticText(w, Rect(541, 326, 135, 10) )
+~label_pitchShiftMix = StaticText(w, Rect(765, 326, 135, 10) )
 .string_("PitchShiftMix")
 .font_(Font("Monaco", 12) )
 .align_(\left);
