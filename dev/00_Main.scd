@@ -98,7 +98,7 @@ Buffer.freeAll; //for cleanup
 
 ////
 Window.closeAll;
-w = Window.new("SonicMirror", Rect.new(470, 330, 780, 405))
+w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
 .front
 .alwaysOnTop_(true);
 
@@ -1286,7 +1286,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .value_(0);
 //--------------------
 
-
+/*
 //------- SCOPE VIEW (AUDIO BUF0) ------------
 
 //~scopeView = ScopeView(w.view, Rect(15, 10, 665, 170) );
@@ -1295,9 +1295,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~scopeView.xZoom = 1;  //changing these values doesn't seem to effect display
 //~scopeView.x = 0;  //changing these values doesn't seem to effect display
 ~scopeView.yZoom = 1.0;
+*/
 
 
-/*
 //-------- PLOTTER ----------//
 GUI.skin.plot.fontColor = Color.red;
 GUI.skin.plot.plotColor = Color.blue;
@@ -1307,119 +1307,107 @@ GUI.skin.plot.gridColorY = Color.cyan;
 //GUI.skin.plot.gridOnY = false;
 //GUI.skin.plot.gridOnX = false;
 
-~bufView = CompositeView(w, Rect(15, 10, 665, 170)).background_(Color.gray).resize_(5);
+~bufView = CompositeView(w, Rect(15, 10, 650, 170)).background_(Color.gray).resize_(5);
 
 ~bufPlot = Plotter.new("Buffer", parent: ~bufView); //CREATE PLOTTER
-//~bufPlot = Plotter.new("BufferPlot", Rect(15, 10, 665, 170), parent: w);
 
 ~audioBuf0.loadToFloatArray(action: {arg array;
-	{~bufPlot.value = array}.defer;
+	{~bufPlot.value = array}.defer; //create bufPlot matrix w/ as many values as buffer (very big...should probably scale this to be smaller more light weight plotter, i.e. divide buffer frames by 10 or 100 to represent average of every 10 - 100ms slices of buffer...
 });
-
-/*
-//<-------RESUME FROME HERE!!!!!!!!!!!!!
-//TESTING --- these funcs work...but refreshing is not working for some reason....
-~audioBuf0.loadToFloatArray(index: 88000, count: 120000, action: {arg array;
-	//{~bufPlot.value[88200..132300] = array}.defer;
-	{
-		array.collect({|item, i| ~bufPlot.value[88000 + i] = item;});
-		~bufPlot.refresh;  //<--doesn't work
-		//~bufView.refresh;  //<--doesn't work
-		//w.refresh; //<--doesn't work
-	}.defer;
-	//}.defer(0.5) //<---no change
-});
-~audioBuf0.get(0, {|val| val.postln;});
-~bufPlot.value[0];
-
-~bufPlot.value = Array.fill(~bufPlot.value.size, { rrand(-1.0, 1.0) });
-//~bufPlot.value;
-//~bufPlot.value.collect({|item| if (item != 0, {item;}); });
-//~bufPlot.value[1] = 1;
-~bufPlot.value[0..100000] = rrand(-1.0, 1.0);
-~bufPlot.value[0..300000] = 0.7;
-w.refresh;
-//~bufView.refresh;
-~bufPlot.refresh;
-//w.refresh;
-
-~testViewUpdate = Routine({
-	//~bufPlot.value[0..300000] = rrand(-1.0, 1.0);
-	~bufPlot.value = Array.fill(~bufPlot.value.size, { rrand(-1.0, 1.0) });
-	//~bufPlot.domainSpecs = ControlSpec(0, ~audioBuf0_dur);
-	~bufPlot.refresh;
-	//w.refresh;
-	"Update?".postln;
-	0.5.yieldAndReset;
-});
-
-AppClock.play(~testViewUpdate);
-~testViewUpdate.stop;
-~testViewUpdate.reset;
-*/
 
 {
 	~bufPlot.setProperties(
 		\gridOnY, false,
 		\gridOnX, true
 	);
+	~bufPlot.plotMode = \linear;
 	~bufPlot.domainSpecs = ControlSpec(0, ~audioBuf0_dur);
-	~bufPlot.refresh;
-	//w.refresh;
+	//~bufPlot.resolution = 1; //<---too coarse...
+	~bufPlot.resolution = 0.04; //good compromise for GUI speed, smaller resos (.02, .01) causes GUI to lag...
+	~bufPlot.updatePlots.refresh;
 }.defer(0.2); //<--if this is any shorter, these properties won't be set for some reason....
 
-
-~updateBufPlot_prevPhase = 0;
-~updateBufPlot_plotWindowDur = 0.6; //not being used
-
 ~updateBufPlot_prevUpdateFrame = nil;
-~updateBufPlot_prevUpdateTime = nil;
-~updateBufPlot_plottingActive = false;
 
-~updateBufPlot = Routine({ //<---attempt 1
-	//var initRecPhase;
+~updateBufPlot = Routine({ //basic incremental buf plotter
+	if (~updateBufPlot_prevUpdateFrame == nil,
+		{//if first time routine's run since program launch
+			var plotDur, currentFrame;
 
-	~phaseBusMonRec.get({|val|
-		//initRecPhase = val;
-		~updateBufPlot_prevPhase = val;
-		//("Rec Phase:" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-		("Rec Phase:" + ~updateBufPlot_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-		/*~audioBuf0.get(val, {|bufVal|
-			("In bufGet |" + "recPhase =" + val + "bufVal =" + bufVal).postln;
-			//~bufPlot.value[val] = bufVal;
-			~bufPlot.value[val] = 0.5;
-			("--bufPlot[val] =" + ~bufPlot.value[val]).postln;
-			//~bufPlot.refresh;
-		});  */
-	});
+			0.5.yield; //wait for buffer to fill w/ values...
 
-	0.5.yield;
+			//then evaluate bufPlot function from frame 0 to currentFrame
+			currentFrame = ~lastRecPhasePos;
 
-	//("Rec Phase (post yield):" + initRecPhase + "|" + Main.elapsedTime.round(0.01)).postln;
-	("--Rec Phase (py):" + ~updateBufPlot_prevPhase + "|" + Main.elapsedTime.round(0.01)).postln;
+			//plotDur = ~lastRecPhasePos + 1; //inclusive of frame 0
+			plotDur = currentFrame + 1; //inclusive of frame 0
+			~audioBuf0.loadToFloatArray(index: 0, count: plotDur, action: {|array|
+				{
+					//(">>>INIT PLOT<<<").postln;
+					//("startFrame: 0 | count:" + plotDur + "| stopFrame:" + currentFrame).postln;
+					array.collect({|item, i| ~bufPlot.value[i] = item;});
+					~bufPlot.updatePlots.refresh;
+					//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
+					~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
+				}.defer;
+			});
+		},
+		{//else if routine's been running: plot from prevUpdateFrame+1 to currentFrame
+			var startFrame, currentFrame;
 
-	~phaseBusMonRec.get({|val|
-		var frameCount;
-		("--Current Phase =" + val + "|" + Main.elapsedTime.round(0.01)).postln;
-		if (val > ~updateBufPlot_prevPhase,
-			{frameCount = (val - ~updateBufPlot_prevPhase) + 1;
-				(">>>NO WRAP:" + "frameCount =" + frameCount).postln;
-				("---").postln;
-			}, //inclusive frame count between init frame and current frame
-			{//else current frame < initRecPhase – we've wrapped around buffer...
-				var chunk1, chunk2;
-				chunk1 = val + 1; //to be inclusive of frame 0
-				chunk2 = ~audioBuf0.numFrames - ~updateBufPlot_prevPhase; //prev frame to last frame of buffer
-				frameCount = chunk1 + chunk2;
-				(">>>WRAP AROUND:" + "frameCount =" + frameCount).postln;
-				("---").postln;
-			}
-		);
+			startFrame = ~updateBufPlot_prevUpdateFrame + 1;
+			if (startFrame >= ~audioBuf0.numFrames, {startFrame = 0;}); //if ~prevUpdateFrame == lastBufFrame, wrap around to 0
+			currentFrame = ~lastRecPhasePos; //store in local var b/c env var frequently updated by other routine
 
-	});
+			//if(~lastRecPhasePos > startFrame,
+			if (currentFrame > startFrame,
+				{//simple contiguous span
+					var plotDur;
+					//plotDur = ~lastRecPhasePos - ~updateBufPlot_prevUpdateFrame; //inclusive of startFrame
+					plotDur = currentFrame - ~updateBufPlot_prevUpdateFrame; //inclusive of startFrame
+					~audioBuf0.loadToFloatArray(index: startFrame, count: plotDur, action: {|array|
+						{
+							//(">>>SIMPLE PLOT<<<").postln;
+							//("startFrame:" + startFrame + "| count:" + plotDur + "| stopFrame:" + currentFrame).postln;
+							array.collect({|item, i| ~bufPlot.value[startFrame + i] = item;});
+							~bufPlot.updatePlots.refresh;
+							//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
+							~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
+						}.defer;
+					});
+				},
+				{//wrapped around buffer, two chunks...
+					var chunk1Dur, chunk2Dur;
+					chunk1Dur = ~audioBuf0.numFrames - startFrame; //dur from start frame to last buf frame (inclusive of startFrame)
+					//chunk2Dur = ~lastRecPhasePos + 1; //dur from frame 0 to lastRecPhasePos (inclusive of frame 0)
+					chunk2Dur = currentFrame + 1; //dur from frame 0 to lastRecPhasePos (inclusive of frame 0)
+
+					//plot from startFrame to lastBufFrame
+					~audioBuf0.loadToFloatArray(index: startFrame, count: chunk1Dur, action: {|array|
+						{
+							//(">>>WRAP PLOT<<<").postln;
+							//("CHUNK1 - startFrame:" + startFrame + "| chunk1Dur:" + chunk1Dur).postln;
+							array.collect({|item, i| ~bufPlot.value[startFrame + i] = item;});
+						}.defer;
+					});
+
+					//plot from frame 0 to ~lastRecPhasePos
+					~audioBuf0.loadToFloatArray(index: 0, count: chunk2Dur, action: {|array|
+						{
+							//("CHUNK2 - startFrame: 0" + "| count:" + chunk2Dur + "| stopFrame:" + currentFrame).postln;
+							//("TOTAL - startFrame:" + startFrame + "| dur:" + (chunk1Dur + chunk2Dur) + "| stopFrame:" + currentFrame).postln;
+							array.collect({|item, i| ~bufPlot.value[i] = item;});
+							~bufPlot.updatePlots.refresh;
+							//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
+							~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
+						}.defer;
+					});
+				}
+			);
+		}
+	);
 	0.5.yieldAndReset;
 });
-*/
 
 //----------
 
@@ -1464,10 +1452,10 @@ AppClock.play(~testViewUpdate);
 			AppClock.play(~getBus_updateGUI_recPhase);
 
 			//////PLOTTER ----------
-			//~updateBufPlot.reset;
-			//	AppClock.play(~updateBufPlot);
+			~updateBufPlot.reset;
+			AppClock.play(~updateBufPlot);
 
-
+			/*
 			//////////////SCOPE
 			~scopeBuf_audioBuf0 = Buffer.alloc(s, ~audioBuf0.numFrames, 1); //create additional buffer for displaying contents of audio buffer...is this the only way to do this?? what happens if I 'scopeOut' to ~audioBuf0?
 			~scopeView.bufnum = ~scopeBuf_audioBuf0.bufnum; //<----
@@ -1476,7 +1464,7 @@ AppClock.play(~testViewUpdate);
 			//~scopeOut = Synth.tail(s, \scopeOut, [\inBus, ~inputSendBus, \buf, ~audioBuf0]); //<--this works also
 			~scopeView.start; //<----
 			//////////
-
+			*/
 
 		},
 		{ //when REC button disabled (when recording stops)
@@ -1488,16 +1476,16 @@ AppClock.play(~testViewUpdate);
 			~a2k_rec.free;
 			~bufRecorder.free; //stop recording to buffer and free RecBuf_loop synth
 
-			//~updateBufPlot.stop;  //PLOTTER
-
 			~getBus_updateGUI_recPhase.stop;
 
+			~updateBufPlot.stop;  //PLOTTER
 
+			/*
 			 ///FOR SCOPE
 			~scopeView.stop; //<----
 			~scopeOut.free; //<----
 			~scopeBuf_audioBuf0.free; //<----
-
+			*/
 		}
 	);
 } );
@@ -1979,7 +1967,4 @@ AppClock.play(~testViewUpdate);
 .string_("PitchShiftMix")
 .font_(Font("Monaco", 12) )
 .align_(\left);
-
-//----------
-
 )
