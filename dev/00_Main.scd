@@ -99,18 +99,27 @@ Buffer.freeAll; //for cleanup
 ////
 Window.closeAll;
 //w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
-w = Window.new("SonicMirror", Rect.new(335, 330, 880, 405))
+w = Window.new("SonicMirror", Rect.new(335, 330, 792, 380), resizable: false)
 .front
 .alwaysOnTop_(true);
 
 w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;}; // clean up when window is closed
 
+~view_main = CompositeView(w, Rect(3, 3, 788, 380));
+~view_MainLevels = CompositeView(~view_main, Rect(625, 26, 75, 147));
+~view_altLevels = CompositeView(~view_main, Rect(693, 26, 68, 105));
+~view_bufConfig = CompositeView(~view_main, Rect(625, 0, 160, 25));
+~view_bufPlot = CompositeView(~view_main, Rect(0, 0, 620, 170)).background_(Color.gray).resize_(1);
+~view_transport = CompositeView(~view_main, Rect(0, 172, 788, 95));
+~view_perfButtons = CompositeView(~view_main, Rect(5, 268, 308, 52));
+~view_sampButtons = CompositeView(~view_main, Rect(5, 320, 250, 45));
+~view_procControls1 = CompositeView(~view_main, Rect(317, 268, 460, 65));
+
 
 //------ Main In/Out Controls (Levels & Lo-Cut) -----------
 
 //Main Input Level --
-//~slider_inMainLevel = Slider(w, Rect(684, 8, 17, 173) )
-~slider_inMainLevel = Slider(w, Rect(15, 8, 17, 173) )
+~slider_inMainLevel = Slider(~view_MainLevels, Rect(8, 2, 15, 90) )
 .background_(Color(0.9, 0.0, 0.0, 0.2))
 .value_(1.0)
 .action_( {
@@ -124,7 +133,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	//~inputLevelBus.get({arg val; val.postln;} );
 } );
 
-~numBox_inMainLevel = NumberBox(w, Rect(10, 183, 26, 15))
+~numBox_inMainLevel = NumberBox(~view_MainLevels, Rect(2, 92, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -139,14 +148,14 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_inMainLevel.value_(val);
 } );
 
-~label_inMainLevel = StaticText(w, Rect(17, 195, 12, 20) )
+~label_inMainLevel = StaticText(~view_MainLevels, Rect(8, 103, 12, 20) )
 .string_("IN")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
 //Main Out Level --
 //~slider_outMainLevel = Slider(w, Rect(733, 8, 17, 173) )
-~slider_outMainLevel = Slider(w, Rect(50, 8, 17, 173) )
+~slider_outMainLevel = Slider(~view_MainLevels, Rect(40, 2, 15, 90) )
 .background_(Color(0.0, 0.8, 0.2, 0.01))
 .value_(1.0)
 .action_( {
@@ -157,7 +166,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_outMainLevel.value_(val);
 } );
 
-~numBox_outMainLevel = NumberBox(w, Rect(45, 183, 26, 15))
+~numBox_outMainLevel = NumberBox(~view_MainLevels, Rect(34, 92, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -172,13 +181,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_outMainLevel.value_(val);
 } );
 
-~label_outMainLevel = StaticText(w, Rect(48, 195, 20, 20) )
+~label_outMainLevel = StaticText(~view_MainLevels, Rect(37, 103, 20, 20) )
 .string_("OUT")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
 //Main In / Out Lo-Cuts --
-~numBox_inMainLoCut = NumberBox(w, Rect(10, 216, 32, 14))//<---
+~numBox_inMainLoCut = NumberBox(~view_MainLevels, Rect(2, 120, 30, 14))//<---
 .value_(~loCutVal_in)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
@@ -192,7 +201,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_in=" ++ ~loCutVal_in ++ "Hz").postln;
 } );
 
-~numBox_outMainLoCut= NumberBox(w, Rect(44, 216, 32, 14))//<---
+~numBox_outMainLoCut= NumberBox(~view_MainLevels, Rect(32, 120, 30, 14))//<---
 .value_(~loCutVal_out)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
@@ -206,7 +215,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_out=" ++ ~loCutVal_out ++ "Hz").postln;
 } );
 
-~label_inoutMainLoCut = StaticText(w, Rect(20, 226, 48, 20) )//<---
+~label_inoutMainLoCut = StaticText(~view_MainLevels, Rect(8, 130, 48, 20) )//<---
 .string_("LoCut-Hz")
 .font_(Font("Monaco", 10) )
 .align_(\left);
@@ -214,7 +223,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 //----- AUDIO BUFFER --------
 
-~button_audioBuf_0 = Button(w, Rect(715, 10, 65, 25)) //Activate / Deactivate audio buffer
+~button_audioBuf_0 = Button(~view_bufConfig, Rect(0, 0, 65, 25)) //Activate / Deactivate audio buffer
 .states_( [
 	["BUF_ACT", Color.black, Color.gray(0.8)] ,
 	["BUF_ACT", Color.white, Color(0.8,0.8, 0)]
@@ -232,7 +241,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	);
 } );
 
-~numBox_audioBuf0_dur = NumberBox(w, Rect(783, 10, 65, 25))
+~numBox_audioBuf0_dur = NumberBox(~view_bufConfig, Rect(67, 0, 65, 25))
 .value_(~audioBuf0_dur)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(120) //longest possible length of buffer (in seconds)
@@ -244,7 +253,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***Buffer Length=" + ~audioBuf0_dur + "seconds.").postln;
 } );
 
-~label_audioBuf0_dur = StaticText(w, Rect(850, 12, 200, 20) )
+~label_audioBuf0_dur = StaticText(~view_bufConfig, Rect(134, 2, 200, 20) )
 .string_("DUR
 (sec)")
 .font_(Font("Monaco", 8) )
@@ -807,7 +816,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-~button_autoRecPlay = Button(w, Rect(135, 349, 25, 25))
+//~button_autoRecPlay = Button(w, Rect(135, 349, 25, 25))
+~button_autoRecPlay = Button(~view_perfButtons, Rect(113, 25, 25, 25))
+//~view_perfButtons, Rect(94, 25, 25, 25)
 .states_( [
 	["^v", Color.black, Color(0.6, 0.9, 0.4, 0.3)] ,
 	["^v", Color.white, Color(0.8, 1.0, 0.4)]
@@ -876,7 +887,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~button_recIn = Button(w, Rect(16, 352, 45, 20) ) //<------NEW
+~button_recIn = Button(~view_sampButtons, Rect(0, 0, 45, 20))
 .states_( [
 	["RECIN", Color.black, Color(0.0, 0.5, 0, 0.3)] ,
 	["RECIN", Color.white, Color(0.0, 0.5, 0)]
@@ -904,7 +915,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		} );
 } );
 
-~button_recOut = Button(w, Rect(16, 372, 45, 20) )
+~button_recOut = Button(~view_sampButtons, Rect(0, 22, 45, 20))
 .states_( [
 	["RECOUT", Color.black, Color(0.95, 0, 0, 0.3)] ,
 	["RECOUT", Color.white, Color(0.95, 0, 0)]
@@ -932,10 +943,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		} );
 } );
 
-~button_recInOut = Button(w, Rect(62, 352, 70, 20))
+~button_recInOut = Button(~view_sampButtons, Rect(45, 0, 66, 20))
 .states_( [
-	["REC-InOut", Color.black, Color(0.9, 0.9, 0.3, 0.3)] ,
-	["REC-InOut", Color.black, Color(0.9, 0.9, 0.3)]
+	["RECinOut", Color.black, Color(0.9, 0.9, 0.3, 0.3)] ,
+	["RECinOut", Color.black, Color(0.9, 0.9, 0.3)]
 ] )
 .font_(Font("Monaco", 12) )
 .action_( {
@@ -954,7 +965,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } )
 .value_(0);
 
-~button_playSamp = Button(w, Rect(62, 372, 65, 20) )
+~button_playSamp = Button(~view_sampButtons, Rect(45, 22, 66, 20) )
 .states_( [
 	["PLAY FILE", Color.black, Color(0.0, 0.5, 0.5, 0.3)] ,
 	["PLAY FILE", Color.white, Color(0.0, 0.5, 0.5)]
@@ -991,8 +1002,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		} );
 } );
 
-~label_playSamp = StaticText(w, Rect(130, 373, 135, 20) )
-.string_("FILENAMEFILENAME...")
+~label_playSamp = StaticText(~view_sampButtons, Rect(113, 23, 135, 20))
+.string_("/PATH/../FILENAME")
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
@@ -1006,7 +1017,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ///---------- LEVELS ----------///
 
-~slider_inFlow1_level = Slider(w, Rect(19, 244, 12, 73) )
+~slider_inFlow1_level = Slider(~view_altLevels, Rect(9, 2, 12, 73))
 .background_(Color(0.0, 0.5, 0.9))
 .value_(1.0)
 .action_( {
@@ -1017,7 +1028,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_inFlow1_level.value_(val);
 } );
 
-~numBox_inFlow1_level = NumberBox(w, Rect(12, 317, 26, 15))
+~numBox_inFlow1_level = NumberBox(~view_altLevels, Rect(2, 75, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -1032,12 +1043,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_inFlow1_level.value_(val);
 } );
 
-~label_inFlow1_level = StaticText(w, Rect(6, 334, 40, 8) )
+~label_inFlow1_level = StaticText(~view_altLevels, Rect(0, 94, 30, 8))
 .string_("IN+FX")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
-~slider_sampOut_level = Slider(w, Rect(54, 244, 12, 73) )
+~slider_sampOut_level = Slider(~view_altLevels, Rect(44, 2, 12, 73))
 .background_(Color(0.0, 0.8, 0.2))
 .value_(1.0)
 .action_( {
@@ -1048,7 +1059,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~numBox_sampOut_level.value_(val);
 } );
 
-~numBox_sampOut_level = NumberBox(w, Rect(46, 317, 26, 15))
+~numBox_sampOut_level = NumberBox(~view_altLevels, Rect(37, 75, 26, 15))
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -1063,233 +1074,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~slider_sampOut_level.value_(val);
 } );
 
-~label_sampOut_level = StaticText(w, Rect(44, 334, 32, 8) )
-.string_("FILE")
+~label_sampOut_level = StaticText(~view_altLevels, Rect(35, 94, 30, 8) )
+.string_("SAMP")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
 //----------
-
-
-//------ DELAY OFFSET -------
-~numBox_delay = NumberBox(w, Rect(772, 64, 55, 25))  //WORKS but a little buggy....
-.value_(~delayTime)
-.clipLo_(0)
-.clipHi_(~audioBuf0_dur - 0.01)
-.font_(Font("Monaco", 14) )
-.decimals_(2)
-.scroll_step_(0.01)
-.step_(0.01)
-.action_( {
-	arg obj;
-	var lastPlay2RecOffset;
-	~delayTime = obj.value.round(0.01);
-	//~delayTime.postln;
-	//~slider_delay.value = obj.value.linlin(0, ~audioBuf0_dur - 0.01, 0, 1); //ideally do this only when the numBox is being manipulated directly, otherwise it's redundantly updating value of slider...OBSOLESCED in 1.82
-
-	~routine_playHeadOffset.reset;
-	AppClock.play(~routine_playHeadOffset);
-
-	/* ~phaseBusMonRec.get( { //<----works but BUGGY small delay values don't seem to be accurate...
-		//calculate the offset of the playhead from the rechead
-		arg val;
-		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-		lastPlay2RecOffset = val - ((~delayTime * s.sampleRate).round(1));
-		//if (~play2recOffset < 0,
-		if (lastPlay2RecOffset < 0,
-			{//~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
-				~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + lastPlay2RecOffset;
-			} ,
-			{//~lastPlayPhasePos = ~play2recOffset;
-			 ~lastPlayPhasePos = lastPlay2RecOffset;
-			}
-		);
-	} );
-
-	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); */
-
-} );
-
-~label_delayTime = StaticText(w, Rect(829, 67, 78, 20) )
-.string_("Offset
-(sec)")
-.font_(Font("Monaco", 8) )
-.align_(\left);
-
-/*~slider_delay = Slider(w, Rect(489, 332, 180, 15))
-.background_(Color(0.85, 0.85, 0.0))
-.value_(~delayTime.linlin(0, ~audioBuf0_dur - 0.01, 0, 1))
-.action_( { //<----BUGGY....?????
-	arg obj;
-	var pos, playPosFrame;
-	pos = obj.value.linlin(0, 1, 0, ~audioBuf0_dur - 0.01).round(0.01);
-	//~numBox_delay.value_(pos); //update numBoxPitch value
-	~numBox_delay.valueAction_(pos); //so we don't have to duplicate calc code from numBoxDel here
-} ); */
-
-~button_delaySync = Button(w, Rect(715, 64, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
-.states_( [
-	["SYNC", Color.black, Color(0.7, 0.7, 0, 0.3)] ,
-	["SYNC", Color.white, Color(0.8, 0.8, 0)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1, // when sync button enabled
-		{
-			~fixPlayRecOffset = true; //IS THIS BETTER THAN POLLING BUTTON.VALUE?????
-			~routine_playHeadOffset.reset;
-			AppClock.play(~routine_playHeadOffset);
-
-			/*
-			//snap playhead to position based on delay offset from rechead<------
-			~phaseBusMonRec.get( { //<----this block doesn't function properly when uncommented, needs to be in a routine?????
-				//calculate the offset of the playhead from the rechead
-				arg val;
-				~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-				if (~play2recOffset < 0,
-					{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
-						//lastPlay2RecOffset = ~lastPlayPhasePos;
-					} ,
-					{~lastPlayPhasePos = ~play2recOffset;
-						//lastPlay2RecOffset = ~play2recOffset;
-					}
-				);
-			} );
-
-			if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
-			*/
-
-		},
-		{ //when button disabled
-			~fixPlayRecOffset = false;
-			~routine_playHeadOffset.stop;
-		}
-	);
-} )
-.value_(0);
-
-~routine_playHeadOffset = Routine.new( {
-	~phaseBusMonRec.get( {
-		arg val;
-		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1)); //calculate the offset of the playhead from the rechead
-		if (~play2recOffset < 0,
-			{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
-			{~lastPlayPhasePos = ~play2recOffset;}
-		);
-	} );
-	0.1.yield; //<--------------IS THERE ANY OTHER WAY???????????
-
-	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
-	nil;
-} );
-
-//--------------------
-
-//-------------- BEHAVIOR BUTTONS ------------
-
-~button_Behavior1 = Button(w, Rect(715, 90, 55, 25)) //randomize rate control
-.states_( [
-	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
-	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1, // when randomize button enabled
-		{
-			~randomRoutine_rate.reset;
-			~updateGUI_counter_rateT2rand.reset;
-			~updateGUI_rate.reset;
-			AppClock.play(~randomRoutine_rate);
-			AppClock.play(~updateGUI_counter_rateT2rand);
-		},
-		{ //when randomize button disabled
-			~randomRoutine_rate.stop;
-			~updateGUI_counter_rateT2rand.stop;
-			//~playHeadFollowRecHead.stop;
-			~updateGUI_rate.stop;
-			~numBox_counter_rateT2rand.value_(0.0);
-		}
-	);
-} )
-.value_(0);
-
-/*
-//Monitoring support GUI objects for ~button_Behavior1 activity
-~numBox_counter_rateT2rand = NumberBox(w, Rect(313, 378, 50, 25))
-.value_(0.0)
-.clipLo_(0)
-.clipHi_(120)
-.font_(Font("Monaco", 14) )
-.decimals_(1);
-
-~label_counter_rateT2rand = StaticText(w, Rect(368, 380, 30, 20) )
-.string_("T2R")
-.font_(Font("Monaco", 12) )
-.align_(\left);
-*/
-
-~button_Behavior2 = Button(w, Rect(772, 90, 40, 25)) //Randomize pitch shift, pitch shift mix, and output level control
-.states_( [
-	["!!", Color.black, Color(0.0, 0.3, 0.9, 0.3)] ,
-	["!!", Color.white, Color(0.8, 0.3, 0.8)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1, // when enabled
-		{
-			~randomRoutine_freq.reset;
-			~randomRoutine_pitchShiftMix.reset;
-			~randomRoutine_outputLevel.reset;
-			//~updateGUI_counter_rateT2rand.reset;
-			//~playHeadFollowRecHead.reset;
-			//~updateGUI_rate.reset;
-
-			AppClock.play(~randomRoutine_freq);
-			AppClock.play(~randomRoutine_pitchShiftMix);
-			AppClock.play(~randomRoutine_outputLevel);
-		},
-		{ //when randomize button disabled
-			//~randomRoutine.stop;
-			~randomRoutine_freq.stop;
-			~randomRoutine_pitchShiftMix.stop;
-			~randomRoutine_outputLevel.stop;
-			//~numBox_counter_rateT2rand.value_(0.0);
-		}
-	);
-} )
-.value_(0);
-
-~button_Behavior3 = Button(w, Rect(814, 90, 25, 25)) //randomize Reverse and PlayHead Behavior control
-.states_( [
-	["!", Color.black, Color(0.6, 0.9, 0.0, 0.3)] ,
-	["!", Color.white, Color(0.8, 1.0, 0.0)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1, // when randomize button enabled
-		{
-			~randomRoutine_reverse.reset;
-			~randomRoutine_playHeadBehavior.reset;
-			AppClock.play(~randomRoutine_reverse);
-			AppClock.play(~randomRoutine_playHeadBehavior);
-		},
-		{ //when randomize button disabled
-			~randomRoutine_reverse.stop;
-			~randomRoutine_playHeadBehavior.stop;
-			~playHeadFollowRecHead.stop;
-		}
-	);
-} )
-.value_(0);
-//--------------------
 
 /*
 //------- SCOPE VIEW (AUDIO BUF0) ------------
@@ -1312,10 +1102,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 //GUI.skin.plot.gridOnY = false;
 //GUI.skin.plot.gridOnX = false;
 
-//~bufView = CompositeView(w, Rect(15, 10, 650, 170)).background_(Color.gray).resize_(5);
-~bufView = CompositeView(w, Rect(90, 10, 620, 170)).background_(Color.gray).resize_(5);
-
-~bufPlot = Plotter.new("Buffer", parent: ~bufView); //CREATE PLOTTER
+~bufPlot = Plotter.new("Buffer", parent: ~view_bufPlot); //CREATE PLOTTER
 
 ~audioBuf0.loadToFloatArray(action: {arg array;
 	{~bufPlot.value = array}.defer; //create bufPlot matrix w/ as many values as buffer (very big...should probably scale this to be smaller more light weight plotter, i.e. divide buffer frames by 10 or 100 to represent average of every 10 - 100ms slices of buffer...
@@ -1424,9 +1211,8 @@ GUI.skin.plot.gridColorY = Color.cyan;
 ~phaseBusMonPly.get({|val| (val/s.sampleRate).postln;});  //<----this is where to get phasor value....
 */
 
-
 ////---------------RECORD TO BUFFER BUTTON--------------////
-~button_recBuf = Button(w, Rect(715, 37, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer
+~button_recBuf = Button(~view_perfButtons, Rect(0, 0, 55, 25)) //REC BUTTON: activate / deactivate recording to buffer
 .states_( [
 	["REC", Color.black, Color(0.95, 0, 0, 0.3)] ,
 	["REC", Color.white, Color(0.95, 0, 0)]
@@ -1499,7 +1285,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 ////------------ PLAY FROM BUFFER BUTTON -----------////
 
-~button_playBuf = Button(w, Rect(772, 37, 55, 25)) //activate / deactivate playback output
+~button_playBuf = Button(~view_perfButtons, Rect(56, 0, 55, 25)) //activate / deactivate playback output
 .states_( [
 	["PLAY", Color.black, Color(0.0, 0.8, 0.2, 0.3)] ,
 	["PLAY", Color.white, Color(0.0, 0.8, 0.2)]
@@ -1587,7 +1373,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 //--------REVERSE BUTTON ---------
 
-~button_rev = Button(w, Rect(829, 37, 45, 25)) //Reverse playback
+~button_rev = Button(~view_perfButtons, Rect(113, 0, 45, 25)) //Reverse playback
 .states_( [
 	["REV", Color.black, Color(0.8, 0.5, 0, 0.3)] ,
 	["REV", Color.white, Color(0.85, 0.5, 0)]
@@ -1623,9 +1409,230 @@ GUI.skin.plot.gridColorY = Color.cyan;
 } )
 .value_(0);
 
+//------ DELAY OFFSET -------
+~button_delaySync = Button(~view_perfButtons, Rect(160, 0, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
+.states_( [
+	["SYNC", Color.black, Color(0.7, 0.7, 0, 0.3)] ,
+	["SYNC", Color.white, Color(0.8, 0.8, 0)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1, // when sync button enabled
+		{
+			~fixPlayRecOffset = true; //IS THIS BETTER THAN POLLING BUTTON.VALUE?????
+			~routine_playHeadOffset.reset;
+			AppClock.play(~routine_playHeadOffset);
+
+			/*
+			//snap playhead to position based on delay offset from rechead<------
+			~phaseBusMonRec.get( { //<----this block doesn't function properly when uncommented, needs to be in a routine?????
+				//calculate the offset of the playhead from the rechead
+				arg val;
+				~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
+				if (~play2recOffset < 0,
+					{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
+						//lastPlay2RecOffset = ~lastPlayPhasePos;
+					} ,
+					{~lastPlayPhasePos = ~play2recOffset;
+						//lastPlay2RecOffset = ~play2recOffset;
+					}
+				);
+			} );
+
+			if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
+			*/
+
+		},
+		{ //when button disabled
+			~fixPlayRecOffset = false;
+			~routine_playHeadOffset.stop;
+		}
+	);
+} )
+.value_(0);
+
+~numBox_delay = NumberBox(~view_perfButtons, Rect(217, 0, 55, 25))  //WORKS but a little buggy....
+.value_(~delayTime)
+.clipLo_(0)
+.clipHi_(~audioBuf0_dur - 0.01)
+.font_(Font("Monaco", 14) )
+.decimals_(2)
+.scroll_step_(0.01)
+.step_(0.01)
+.action_( {
+	arg obj;
+	var lastPlay2RecOffset;
+	~delayTime = obj.value.round(0.01);
+	//~delayTime.postln;
+	//~slider_delay.value = obj.value.linlin(0, ~audioBuf0_dur - 0.01, 0, 1); //ideally do this only when the numBox is being manipulated directly, otherwise it's redundantly updating value of slider...OBSOLESCED in 1.82
+
+	~routine_playHeadOffset.reset;
+	AppClock.play(~routine_playHeadOffset);
+
+	/* ~phaseBusMonRec.get( { //<----works but BUGGY small delay values don't seem to be accurate...
+		//calculate the offset of the playhead from the rechead
+		arg val;
+		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
+		lastPlay2RecOffset = val - ((~delayTime * s.sampleRate).round(1));
+		//if (~play2recOffset < 0,
+		if (lastPlay2RecOffset < 0,
+			{//~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
+				~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + lastPlay2RecOffset;
+			} ,
+			{//~lastPlayPhasePos = ~play2recOffset;
+			 ~lastPlayPhasePos = lastPlay2RecOffset;
+			}
+		);
+	} );
+
+	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); */
+
+} );
+
+~label_delayTime = StaticText(~view_perfButtons, Rect(275, 2, 78, 20) )
+//~label_delayTime = StaticText(w, Rect(720, 157, 78, 20) )
+.string_("Offset
+(sec)")
+.font_(Font("Monaco", 8) )
+.align_(\left);
+
+/*~slider_delay = Slider(w, Rect(489, 332, 180, 15))
+.background_(Color(0.85, 0.85, 0.0))
+.value_(~delayTime.linlin(0, ~audioBuf0_dur - 0.01, 0, 1))
+.action_( { //<----BUGGY....?????
+	arg obj;
+	var pos, playPosFrame;
+	pos = obj.value.linlin(0, 1, 0, ~audioBuf0_dur - 0.01).round(0.01);
+	//~numBox_delay.value_(pos); //update numBoxPitch value
+	~numBox_delay.valueAction_(pos); //so we don't have to duplicate calc code from numBoxDel here
+} ); */
+
+~routine_playHeadOffset = Routine.new( {
+	~phaseBusMonRec.get( {
+		arg val;
+		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1)); //calculate the offset of the playhead from the rechead
+		if (~play2recOffset < 0,
+			{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
+			{~lastPlayPhasePos = ~play2recOffset;}
+		);
+	} );
+	0.1.yield; //<--------------IS THERE ANY OTHER WAY???????????
+
+	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
+	nil;
+} );
+
+//--------------------
+
+//-------------- BEHAVIOR BUTTONS ------------
+
+~button_Behavior1 = Button(~view_perfButtons, Rect(0, 25, 55, 25)) //randomize rate control
+.states_( [
+	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
+	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1, // when randomize button enabled
+		{
+			~randomRoutine_rate.reset;
+			//~updateGUI_counter_rateT2rand.reset;
+			~updateGUI_rate.reset;
+			AppClock.play(~randomRoutine_rate);
+			//AppClock.play(~updateGUI_counter_rateT2rand);
+		},
+		{ //when randomize button disabled
+			~randomRoutine_rate.stop;
+			//~updateGUI_counter_rateT2rand.stop;
+			//~playHeadFollowRecHead.stop;
+			~updateGUI_rate.stop;
+			//~numBox_counter_rateT2rand.value_(0.0);
+		}
+	);
+} )
+.value_(0);
+
+/*
+//Monitoring support GUI objects for ~button_Behavior1 activity
+~numBox_counter_rateT2rand = NumberBox(w, Rect(313, 378, 50, 25))
+.value_(0.0)
+.clipLo_(0)
+.clipHi_(120)
+.font_(Font("Monaco", 14) )
+.decimals_(1);
+
+~label_counter_rateT2rand = StaticText(w, Rect(368, 380, 30, 20) )
+.string_("T2R")
+.font_(Font("Monaco", 12) )
+.align_(\left);
+*/
+
+~button_Behavior2 = Button(~view_perfButtons, Rect(55, 25, 30, 25)) //Randomize pitch shift, pitch shift mix, and output level control
+.states_( [
+	["!!", Color.black, Color(0.0, 0.3, 0.9, 0.3)] ,
+	["!!", Color.white, Color(0.8, 0.3, 0.8)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1, // when enabled
+		{
+			~randomRoutine_freq.reset;
+			~randomRoutine_pitchShiftMix.reset;
+			~randomRoutine_outputLevel.reset;
+			//~updateGUI_counter_rateT2rand.reset;
+			//~playHeadFollowRecHead.reset;
+			//~updateGUI_rate.reset;
+
+			AppClock.play(~randomRoutine_freq);
+			AppClock.play(~randomRoutine_pitchShiftMix);
+			AppClock.play(~randomRoutine_outputLevel);
+		},
+		{ //when randomize button disabled
+			//~randomRoutine.stop;
+			~randomRoutine_freq.stop;
+			~randomRoutine_pitchShiftMix.stop;
+			~randomRoutine_outputLevel.stop;
+			//~numBox_counter_rateT2rand.value_(0.0);
+		}
+	);
+} )
+.value_(0);
+
+~button_Behavior3 = Button(~view_perfButtons, Rect(86, 25, 25, 25)) //randomize Reverse and PlayHead Behavior control
+.states_( [
+	["!", Color.black, Color(0.6, 0.9, 0.0, 0.3)] ,
+	["!", Color.white, Color(0.8, 1.0, 0.0)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1, // when randomize button enabled
+		{
+			~randomRoutine_reverse.reset;
+			~randomRoutine_playHeadBehavior.reset;
+			AppClock.play(~randomRoutine_reverse);
+			AppClock.play(~randomRoutine_playHeadBehavior);
+		},
+		{ //when randomize button disabled
+			~randomRoutine_reverse.stop;
+			~randomRoutine_playHeadBehavior.stop;
+			~playHeadFollowRecHead.stop;
+		}
+	);
+} )
+.value_(0);
+//--------------------
+
 // ------------- REC HEAD / PLAY HEAD ----------
 
-~slider_recPos = Slider(w, Rect(95, 212, 610, 20))
+~slider_recPos = Slider(~view_transport, Rect(5, 25, 610, 20))
 .background_(Color(0.95, 0.0, 0.0))
 .action_( {
 	arg obj;
@@ -1682,7 +1689,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 } )
 .value_(0.0);
 
-~numBox_recPos = NumberBox(w, Rect(715, 208, 65, 25)) //numBox PlayPos
+~numBox_recPos = NumberBox(~view_transport, Rect(625, 25, 65, 20)) //numBox PlayPos
 .value_(0)
 .clipLo_(0)
 //.clipHi_(~audioBuf0_dur) //HOW COME UNCOMMENTING THIS MESSES UP THE GUI??????
@@ -1693,13 +1700,13 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	//~slider_recPos.valueAction = obj.value / ~audioBuf0_dur; //<---
 //} );
 
-~label_recPos = StaticText(w, Rect(782, 182, 100, 80) )
+~label_recPos = StaticText(~view_transport, Rect(692, 32, 100, 10) )
 .string_("RecPos(sec)")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
 
-~slider_playPos = Slider(w, Rect(95, 237, 610, 20))
+~slider_playPos = Slider(~view_transport, Rect(5, 48, 610, 20))
 .background_(Color(0, 0.8, 0.2))
 .action_( {
 	arg obj;
@@ -1722,19 +1729,19 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .value_(0.0);
 
 
-~numBox_playPos = NumberBox(w, Rect(715, 234, 65, 25))
+~numBox_playPos = NumberBox(~view_transport, Rect(625, 48, 65, 20))
 .value_(0)
 .clipLo_(0)
 //.clipHi_(~audioBuf0.numFrames-1)
 .font_(Font("Monaco", 14) )
 .decimals_(2);
 
-~label_playPos = StaticText(w, Rect(782, 207, 100, 80) )
+~label_playPos = StaticText(~view_transport, Rect(692, 53, 100, 10) )
 .string_("PlayPos(sec)")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
-~slider_recInOut = RangeSlider(w, Rect(95, 187, 610, 20)) //SLIDER => Play In/Out
+~slider_recInOut = RangeSlider(~view_transport, Rect(5, 2, 610, 20))
 .lo_(0.0)
 .hi_(1.0)
 //.background_(Color(0.0, 0.5, 0.2))
@@ -1763,7 +1770,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_recOut.value_( (recOut / s.sampleRate).round(0.01) );
 } );
 
-~numBox_recIn = NumberBox(w, Rect(715, 187, 46, 20))
+~numBox_recIn = NumberBox(~view_transport, Rect(625, 2, 46, 20))
 .value_(0.0)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1776,7 +1783,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } ); */
 
-~numBox_recOut = NumberBox(w, Rect(762, 187, 46, 20))
+~numBox_recOut = NumberBox(~view_transport, Rect(672, 2, 46, 20))
 .value_(~audioBuf0_dur)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1789,12 +1796,12 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } )*/
 
-~label_recInOut = StaticText(w, Rect(810, 189, 90, 20) )
+~label_recInOut = StaticText(~view_transport, Rect(720, 3, 90, 20) )
 .string_("In/Out-Rec")
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
-~slider_playInOut = RangeSlider(w, Rect(95, 259, 610, 20)) //SLIDER => Play In/Out
+~slider_playInOut = RangeSlider(~view_transport, Rect(5, 71, 610, 20)) //SLIDER => Play In/Out
 .lo_(0.0)
 .hi_(1.0)
 //.background_(Color(0.0, 0.5, 0.2))
@@ -1827,12 +1834,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_playOut.value_( (playOut / s.sampleRate).round(0.01) );
 } );
 
-~label_playInOut = StaticText(w, Rect(810, 259, 90, 20) )
-.string_("In/Out-Play")
-.font_(Font("Monaco", 10) )
-.align_(\left);
-
-~numBox_playIn = NumberBox(w, Rect(715, 260, 46, 20))
+~numBox_playIn = NumberBox(~view_transport, Rect(625, 71, 46, 20))
 .value_(0.0)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1845,7 +1847,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } ); */
 
-~numBox_playOut = NumberBox(w, Rect(762, 260, 46, 20))
+~numBox_playOut = NumberBox(~view_transport, Rect(672, 71, 46, 20))
 .value_(~audioBuf0_dur)
 .clipLo_(0.0)
 //.clipHi_(~audioBuf0_dur)
@@ -1858,12 +1860,17 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_playInOut.lo.valueAction_(obj.value); //updates value & position of slider and triggers action when numberBox value is changed...
 } )*/;
 
+~label_playInOut = StaticText(~view_transport, Rect(720, 72, 90, 20) )
+.string_("In/Out-Play")
+.font_(Font("Monaco", 10) )
+.align_(\left);
+
 //-----------
 
 // ------- OTHER PLAYBACK CONTROLS ------
 
 //RATE --
-~slider_rate = Slider(w, Rect(406, 280, 300, 20))
+~slider_rate = Slider(~view_procControls1, Rect(0, 0, 300, 20))
 .background_(Color(0.0, 0.5, 0.9))
 .value_(0.5)
 .action_( {
@@ -1878,7 +1885,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_rate.value_(pos); //update numBoxPitch value
 } ) ;
 
-~numBox_rate = NumberBox(w, Rect(715, 280, 48, 20))
+~numBox_rate = NumberBox(~view_procControls1, Rect(308, 0, 48, 20))
 .value_(0)
 .clipLo_(-48)
 .clipHi_(48)
@@ -1895,14 +1902,14 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_rate.value_(pos);
 } );
 
-~label_rate = StaticText(w, Rect(765, 270, 135, 40) )
+~label_rate = StaticText(~view_procControls1, Rect(358, 4, 80, 10))
 .string_("Rate(semi)")
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
 
 //PITCH SHIFT --
-~slider_pitch = Slider(w, Rect(406, 301, 300, 20))
+~slider_pitch = Slider(~view_procControls1, Rect(0, 22, 300, 20))
 .background_(Color(0.0, 0.7, 0.9))
 .value_(0.linlin(-48, 24, 0.0, 1.0))
 .action_( {
@@ -1913,7 +1920,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_pitch.value_(pos);
 } );
 
-~numBox_pitch = NumberBox(w, Rect(715, 301, 48, 20))
+~numBox_pitch = NumberBox(~view_procControls1, Rect(308, 22, 48, 20))
 .value_(0)
 .clipLo_(-48)
 .clipHi_(24)
@@ -1930,14 +1937,14 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_pitch.value_(pos);
 } );
 
-~label_pitch = StaticText(w, Rect(765, 290, 135, 40) )
+~label_pitch = StaticText(~view_procControls1, Rect(358, 27, 80, 10))
 .string_("Pitch(semi)")
 .font_(Font("Monaco", 12) )
 .align_(\left);
 
 
 // PITCH SHIFT MIX --
-~slider_pitchShiftMix = Slider(w, Rect(572, 322, 135, 15))
+~slider_pitchShiftMix = Slider(~view_procControls1, Rect(165, 44, 135, 15))
 .background_(Color(0.0, 0.6, 0.8, 0.2))
 .value_(0.0)
 .action_( {
@@ -1950,7 +1957,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~numBox_pitchShiftMix.value_(mixAmount * 100);
 } );
 
-~numBox_pitchShiftMix = NumberBox(w, Rect(715, 322, 48, 20))
+~numBox_pitchShiftMix = NumberBox(~view_procControls1, Rect(308, 44, 48, 20))
 .value_(0)
 .clipLo_(0)
 .clipHi_(100)
@@ -1969,7 +1976,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~slider_pitchShiftMix.value_(mixVal);
 } );
 
-~label_pitchShiftMix = StaticText(w, Rect(765, 326, 135, 10) )
+~label_pitchShiftMix = StaticText(~view_procControls1, Rect(358, 49, 135, 10))
 .string_("PitchShiftMix")
 .font_(Font("Monaco", 12) )
 .align_(\left);
