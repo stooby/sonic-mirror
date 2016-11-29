@@ -96,16 +96,20 @@
 
 			~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", startFrame: ~recSamp_input_startFrame, numFrames: recFrames); // write sampled buffer to audio file - directly from original buffer...
 
-			//~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
+			//LOG DURATION OF THIS RECORDED SAMPLE HERE, OR EMBED IN FILE NAME? <-----
 
 			("--SIMPLE Write--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
 			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
-		}, { //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
+		},
+		{ //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
 			var recFrames, bufChunk1frames, bufChunk2frames;
 			bufChunk1frames = ~audioBuf0.numFrames - ~recSamp_input_startFrame; //inclusive frame count from "startFrame" to last frame in buffer
 			bufChunk2frames = ~recSamp_input_stopFrame + 1; //inclusive frame count (b/c buffers start at frame 0)
+
 			recFrames = bufChunk1frames + bufChunk2frames; //total # of frames to sample
+
+			//LOG DURATION OF THIS RECORDED SAMPLE HERE, OR EMBED IN FILE NAME? <----
 
 			~audioBuf_inMainWrite = Buffer.alloc(s, recFrames, 1);
 
@@ -124,22 +128,24 @@
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
 			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
 			~audioBuf_inMainWrite.free;
-	});
+		}
+	);
 
 	~recSamp_input = false; //EXIT THIS HALF OF ROUTINE, resume listening for sound...
 	{~button_recIn.value = 0}.defer; //update GUI
 
 	~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
-	~autoRecPlay_state = 1; //<------NEW --- (advance state to trigger ~autoPlay before next ~autoRec)
-	("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
+
+	//moved below two lines back to ~autoRec_soundTrigAuto routine
+	//~autoRecPlay_state = 1; //<------NEW --- (advance state to trigger ~autoPlay before next ~autoRec)
+	//("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
 
 	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
-	if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
+	if (~fileAudio_writeIn_nameNum > (~fileAudio_writeIn_maxNum - 1), { //cap max file count...
 		~fileAudio_writeIn_nameNum = 0;
 	});
 
 	(">>>RECORDING COMPLETE<<<").postln;
-	("---.....---").postln;
 };
 
 

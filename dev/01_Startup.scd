@@ -23,7 +23,6 @@ o.outDevice = nil; //use system default audio output (change value to manually c
 
 //o.inDevice = "MiC";  //external USB mic
 
-
 //o.outDevice = "iConnectAudio4+"; //external audio interface
 
 s.boot;

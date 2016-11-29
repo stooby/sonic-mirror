@@ -14,7 +14,20 @@ SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 	Out.ar(sendBus, sig);
 } ).add;
 
-// Takes audio-rate input phase to control the buffer position
+
+SynthDef.new(\bufRead_complex1, { //<----NEW --- TEST
+	arg buf, duration, amp=1, rate = 1, pitch = 1, pShiftMix = 0, out = 0;
+	var sig1, sig2, sigOut, frames, dur, env, phasor;
+	frames = BufFrames.kr(buf);
+	dur = duration.asFloat; //total playback duration in seconds
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames - 1);
+	sig1 = BufRd.ar(1, buf, phasor);
+	sig2 = PitchShift.ar(sig1, windowSize: 0.1, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0.003);
+	sigOut = SelectX.ar(pShiftMix, [sig1, sig2]) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sigOut * amp);
+} ).add;
+
 SynthDef.new(\bufRead_noLoop, {
 	arg buf, rate = 1, amp=1, out=0;
 	var sig, frames, dur, env, phasor;
