@@ -85,6 +85,9 @@
 	} );
 };
 
+
+//AUTO REC / PLAY HELPER FUNCTIONS -----
+
 ~writeSampFromBufCopy_input = {
 	var temp;
 	("-----...........------").postln;
@@ -145,6 +148,171 @@
 
 	(">>>RECORDING COMPLETE<<<").postln;
 };
+
+~sample_randAudify = {|buffer, duration, ampBus, outBus|
+	var rate, pitch, mix;
+	pitch = 1;
+	mix = 0;
+
+	if (0.5.coin == true, //50% faster or slower rate
+		{//FASTER rate
+			var rate1, origDuration;
+			rate = rrand(2.0, 24.0).round(0.01);
+			("==FASTER Rate==" + rate).postln;
+			rate1 = rate; //store semitone transp value for reference in case double play triggered
+
+			if (0.65.coin == true, {//65% chance pitch shift
+				"--PITCH TRANSP--".postln;
+				if (0.65.coin == true,
+					{//65% chance pitch is inversion of rate - STRETCH
+						pitch = (rate * -1) - rrand(0.0, 2.0).round(0.01);
+						("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
+					},
+					{//35% chance pitch transp doesn't correspond to rate
+						if (rate <= 12,
+							{
+								if (0.5.coin == true, {pitch = rrand(-24.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 7.0).round(0.01);});
+								("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
+							},
+							{//else if rate > 12
+								pitch = rrand(-12.0, -1.0).round(0.01);
+								("---Pitch Change (downwards) - rate =" + rate + "pitch =" + pitch).postln;
+							}
+						);
+					}
+				);
+				mix = 1; //set mix so we hear pitch shifter within synth
+			});
+
+			rate = rate.midiratio; //convert transposition from semitones to raw rate ratio
+			pitch = pitch.midiratio; //convert pitch from semitones to ratio
+			origDuration = duration; //store orig dur for reference in case playback at 2 different transps
+			duration = duration / rate; //update duration based on transp rate
+
+			if (duration <= 3, {//if transposed sample shorter than 3 seconds, maybe play twice
+				if (0.6.coin == true, {//60% chance play short sample twice at one or two transpositions
+					var rate2;
+					"==UPWARDS TRANSP - PLAY TWICE==".postln;
+
+					if (0.9.coin == true, {//~90% chance second play back w/ 2 transpositions
+						if (rate1 >= 13,
+							{//minimal transp range possible if init transp is high
+								var transpOffset, duration2;
+								if (0.5.coin == true,
+									{transpOffset = rrand(1.0, 4.0).round(0.01);},
+									{transpOffset = rrand(-12.0, -1.0).round(0.01);}
+								);
+								rate2 = (rate1 + transpOffset).midiratio;
+								duration2 = origDuration / rate2;
+								{~samp0.set(\rate, rate2);}.defer(duration); //change rate after first playthrough
+								duration = duration + duration2;
+							},
+							{//larger transposition range possible if init transp not that high
+								var transpOffset, duration2;
+								if (0.5.coin == true,
+									{transpOffset = rrand(1.0, 10.0).round(0.01);},
+									{transpOffset = rrand(-12.0, -1.0).round(0.01);}
+								);
+								rate2 = (rate1 + transpOffset).midiratio;
+								duration2 = origDuration / rate2;
+								{~samp0.set(\rate, rate2);}.defer(duration); //change rate after first playthrough
+								duration = duration + duration2;
+							}
+						);
+					}, {//~10% chance second playback w/ no additional transposition
+						duration = duration * 2;
+					});
+				});
+			});
+		},
+		{//slower rate
+			rate = rrand(-24.0, -2.0).round(0.01);
+			("==SLOWER Rate==" + rate).postln;
+
+			if (0.65.coin == true, {//65% chance pitch shift
+				"--PITCH TRANSP--".postln;
+				if (0.65.coin == true,
+					{//65% chance pitch is inversion of rate - STRETCH
+						pitch = rate.abs + rrand(0.0, 1.0).round(0.01);
+						("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
+					},
+					{//35% chance pitch transp doesn't correspond to rate
+						if (rate >= -6,
+							{
+								if (0.5.coin == true, {pitch = rrand(-7.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 12.0).round(0.01);});
+								("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
+							},
+							{//else if rate < -6
+								pitch = rrand(1.0, 12.0).round(0.01);
+								("---Pitch Change (upwards) - rate =" + rate + "pitch =" + pitch).postln;
+							}
+						);
+					}
+				);
+				mix = 1; //set mix so we hear pitch shifter within synth
+			});
+
+			rate = rate.midiratio;
+			pitch = pitch.midiratio;
+			duration = duration / rate; //update duration based on transp rate
+
+			if (duration > 30, //if transposed sample longer than 30 seconds, shorten playback time
+				{
+					("----> SHORTEN DUR: Orig Dur: " ++ duration).postln;
+					duration = rrand(15.0, 25.0);
+					("---->NEW DUR = " ++ duration).postln;
+				}
+			);
+		}
+	);
+	~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus.asMap, \out, outBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]);
+
+	duration;
+};
+
+~sample_noiseMangle = {|buffer, duration, ampBus, outBus|
+	if (duration <= 6,
+		{
+			//("TRIPLE SHORT: OrigDur =" + duration + ">").post;
+			duration = (duration * 3).round(0.001);
+			//("newDur =" + duration).postln;
+		},
+		{
+			if (duration <= 12,
+				{
+					//("1.5X MED: OrigDur =" + duration + ">").post;
+					duration = (duration * 1.5).round(0.001);
+					//("newDur =" + duration).postln;
+				},
+				{
+					duration = duration.round(0.001);
+					//("No CHANGE: dur = " ++ duration).postln;
+				};
+			);
+		}
+	);
+
+	if (0.5.coin == true,
+		{//straight noise
+			var freq;
+			//"-x-x-STRAIGHT NOISE-x-x-".postln;
+			freq = rrand(0.5, 5.0).round(0.01);
+			//("--freq = " ++ freq).postln;
+			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus.asMap, \out, outBus]);
+		},
+		{//else, modulating noise
+			var mod, lo, hi;
+			//"-x-x-MOD NOISE-x-x-".postln;
+			mod = rrand(0.1, 1.0).round(0.1);
+			lo = rrand(0.25, 1.0).round(0.01);
+			hi = rrand(1.25, 5.0).round(0.01);
+			//("mod = " ++ mod + "| lo =" + lo + "| hi =" + hi).postln;
+			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus.asMap, \out, outBus]);
+		}
+	);
+	duration;
+};
+
 
 
 //====== ROUTINES ==========================

@@ -353,15 +353,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			if (((~recSamp_input == false) && (~autoRecPlay_state == 1)), //only play back sounds if not recording...
 				{
 					//PLAYBACK AUDIO FILE FROM DISK
-					//var interpSynth, randFilePick, randNum, fileDir, duration, currentTime;
-					var interpSynth, randFilePick, randNum, fileDir, file, duration, temp, rate, pitch, mix, currentTime;
+					var interpSynth, fileDir, file, duration, temp, /*rate, pitch, mix,*/ currentTime;
 
 					//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
 					//---e.g. routines checking machine listening ugen output control busses...
 
 					~playSamp = true; //set flag
-					pitch = 1; //<--
-					mix = 0; //<--
+					//pitch = 1; //<--
+					//mix = 0; //<--
+
 					/*
 					//<--- this chunk no longer necessary???
 					if (~bufPlayer.isRunning, { //if playing buffer audio, silence it for audio sample playback
@@ -419,125 +419,42 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 					//PLAY SOUND FILE from disk
 					~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
-						//var temp, rate, file;
+						var rand, procSelect;
 						//duration = buffer.numFrames/s.sampleRate;
 						duration = buffer.numFrames/buffer.sampleRate; //<--orig
 
-						//SELECT RATE AND PITCH DEPENDING ON DURATION LENGTH (if long duration, speed up, if short duration more likely playback at slower rate, etc...)<-------!!!!!!!!!!
+						//EVENTUALLY consider selecting proc behaviors based on features of analyzed audio <<<<
+						rand = rrand(1.0, 10.0);
 
-						if (0.5.coin == true, //50% faster or slower rate
-							{//FASTER rate
-								var rate1, origDuration;
-								rate = rrand(2.0, 24.0).round(0.01);
-								("==FASTER Rate==" + rate).postln;
-								rate1 = rate; //store semitone transp value for reference in case double play triggered
+						procSelect = case
+						{rand <= 6} {
+							"==randAudify==".postln;
+							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
+						}
+						{rand > 8.5} {
+							"==NOIZ MANGLE==".postln;
+							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
+						}
+						{rand > 6 && rand <= 8.5} {
+							var lfoFreq, loFreq, hiFreq;
+							"==SINE MODs==".postln;
+							lfoFreq = rrand(0.1, 1.0).round(0.01);
+							loFreq = rrand(0.05, 0.3).round(0.01);
+							hiFreq = rrand(0.1, 0.7).round(0.01);
 
-								if (0.65.coin == true, {//65% chance pitch shift
-									"--PITCH TRANSP--".postln;
-									if (0.75.coin == true,
-										{//75% chance pitch is inversion of rate - STRETCH
-											pitch = (rate * -1) - rrand(0.0, 2.0).round(0.01);
-											("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
-										},
-										{//25% chance pitch transp doesn't correspond to rate
-											if (rate <= 12,
-												{
-													if (0.5.coin == true, {pitch = rrand(-24.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 7.0).round(0.01);});
-													("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
-												},
-												{//else if rate > 12
-													pitch = rrand(-12.0, -1.0).round(0.01);
-													("---Pitch Change (downwards) - rate =" + rate + "pitch =" + pitch).postln;
-												}
-											);
-										}
-									);
-									mix = 1; //set mix so we hear pitch shifter within synth
-								});
-
-								rate = rate.midiratio; //convert transposition from semitones to raw rate ratio
-								pitch = pitch.midiratio; //convert pitch from semitones to ratio
-								origDuration = duration; //store orig dur for reference in case playback at 2 different transps
-								duration = duration / rate; //update duration based on transp rate
-
-								if (duration <= 3, {//if transposed sample shorter than 3 seconds, maybe play twice
-									if (0.6.coin == true, {//60% chance play short sample twice at one or two transpositions
-										var rate2;
-										"==UPWARDS TRANSP - PLAY TWICE==".postln;
-
-										if (0.9.coin == true, {//~90% chance second play back w/ 2 transpositions
-											if (rate1 >= 13,
-												{//minimal transp range possible if init transp is high
-													var transpOffset, duration2;
-													if (0.5.coin == true,
-														{transpOffset = rrand(1.0, 4.0).round(0.01);},
-														{transpOffset = rrand(-12.0, -1.0).round(0.01);}
-													);
-													rate2 = (rate1 + transpOffset).midiratio;
-													duration2 = origDuration / rate2;
-													{~samp0.set(\rate, rate2);}.defer(duration); //change rate after first playthrough
-													duration = duration + duration2;
-												},
-												{//larger transposition range possible if init transp not that high
-													var transpOffset, duration2;
-													if (0.5.coin == true,
-														{transpOffset = rrand(1.0, 10.0).round(0.01);},
-														{transpOffset = rrand(-12.0, -1.0).round(0.01);}
-													);
-													rate2 = (rate1 + transpOffset).midiratio;
-													duration2 = origDuration / rate2;
-													{~samp0.set(\rate, rate2);}.defer(duration); //change rate after first playthrough
-													duration = duration + duration2;
-												}
-											);
-										}, {//~10% chance second playback w/ no additional transposition
-											duration = duration * 2;
-										});
-									});
-								});
-							},
-							{//slower rate
-								rate = rrand(-24.0, -2.0).round(0.01);
-								("==SLOWER Rate==" + rate).postln;
-
-								if (0.65.coin == true, {//65% chance pitch shift
-									"--PITCH TRANSP--".postln;
-									if (0.75.coin == true,
-										{//75% chance pitch is inversion of rate - STRETCH
-											pitch = rate.abs + rrand(0.0, 1.0).round(0.01);
-											("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
-										},
-										{//25% chance pitch transp doesn't correspond to rate
-											if (rate >= -6,
-												{
-													if (0.5.coin == true, {pitch = rrand(-7.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 12.0).round(0.01);});
-													("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
-												},
-												{//else if rate < -6
-													pitch = rrand(1.0, 12.0).round(0.01);
-													("---Pitch Change (upwards) - rate =" + rate + "pitch =" + pitch).postln;
-												}
-											);
-										}
-									);
-									mix = 1; //set mix so we hear pitch shifter within synth
-								});
-
-								rate = rate.midiratio;
-								pitch = pitch.midiratio;
-								duration = duration / rate; //update duration based on transp rate
-
-								if (duration > 30, //if transposed sample longer than 30 seconds, shorten playback time
-									{
-										("----> SHORTEN DUR: Orig Dur: " ++ duration).postln;
-										duration = rrand(15.0, 25.0);
-										("---->NEW DUR = " ++ duration).postln;
-									}
-								);
-							}
-						);
-						//~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \rate, rate, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]); //orig
-						~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]);
+							if (0.5.coin == true,
+								{
+									("---SineSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;
+									//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+									~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+								},
+								{
+									("---NoiseSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;
+									//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+									~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+								}
+							);
+						};
 
 						//NodeWatcher.register(~samp0);
 						~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time

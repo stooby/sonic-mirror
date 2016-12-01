@@ -14,8 +14,7 @@ SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 	Out.ar(sendBus, sig);
 } ).add;
 
-
-SynthDef.new(\bufRead_complex1, { //<----NEW --- TEST
+SynthDef.new(\bufRead_complex1, {
 	arg buf, duration, amp=1, rate = 1, pitch = 1, pShiftMix = 0, out = 0;
 	var sig1, sig2, sigOut, frames, dur, env, phasor;
 	frames = BufFrames.kr(buf);
@@ -26,6 +25,45 @@ SynthDef.new(\bufRead_complex1, { //<----NEW --- TEST
 	sig2 = PitchShift.ar(sig1, windowSize: 0.2, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0.003);
 	sigOut = SelectX.ar(pShiftMix, [sig1, sig2]) * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sigOut * amp);
+} ).add;
+
+SynthDef.new(\bufRead_noise1, {
+	//arg buf, duration, amp=1, freq = 1, out = 0;
+	arg buf, duration, amp=1, modFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
+	var dur, frames, ptr, env, lfo, sig;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	lfo = SinOsc.ar(modFreq, 3pi/2).range(loFreq, hiFreq);
+	ptr = LFDNoise1.ar(lfo).range(0, frames - 1);
+	//ptr = LFDNoise1.ar(freq).range(0, frames - 1);
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
+SynthDef.new(\bufRead_sineSineMod, {
+	arg buf, duration, amp=1, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
+	var dur, frames, lfo, ptr, env, sig;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	lfo = SinOsc.ar(lfoFreq, 3pi/2).range(loFreq, hiFreq);
+	ptr = SinOsc.ar(lfo, 3pi/2).range(0, frames - 1);
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
+SynthDef.new(\bufRead_noiseSineMod, {
+	arg buf, duration, amp=1, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
+	var dur, frames, lfo, ptr, env, sig;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	//lfo = SinOsc.ar(lfoFreq, 3pi/2).range(loFreq, hiFreq);
+	lfo = LFDNoise1.ar(lfoFreq).range(loFreq, hiFreq);
+	ptr = SinOsc.ar(lfo, 3pi/2).range(0, frames - 1);
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
 } ).add;
 
 SynthDef.new(\bufRead_noLoop, {

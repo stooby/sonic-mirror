@@ -8,12 +8,15 @@ ServerOptions.devices; //uncomment and evaluate this to see what audio input/out
 o = Server.local.options;
 o.sampleRate = 44100;
 //o.sampleRate = 48000; //use w/ external USB mic "MiC"
-o.blockSize = 512;
+//o.blockSize = 512;
+o.blockSize = 64; //SC default
 s.latency = 0.05; //0.2 is SC default
 
 //o.inDevice = "Built-in Microph";
 //o.inDevice = "iConnectAudio4+";
 //o.outDevice = "Built-in Output";
+
+//o.inDevice = "MiC";  //external USB mic
 
 o.inDevice = nil; //use system default audio input (change value to manually configure input)
 o.outDevice = nil; //use system default audio output (change value to manually configure output)
@@ -21,7 +24,7 @@ o.outDevice = nil; //use system default audio output (change value to manually c
 //o.inDevice = "C-Media USB Headphone Set";
 //o.outDevice = "C-Media USB Headphone Set";
 
-//o.inDevice = "MiC";  //external USB mic
+
 
 //o.outDevice = "iConnectAudio4+"; //external audio interface
 
