@@ -86,6 +86,7 @@
 };
 
 ~writeSampFromBufCopy_input = {
+	var temp;
 	("-----...........------").postln;
 	(">>>SAMPLING ~audioBuf0......<<<").postln;
 
@@ -122,8 +123,6 @@
 			//write ~audioBuf_inMainWrite to an audio file
 			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24");
 
-			//~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
-
 			("--WRAP AROUND 2-STEP WRITE--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
 			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
@@ -136,9 +135,8 @@
 
 	~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath; //<---------- NEW (keeps track of last written file name)
 
-	//moved below two lines back to ~autoRec_soundTrigAuto routine
-	//~autoRecPlay_state = 1; //<------NEW --- (advance state to trigger ~autoPlay before next ~autoRec)
-	//("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
+	temp = ~fileHistory_rec.shift(1, ~fileAudio_writeIn_lastFile); //<---NEW - rec file memory
+	~fileHistory_rec = temp; //<---NEW
 
 	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
 	if (~fileAudio_writeIn_nameNum > (~fileAudio_writeIn_maxNum - 1), { //cap max file count...

@@ -282,7 +282,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ~fileAudio_lastPlay; //<---NEW (not needed if using below array though)
 
-~soundMemory_playback = Array.newClear(5); //to remember last 5 samples played back <--NEW
+~fileHistory_rec = Array.newClear(5); //history of last 5 samples recorded <--NEW
+~fileHistory_play = Array.newClear(5); //history of last 5 samples played back <--NEW
 
 ~soundMemory = []; //<-------NEW (init)
 //~soundMemory = [["sound1Name", sound1timeIn, sound1timeOut, sound1dur, sus / transient, mean loudness, pitchiness, mean pitch], ["sound2Name", sound2timeIn, sound2timeOut, ....], ["sound3Name", ...], ["soundMaxNumName", ...]];
@@ -341,7 +342,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
 			~playSamp = false;
 			~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
-			~audioBuf_play0.close; //not needed? didn't fix bug....
+			//~audioBuf_play0.close; //not needed? didn't fix bug....
 			~audioBuf_play0.free;
 			{~button_playSamp.value = 0;}.defer; //update GUI button
 			~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
@@ -352,14 +353,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			if (((~recSamp_input == false) && (~autoRecPlay_state == 1)), //only play back sounds if not recording...
 				{
 					//PLAYBACK AUDIO FILE FROM DISK
-					//var readDiskSynth, interpSynth, readFileFunc, randFilePick, duration;
-					var interpSynth, randFilePick, randNum, fileDir, duration;
+					//var interpSynth, randFilePick, randNum, fileDir, duration, currentTime;
+					var interpSynth, randFilePick, randNum, fileDir, file, duration, temp, rate, pitch, mix, currentTime;
 
 					//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
 					//---e.g. routines checking machine listening ugen output control busses...
 
 					~playSamp = true; //set flag
-
+					pitch = 1; //<--
+					mix = 0; //<--
 					/*
 					//<--- this chunk no longer necessary???
 					if (~bufPlayer.isRunning, { //if playing buffer audio, silence it for audio sample playback
@@ -379,22 +381,82 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					//>-----FILE SELECTION CONDITIONS GO HERE-----<<<<<<------------DO
 					// IF IT'S BEEN AWHILE since last recorded sound OR if have played back previous sample already, be more likely to play a random sample or second to last sample or older samples <--------- DO THIS ---<<<<<!!!
 
-					fileDir = ~fileAudio_writeIn_lastFile; //<-----NEW (play back last saved audio file)
+					/*
+					currentTime = Main.elapsedTime.round(0.001); //<----IN PROGRESS
+					if (currentTime <= (~time_lastRec_stop + 5),
+						{//if just recorded new sound, play last recorded sound
+							fileDir = ~fileAudio_writeIn_lastFile;
+						},
+						{//else if it's been awhile since last recorded sound
+							if (~fileHistory_play[0] != ~fileHistory_play[1], //if last played sound isn't the same as previously played sound
+								{
+									if (0.85.coin == true,
+										{fileDir = ~fileAudio_writeIn_lastFile;}, //~85% select last recorded file for playback
+										{fileDir = ~fileHistory_play[1];}//else select second to last played file
+									);
+									if (fileDir == nil, {fileDir = ~fileAudio_writeIn_lastFile;}); //safe driving
+								}
+							);
+
+							if (~fileHistory_play[0] == ~fileHistory_play[1], //if played same sound twice
+								{
+
+									if ((~fileHistory_play[2] != nil) && (~fileHistory_play[2] != ~fileHistory_play[0]),
+										{fileDir = ~fileHistory_play[2];}
+									);
+								}
+							);
+						}
+					); //<---IN PROGRESS - END
+					*/
+
+					fileDir = ~fileAudio_writeIn_lastFile; //orig
+
+					//file = SoundFile.new(fileDir); //<--- new
+					//file.openRead; //<--- new
+					//0.5.yield;  //<----testing for RPI, might help? not sure....
+					//duration = file.duration; //<--- new, BUT this DOESN'T have different effect b/c being changed inside action function....
 
 					//PLAY SOUND FILE from disk
 					~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
-						var temp, rate;
+						//var temp, rate, file;
 						//duration = buffer.numFrames/s.sampleRate;
-						duration = buffer.numFrames/buffer.sampleRate;
+						duration = buffer.numFrames/buffer.sampleRate; //<--orig
 
 						//SELECT RATE AND PITCH DEPENDING ON DURATION LENGTH (if long duration, speed up, if short duration more likely playback at slower rate, etc...)<-------!!!!!!!!!!
 
-						if (0.5.coin == true, //50% upwards or downwards transp
-							{//upwards transposition
+						if (0.5.coin == true, //50% faster or slower rate
+							{//FASTER rate
 								var rate1, origDuration;
 								rate = rrand(2.0, 24.0).round(0.01);
+								("==FASTER Rate==" + rate).postln;
 								rate1 = rate; //store semitone transp value for reference in case double play triggered
+
+								if (0.65.coin == true, {//65% chance pitch shift
+									"--PITCH TRANSP--".postln;
+									if (0.75.coin == true,
+										{//75% chance pitch is inversion of rate - STRETCH
+											pitch = (rate * -1) - rrand(0.0, 2.0).round(0.01);
+											("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
+										},
+										{//25% chance pitch transp doesn't correspond to rate
+											if (rate <= 12,
+												{
+													if (0.5.coin == true, {pitch = rrand(-24.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 7.0).round(0.01);});
+													("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
+												},
+												{//else if rate > 12
+													pitch = rrand(-12.0, -1.0).round(0.01);
+													("---Pitch Change (downwards) - rate =" + rate + "pitch =" + pitch).postln;
+												}
+											);
+										}
+									);
+									mix = 1; //set mix so we hear pitch shifter within synth
+								});
+
 								rate = rate.midiratio; //convert transposition from semitones to raw rate ratio
+								pitch = pitch.midiratio; //convert pitch from semitones to ratio
 								origDuration = duration; //store orig dur for reference in case playback at 2 different transps
 								duration = duration / rate; //update duration based on transp rate
 
@@ -434,13 +496,40 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 									});
 								});
 							},
-							{//downwards transposition
+							{//slower rate
 								rate = rrand(-24.0, -2.0).round(0.01);
+								("==SLOWER Rate==" + rate).postln;
+
+								if (0.65.coin == true, {//65% chance pitch shift
+									"--PITCH TRANSP--".postln;
+									if (0.75.coin == true,
+										{//75% chance pitch is inversion of rate - STRETCH
+											pitch = rate.abs + rrand(0.0, 1.0).round(0.01);
+											("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
+										},
+										{//25% chance pitch transp doesn't correspond to rate
+											if (rate >= -6,
+												{
+													if (0.5.coin == true, {pitch = rrand(-7.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 12.0).round(0.01);});
+													("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
+												},
+												{//else if rate < -6
+													pitch = rrand(1.0, 12.0).round(0.01);
+													("---Pitch Change (upwards) - rate =" + rate + "pitch =" + pitch).postln;
+												}
+											);
+										}
+									);
+									mix = 1; //set mix so we hear pitch shifter within synth
+								});
+
 								rate = rate.midiratio;
+								pitch = pitch.midiratio;
 								duration = duration / rate; //update duration based on transp rate
+
 								if (duration > 30, //if transposed sample longer than 30 seconds, shorten playback time
 									{
-										("==DOWNWARDS TRANSP - Orig Dur: " ++ duration).postln;
+										("----> SHORTEN DUR: Orig Dur: " ++ duration).postln;
 										duration = rrand(15.0, 25.0);
 										("---->NEW DUR = " ++ duration).postln;
 									}
@@ -448,7 +537,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 							}
 						);
 						//~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \rate, rate, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]); //orig
-						~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus, \rate, rate, \duration, duration]);
+						~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]);
 
 						//NodeWatcher.register(~samp0);
 						~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
@@ -456,13 +545,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 						~fileAudio_lastPlay = fileDir; //<---NEW - to keep track of last played sample (not needed if using below array for playback memory)
 
-						temp = ~soundMemory_playback.shift(1, fileDir); //<---NEW - longer-term playback memory
-						~soundMemory_playback = temp; //<---NEW - longer-term playback memory
+						temp = ~fileHistory_play.shift(1, fileDir); //<---NEW - longer-term playback memory
+						~fileHistory_play = temp; //<---NEW - longer-term playback memory
 					});
 
 					{~button_playSamp.value = 1;}.defer; //update GUI
 					("Pre-yield samp Dur = " ++ duration).postln;
-					0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error, but testing seems to point elsewhere ...
+					0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
 					("Post-yield samp Dur = " ++ duration).postln;
 					//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
 					(duration + 0.02).round(0.01).yieldAndReset; //<---probs not necessary to add much time, experiment
@@ -624,8 +713,16 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 												{ //else if ~hearSound == false
 													("-->...silence...").postln;
 
-													//INSERT CONDITIONAL:  <--------------DO THIS --------<<<<
-													//if it's been >= patienceTimeDur, play a sound
+													if (~fileHistory_play[0] != nil, {//if recorded & played @ least 1 sound
+														var currentTime = Main.elapsedTime.round(0.001);
+														if (currentTime >= (~time_lastPlay_stop + ~listenDur_soundPatience),
+															{
+																~autoRecPlay_state = 1;
+																//adjust ~listenDur_soundPatience based on timespan since ~time_lastRec_stop; ? <--------CONSIDER DOING THIS ----------------<<<<<<<<<<
+																~listenDur_soundPatience = rrand(6.0, 20.0); //temporary<---?
+															}
+														);
+													});
 												}
 											);
 										}

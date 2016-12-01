@@ -23,7 +23,7 @@ SynthDef.new(\bufRead_complex1, { //<----NEW --- TEST
 	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
 	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames - 1);
 	sig1 = BufRd.ar(1, buf, phasor);
-	sig2 = PitchShift.ar(sig1, windowSize: 0.1, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0.003);
+	sig2 = PitchShift.ar(sig1, windowSize: 0.2, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0.003);
 	sigOut = SelectX.ar(pShiftMix, [sig1, sig2]) * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sigOut * amp);
 } ).add;
