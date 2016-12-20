@@ -427,15 +427,18 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 						rand = rrand(1.0, 10.0);
 
 						procSelect = case
+						//{rand <= 10} {
 						{rand <= 6} {
 							"==randAudify==".postln;
 							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
 						{rand > 8.5} {
+						//{rand == 11} {
 							"==NOIZ MANGLE==".postln;
 							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
 						{rand > 6 && rand <= 8.5} {
+						//{rand == 12} {
 							var lfoFreq, loFreq, hiFreq;
 							"==SINE MODs==".postln;
 							lfoFreq = rrand(0.1, 1.0).round(0.01);
@@ -468,10 +471,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 					{~button_playSamp.value = 1;}.defer; //update GUI
 					("Pre-yield samp Dur = " ++ duration).postln;
-					0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
+
+					s.sync; //<------USING THIS INSTEAD OF YIELD, FIXES RPI ISSUE AND NO MORE NEED FOR YIELD!!
+					//0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
 					("Post-yield samp Dur = " ++ duration).postln;
+
 					//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
-					(duration + 0.02).round(0.01).yieldAndReset; //<---probs not necessary to add much time, experiment
+					(duration + 0.02).round(0.01).yieldAndReset; //<--maybe not necessary to add more time
 					//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
 				},
 				{0.25.yieldAndReset;} //else if (~recSoundInput == true)
@@ -585,7 +591,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								});
 
 								//GET SUM BUS
-								featureBus.get({|val|
+								featureBus.get({|val|  //<----- MOVE THIS TO ~listen function?  ---- < ----< -----<--!!!!
 									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
 										{//SOUND DETECTED
 											("---").postln;
@@ -1618,20 +1624,20 @@ GUI.skin.plot.gridColorY = Color.cyan;
 		{
 			~randomRoutine_freq.reset;
 			~randomRoutine_pitchShiftMix.reset;
-			~randomRoutine_outputLevel.reset;
+			//~randomRoutine_outputLevel.reset;
 			//~updateGUI_counter_rateT2rand.reset;
 			//~playHeadFollowRecHead.reset;
 			//~updateGUI_rate.reset;
 
 			AppClock.play(~randomRoutine_freq);
 			AppClock.play(~randomRoutine_pitchShiftMix);
-			AppClock.play(~randomRoutine_outputLevel);
+			//AppClock.play(~randomRoutine_outputLevel);
 		},
 		{ //when randomize button disabled
 			//~randomRoutine.stop;
 			~randomRoutine_freq.stop;
 			~randomRoutine_pitchShiftMix.stop;
-			~randomRoutine_outputLevel.stop;
+			//~randomRoutine_outputLevel.stop;
 			//~numBox_counter_rateT2rand.value_(0.0);
 		}
 	);

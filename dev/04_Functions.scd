@@ -292,7 +292,7 @@
 		}
 	);
 
-	if (0.5.coin == true,
+	if (0.25.coin == true,
 		{//straight noise
 			var freq;
 			//"-x-x-STRAIGHT NOISE-x-x-".postln;
