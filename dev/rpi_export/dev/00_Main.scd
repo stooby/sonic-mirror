@@ -553,11 +553,11 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 													//("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 													~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
 
-													{ //<---RPI DEBUG --- DEFER TO AVOID BUFFER.READ ERROR??? (try commenting out if s.sync works)
+													//{ //<---RPI DEBUG --- DEFER TO AVOID BUFFER.READ ERROR??? (try commenting out if s.sync works)
 														~autoRecPlay_state = 1; //advance state to trigger ~autoPlay
 														("~autoRecPlay_state = " ++ ~autoRecPlay_state + "| ~autoPlay").postln;
 														//("---.....---").postln;
-													}.defer(0.5); //<---MAYBE THIS WILL HELP AVOID RPI BUFF.READ ERROR???
+													//}.defer(0.5); //<---MAYBE THIS WILL HELP AVOID RPI BUFF.READ ERROR???
 
 													//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
 													//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
