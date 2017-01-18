@@ -8,7 +8,7 @@
 SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 	arg phaseBus, buf, sendBus, loCutoff = 90, rQ = 1, mul = 1;
 	//var sig = SoundIn.ar(bus: 0, mul: mul);
-	var sig = BHiPass4.ar( SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
+	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
 	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
 	//OffsetOut.ar(sendBus, sig);  //would this provide better sample accurate scope plotting and recording?
 	Out.ar(sendBus, sig);
@@ -81,7 +81,8 @@ SynthDef.new(\bufRead_noLoop, {
 
 SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
 	arg amp=1, out=0, phaseBus, buf;
-	var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus), interpolation: 4); //cubic interpolation (seems to help preserve detail at faster playback rates +24st)
+	var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus));
+	//var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus), interpolation: 4); //cubic interpolation (seems to help preserve detail at faster playback rates +24st)
 	sig = sig * amp;
 	Out.ar(out, sig);
 } ).add;
@@ -101,11 +102,9 @@ SynthDef(\a2k_patch, {// Needed to monitor phasor val (don't fully understand wh
 }).add;
 
 SynthDef.new(\pitchShifter, {
-	//arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.002, amp = 1; //v1
-	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //v1.1, FOR TIME STRETCH (larger time Dispers better for time stretching, but worse for preserving percussive transients)
-	//arg inBus, outBus, windowSize = 0.3, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.001, amp = 1; //v2, PRESERVE TRANSIENTS DURING FAST PLAYBACK - good settings for faster playback (+24 rate, -24 pitch)
-	//arg inBus, outBus, windowSize = 0.35, pitchRatio = 1, pitchDispers = 0, timeDispers = 0, amp = 1; //v2.1, FAST PLAYBACK (preserves transients better than v1.1 at fast playback rates) <-------------
-	//arg inBus, outBus, windowSize = 0.005, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //vPiezo, decent settings for piezo....but not good for pitched sounds
+	//arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.002, amp = 1; //<--orig
+	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1;
+	//arg inBus, outBus, windowSize = 0.005, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //<--decent settings for piezo....
 	var sigIn, sigOut;
 	sigIn = In.ar(inBus, 1);
 	//sigIn = InFeedback.ar(inBus, 1);
@@ -151,22 +150,12 @@ SynthDef.new(\subMix, {
 SynthDef.new(\mainOut, { //w/ Lo-cut
 	|in, loCutoff = 90, rQ = 1, amp = 1|
 	var sig;
-	sig = BHiPass4.ar(In.ar(in), loCutoff, rq: rQ, mul: amp);
+	sig = BHiPass4.ar( In.ar(in), loCutoff, rq: rQ, mul: amp);
 	//sig = In.ar(in) * amp;
 	//sig = InFeedback.ar(in) * amp;
 	//OffsetOut.ar(0, sig);
 	Out.ar([0, 1], sig);
 } ).add;
-
-/*  //<------ADDING ---- Main Out w/ soft Limiter
-SynthDef.new(\mainOut, { //w/ Lo-cut and Limiter
-	|in, loCutoff = 90, rQ = 1, amp = 1|
-	var sig;
-	sig = BHiPass4.ar(In.ar(in), loCutoff, rq: rQ, mul: amp);
-	sig = Compander.ar(in: sig, control: sig, thresh: 0.95, slopeBelow: 1, slopeAbove: 0.1, clampTime: 0.01, relaxTime: 0.1); //set threshold to  -0.3.dbamp  ?
-	//OffsetOut.ar(0, sig);
-	Out.ar([0, 1], sig);
-} ).add; */
 
 SynthDef.new(\scopeOut, { //<------NEW
 	//|inBus, buf, frames = 4096|

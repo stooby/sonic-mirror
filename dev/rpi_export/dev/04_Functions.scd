@@ -103,7 +103,7 @@
 			//LOG DURATION OF THIS RECORDED SAMPLE HERE, OR EMBED IN FILE NAME? <-----
 
 			("--SIMPLE Write--").postln;
-			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
+			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
 			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
 		},
 		{ //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
@@ -265,7 +265,14 @@
 			);
 		}
 	);
-	~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus.asMap, \out, outBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]);
+
+	/*~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus.asMap, \out, outBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]).onFree{
+		{
+			if((~playSamp == true) && (~samp0.isRunning == false), {~debugCatch = true; "DEBUG CATCH".postln;});
+		}.defer(~debugCatchTime);
+	}; */ //<----UNCOMMENT TO RESTORE PREV 99% WORKING DEBUG CATCH
+
+	~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus.asMap, \out, outBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]); //<---ATTEMPTING NEW DEBUG - SIMPLER
 
 	duration;
 };
@@ -292,12 +299,15 @@
 		}
 	);
 
-	if (0.25.coin == true,
+	if (0.3.coin == true,
 		{//straight noise
 			var freq;
 			//"-x-x-STRAIGHT NOISE-x-x-".postln;
 			freq = rrand(0.5, 5.0).round(0.01);
 			//("--freq = " ++ freq).postln;
+
+			//~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus.asMap, \out, outBus]).onFree{{if((~playSamp == true) && (~samp0.isRunning == false), {~debugCatch = true; "DEBUG CATCH".postln;});}.defer(~debugCatchTime);}; //<----UNCOMMENT TO RESTORE
+
 			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus.asMap, \out, outBus]);
 		},
 		{//else, modulating noise
@@ -307,6 +317,9 @@
 			lo = rrand(0.25, 1.0).round(0.01);
 			hi = rrand(1.25, 5.0).round(0.01);
 			//("mod = " ++ mod + "| lo =" + lo + "| hi =" + hi).postln;
+
+			//~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus.asMap, \out, outBus]).onFree{{if((~playSamp == true) && (~samp0.isRunning == false), {~debugCatch = true; "DEBUG CATCH".postln;});}.defer(~debugCatchTime);};  //<----UNCOMMENT TO RESTORE
+
 			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus.asMap, \out, outBus]);
 		}
 	);
@@ -983,7 +996,7 @@
 					~recSamp_input = true;
 					{~button_recIn.value = 1;}.defer;
 					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int16", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
 					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
 					("AutoRecRand: -- recTime = " ++ recTime).postln;
@@ -1051,7 +1064,7 @@
 							//<----***could alternatively insert other file picking behaviors or mappings here****
 
 							//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
-							fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath;
+							fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".wav").standardizePath;
 
 							//PLAY SOUND FILE from disk
 							~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
@@ -1060,7 +1073,7 @@
 								~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
 								//NodeWatcher.register(~samp0);
 
-								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
+								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".wav").standardizePath).postln;
 
 							});
 							{~button_playSamp.value = 1;}.defer; //update GUI
