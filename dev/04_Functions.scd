@@ -87,6 +87,11 @@
 
 
 //AUTO REC / PLAY HELPER FUNCTIONS -----
+~writeSampFromBuf_full = {//add args for in and out
+	~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int24");
+	("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
+	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+};
 
 ~writeSampFromBufCopy_input = {
 	var temp;
@@ -103,7 +108,7 @@
 			//LOG DURATION OF THIS RECORDED SAMPLE HERE, OR EMBED IN FILE NAME? <-----
 
 			("--SIMPLE Write--").postln;
-			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").postln;
+			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
 			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
 		},
 		{ //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
@@ -312,6 +317,49 @@
 	);
 	duration;
 };
+
+//SOUND SCENE AUDIFICATION FUNCTIONS -----
+
+~sampBuf = {|filePath, fileNum, rate| //helper function creates audio buffer and env var storing its dur
+	Buffer.read(s, (filePath ++ fileNum ++ ".wav").standardizePath, action: {|buffer| //load audio file to buffer
+		("~buf" ++ fileNum ++ "dur = " ++ ((buffer.numFrames/buffer.sampleRate) / rate)).interpret; //store dur in var
+	});
+};
+
+~audifyScene1 = {|filePath, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1|
+	var audifyRoutine, thisRate, thisPitch;
+	thisRate = rate.asFloat.round(0.01).midiratio;
+	thisPitch = pitch.asFloat.round(0.01).midiratio;
+
+	audifyRoutine = Routine({
+		for (fileStart, (fileNum - 1), {|i|
+			("~buf" ++ i ++ "= ~sampBuf.(~fileAudio_writeIn_lastPath," ++ i ++ "," ++ thisRate ++ ")" ).interpret;
+		});
+		s.sync;
+
+		cycle.do({ //trigger synths (one per sample played)
+			for (fileStart, (fileNum - 1), {|i|
+				var thisBuf, thisDur;
+				thisBuf = ("~buf" ++ i).interpret;
+				thisDur = ("~buf" ++ i ++ "dur").interpret;
+				Synth(\bufRead_complex1, [\buf, thisBuf, \amp, 1, \out, 0, \rate, thisRate, \pitch, thisPitch, \winSize, 0.35, \timeDisp, 0, \pShiftMix, 1, \duration, thisDur]);
+				thisDur.yield;
+			});
+		});
+
+		for (fileStart, (fileNum - 1), {|i|  //free all buffers
+			("~buf" ++ i ++ ".free").interpret;
+		});
+	});
+
+	audifyRoutine;//return routine
+};
+/* //IMPLEMENTATION OF SOUND SCENE AUDIFY <------------
+~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, fileNum: 15, cycle: 6, rate: 48, pitch: -48); //<----
+SystemClock.play(~audifyRout);
+~audifyRout.stop;
+~audifyRout.reset;
+*/
 
 
 

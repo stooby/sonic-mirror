@@ -13,6 +13,7 @@ o.blockSize = 512;
 //s.latency = 0.05; //0.2 is SC default
 
 o.inDevice = "Built-in Microph";
+//o.inDevice = "Generic USB Audio Device";
 o.outDevice = "Built-in Output";
 
 //o.inDevice = "USB Audio Device";

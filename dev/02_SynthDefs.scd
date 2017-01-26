@@ -15,14 +15,18 @@ SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 } ).add;
 
 SynthDef.new(\bufRead_complex1, {
-	arg buf, duration, amp=1, rate = 1, pitch = 1, pShiftMix = 0, out = 0;
+	arg buf, duration, amp=1, rate = 1, pitch = 1, winSize = 0.1, timeDisp = 0.003, pShiftMix = 0, out = 0;
 	var sig1, sig2, sigOut, frames, dur, env, phasor;
 	frames = BufFrames.kr(buf);
 	dur = duration.asFloat; //total playback duration in seconds
 	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	//env = Env.linen(attackTime: 0.003, sustainTime: (dur - 0.006), releaseTime: 0.003, level: 1); //for fast rate playback
 	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames - 1);
-	sig1 = BufRd.ar(1, buf, phasor);
-	sig2 = PitchShift.ar(sig1, windowSize: 0.2, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0.003);
+	sig1 = BufRd.ar(1, buf, phasor, interpolation: 4); //<--changed -- interp 4 for faster playback rates
+	//sig1 = BufRd.ar(1, buf, phasor);
+	sig2 = PitchShift.ar(sig1, windowSize: winSize, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: timeDisp);
+	//sig2 = PitchShift.ar(sig1, windowSize: 0.1, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0.003);
+	//sig2 = PitchShift.ar(sig1, windowSize: 0.35, pitchRatio: pitch, pitchDispersion: 0, timeDispersion: 0);
 	sigOut = SelectX.ar(pShiftMix, [sig1, sig2]) * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sigOut * amp);
 } ).add;
@@ -105,7 +109,7 @@ SynthDef.new(\pitchShifter, {
 	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //v1.1, FOR TIME STRETCH (larger time Dispers better for time stretching, but worse for preserving percussive transients)
 	//arg inBus, outBus, windowSize = 0.3, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.001, amp = 1; //v2, PRESERVE TRANSIENTS DURING FAST PLAYBACK - good settings for faster playback (+24 rate, -24 pitch)
 	//arg inBus, outBus, windowSize = 0.35, pitchRatio = 1, pitchDispers = 0, timeDispers = 0, amp = 1; //v2.1, FAST PLAYBACK (preserves transients better than v1.1 at fast playback rates) <-------------
-	//arg inBus, outBus, windowSize = 0.005, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //vPiezo, decent settings for piezo....but not good for pitched sounds
+	//arg inBus, outBus, windowSize = 0.01, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.02, amp = 1; //vPiez_1, decent settings for time stretched piezo...
 	var sigIn, sigOut;
 	sigIn = In.ar(inBus, 1);
 	//sigIn = InFeedback.ar(inBus, 1);

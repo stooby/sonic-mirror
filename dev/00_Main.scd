@@ -2,6 +2,8 @@
 
 //== Main Performance Doc ==
 
+~writeSampFromBuf_full.value(); //execute to write file of entire audio buffer
+
 //---- refactor in progress ----
 
 ~dir = "/Users/Scott/Dropbox/DocSync/Project Docs/DigitalArt/SonicMirror/sonic-mirror_SC_git/dev/";
