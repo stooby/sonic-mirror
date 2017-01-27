@@ -21,9 +21,9 @@
 ~phaseBusMonRec = Bus.control(s, 1);
 ~inputLevelBus = Bus.control(s, 1);
 
-~loCutBus_in = Bus.control(s, 1); //<----NEW
-~loCutBus_out = Bus.control(s, 1); //<----NEW
-~inputSendBus = Bus.audio(s, 1); //<---NEW
+~loCutBus_in = Bus.control(s, 1);
+~loCutBus_out = Bus.control(s, 1);
+~inputSendBus = Bus.audio(s, 1);
 
 ~phaseBusPly = Bus.audio(s, 1);
 ~phaseBusMonPly = Bus.control(s, 1);

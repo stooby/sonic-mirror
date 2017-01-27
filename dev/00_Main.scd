@@ -593,7 +593,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								});
 
 								//GET SUM BUS
-								featureBus.get({|val|  //<----- MOVE THIS TO ~listen function?  ---- < ----< -----<--!!!!
+								featureBus.get({|val|  //<----- MOVE THIS TO ~listen_soundDetect function?  < -----<--!!!!
 									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
 										{//SOUND DETECTED
 											("---").postln;
@@ -812,24 +812,25 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-~listen = { |active = 1, rate = 0.1, post = 0| //setup and trigger all automated feature extractors???
+~listen_soundDetect = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 0| //setup/shutdown feat extractors on a bus
+	//|active = 1, input, rate = 0.1, post = 0| //orig args...
 	if (active == 1, {//start feature extraction...
 		if (~bufRecorder.isRunning, {
-			//LOUDNESS monitor
-			l = Synth(\Loudness, [\input, ~inputSendBus, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+			//LOUDNESS monitor  input = ~inputSendBus
+			l = Synth(\Loudness, [\input, input, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
 			//PITCH tracker
-			p = Synth(\Pitch, [\input, ~inputSendBus, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
+			p = Synth(\Pitch, [\input, input, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
 			//ONSET detector
-			n = Synth(\onsets, [\input, ~inputSendBus, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);  //<--- this should be okay here one SynthDef is tweaked (Env or EnvGen is culprit)
+			n = Synth(\onsets, [\input, input, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);
 			//etc....
 
 			//fire off ~senseNoiseFloor routine....?
 
-			~busSum_lop = ~sumFunc_xin.value([~bus_loudness, ~bus_onsets, ~bus_pitch]); //4 feats
+			outBus.envirPut(~sumFunc_xin.([~bus_loudness, ~bus_onsets, ~bus_pitch], sumSynth)); //assign bus and resulting summing synth to new env vars
 
 			if (post == 1, { //only run this routine to monitor features w/ post window...
 				//===THIS IS WHERE ~transmit feature via OSC routine from SCML could live if needed
-				~listenPost = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post);
+				~listenPost = ~streamFeatures.value(bus: outBus.envirGet, rate: rate, post: post);
 				SystemClock.play(~listenPost);
 			});
 
@@ -843,15 +844,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		if (~listening == true, { //only free synths and cleanup if we were listening in the first place, otherwise don't do anything and avoid server errors....
 			if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
 
-			~sumSyn_xin.free;
-			~busSum_lop.free;
+			sumSynth.envirGet.free;
+			outBus.envirGet.free;
 			l.free;
 			p.free;
 			n.free;
 			~listening = false;
 			~hearSound = false;
 
-			~bus_onsets.set(0); //<----
+			~bus_onsets.set(0); //reset value in case mouse click triggers onset detector at termination of routine
 			//zero out loudness and other feature busses here too???
 
 			"====STOPPED LISTENING====".postln;
@@ -871,10 +872,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{
-			~listen.value(1, post: 0); //start listening
+			//~listen_soundDetect.value(active: 1, input: ~inputSendBus, post: 0); //start listening
+			~listen_soundDetect.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //start listening
 			~autoRecStartTrig = true; //enables debounce when ~autoRecStart initialized
 
-			//~autoRecStart = ~autoRec_soundTrig1.value(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.7);
 			~autoRecStart = ~autoRec_soundTrigAuto.value(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.5);
 			SystemClock.play(~autoRecStart);
 
@@ -902,7 +903,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				~autoRecPlay_state = 0; //<----- NEW
 			});
 
-			~listen.value(0); //stop listening
+			~listen_soundDetect.(0, outBus: \busSum_lop, sumSynth: \sumSyn_1); //stop listening
 
 			/*if (~recSamp_input == true, { //pertains to ~autoRec_random routine only...
 				~writeIn2Disk.free;

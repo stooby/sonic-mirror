@@ -6,22 +6,24 @@
 
 //====== FUNCTIONS ========
 
-~sumFunc_xin = {arg busArray;  //bus val concat function for variable size arg array of feat busses
+~sumFunc_xin = {|busArray, sumSynth|  //bus val concat function for variable size arg array of feat busses
 	var numCh = 0, busCol, outArray, outBus;
 	busArray.do({|item| numCh = numCh + item.numChannels}); //calculate total # bus channels
 	outBus = Bus.control(s, numCh);
 	busCol = Array.newClear(busArray.size);
 
-	~sumSyn_xin = SynthDef(\sumSyn_xin, {
-		busArray.do({|item, i| busCol[i] = In.kr(item, item.numChannels); }); //input bus vals to var array
-		busCol.do({|item| //concat all bus vals into single out array
-			if (item.numChannels == 1,
-				{outArray = outArray ++ [item]},
-				{outArray = outArray ++ (item.numChannels.collect( {|i| item[i]} ))}
-			);
-		});
-		Out.kr(outBus, outArray);
-	}).play(addAction: \addToTail);
+	sumSynth.envirPut(//create synth to route outputs from different busses to one sum bus w/ correct # of chans
+		SynthDef(sumSynth, {//give synth a unique name to avoid conflicts if multiples of this func are active at once
+			busArray.do({|item, i| busCol[i] = In.kr(item, item.numChannels); }); //input bus vals to var array
+			busCol.do({|item| //concat all bus vals into single out array
+				if (item.numChannels == 1,
+					{outArray = outArray ++ [item]},
+					{outArray = outArray ++ (item.numChannels.collect( {|i| item[i]} ))}
+				);
+			});
+			Out.kr(outBus, outArray);
+		}).play(addAction: \addToTail);
+	);
 
 	outBus; //return new bus w/ concat values of all input busses in arg array
 };
@@ -326,7 +328,7 @@
 	});
 };
 
-~audifyScene1 = {|filePath, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1|
+~audifyScene1 = {|filePath, ampBus, outBus, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1, overlap = 0.02|
 	var audifyRoutine, thisRate, thisPitch;
 	thisRate = rate.asFloat.round(0.01).midiratio;
 	thisPitch = pitch.asFloat.round(0.01).midiratio;
@@ -342,8 +344,9 @@
 				var thisBuf, thisDur;
 				thisBuf = ("~buf" ++ i).interpret;
 				thisDur = ("~buf" ++ i ++ "dur").interpret;
-				Synth(\bufRead_complex1, [\buf, thisBuf, \amp, 1, \out, 0, \rate, thisRate, \pitch, thisPitch, \winSize, 0.35, \timeDisp, 0, \pShiftMix, 1, \duration, thisDur]);
-				thisDur.yield;
+				Synth(\bufRead_complex1, [\buf, thisBuf, \amp, ampBus, \out, outBus, \rate, thisRate, \pitch, thisPitch, \winSize, 0.35, \timeDisp, 0, \pShiftMix, 1, \duration, thisDur]);
+				//thisDur.yield;
+				(thisDur - overlap).yield; //slight overlap between samples...
 			});
 		});
 
