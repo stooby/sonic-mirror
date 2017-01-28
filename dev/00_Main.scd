@@ -2,7 +2,8 @@
 
 //== Main Performance Doc ==
 
-~writeSampFromBuf_full.value(); //execute to write file of entire audio buffer
+//~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
+//~writeSampFromBuf.(~audioBuf0, 58, 8.37);
 
 //---- refactor in progress ----
 
@@ -303,6 +304,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~loudnessThresh = 5; //set w/ ~senseNoiseFloor eventually?
 ~pitchThresh = 0.55;
 
+~hearFeedback = false;
+~fdbackDetect = false; //flag indicates feedback detection activity
 ~hearSound = false;
 ~listening = false;  //flag indicates audio analysis activity
 
@@ -593,7 +596,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								});
 
 								//GET SUM BUS
-								featureBus.get({|val|  //<----- MOVE THIS TO ~listen_soundDetect function?  < -----<--!!!!
+								featureBus.get({|val|  //<----- MOVE THIS TO ~listen_sound function?  < -----<--!!!!
 									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
 										{//SOUND DETECTED
 											("---").postln;
@@ -812,7 +815,57 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-~listen_soundDetect = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 0| //setup/shutdown feat extractors on a bus
+//s.plotTree;
+//~listen_loudness.(1, ~inputSendBus, featSynth: \rms1, post: 1);
+//~listen_loudness.(0, featSynth: \rms1);
+
+~listen_loudness = {|active = 1, input, featSynth, rate = 0.1, post = 0| //<--IN PROGRESS....
+	if (active == 1, {//start detecting feedback
+		if (~bufRecorder.isRunning, {
+
+			//RMS monitor
+			featSynth.envirPut(Synth(\RMS, [\input, input, \outBus, ~bus_rms]).moveAfter(~bufRecorder));
+
+			//LOUDNESS monitor  input = ~inputSendBus
+			//l = Synth(\Loudness, [\input, input, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+
+			//outBus.envirPut(~sumFunc_xin.([~bus_rms], sumSynth)); //assign bus and resulting summing synth to new env vars
+
+			if (post == 1, { //only run this routine to monitor features w/ post window...
+				//===THIS IS WHERE ~transmit feature via OSC routine from SCML could live if needed
+				~listenPost = ~streamFeatures.value(bus: ~bus_rms, rate: rate, post: post);
+				SystemClock.play(~listenPost);
+			});
+
+			~hearFeedback = false;
+			~fdbackDetect = true;
+
+			//RESET FEEDBACK DETECTION ROUTINE
+			//START FEEDBACK DETECTION ROUTINE (track ~bus_rms for loud levels and trigger anti-feedback measures
+
+			"====FEEDBACK DETECTION ACTIVE====".postln;
+		}, {
+			"===CAN'T DETECT FEEDBACK UNLESS BUF RECORDER ACTIVE===".postln;
+		} );
+	}, {//if active == 0, stop feature extraction and clean up...
+		if (~fdbackDetect == true, { //only free synths and cleanup if we were detecting feedback in the first place, otherwise don't do anything and avoid server errors....
+			if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
+
+			//STOP FEEDBACK DETECTION ROUTINE
+
+			featSynth.envirGet.free; //free RMS feature extractor synth
+			//sumSynth.envirGet.free;
+			//outBus.envirGet.free;
+
+			~hearFeedback = false;
+			~fdbackDetect = false;
+
+			"====FEEDBACK DETECTION DISABLED====".postln;
+		});
+	} );
+};
+
+~listen_sound = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 0| //setup/shutdown feat extractors on a bus
 	//|active = 1, input, rate = 0.1, post = 0| //orig args...
 	if (active == 1, {//start feature extraction...
 		if (~bufRecorder.isRunning, {
@@ -872,8 +925,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{
-			//~listen_soundDetect.value(active: 1, input: ~inputSendBus, post: 0); //start listening
-			~listen_soundDetect.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //start listening
+			//~listen_sound.value(active: 1, input: ~inputSendBus, post: 0); //start listening
+			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //start listening
 			~autoRecStartTrig = true; //enables debounce when ~autoRecStart initialized
 
 			~autoRecStart = ~autoRec_soundTrigAuto.value(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.5);
@@ -903,7 +956,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				~autoRecPlay_state = 0; //<----- NEW
 			});
 
-			~listen_soundDetect.(0, outBus: \busSum_lop, sumSynth: \sumSyn_1); //stop listening
+			~listen_sound.(0, outBus: \busSum_lop, sumSynth: \sumSyn_1); //stop listening
 
 			/*if (~recSamp_input == true, { //pertains to ~autoRec_random routine only...
 				~writeIn2Disk.free;

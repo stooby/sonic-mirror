@@ -89,10 +89,28 @@
 
 
 //AUTO REC / PLAY HELPER FUNCTIONS -----
-~writeSampFromBuf_full = {//add args for in and out
-	~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int24");
-	("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
-	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+~writeSampFromBuf = {|buffer, in, out| //expecting in and out time in seconds
+	var inFrame, outFrame;
+	inFrame = (in.asFloat.round(0.001) * buffer.sampleRate);
+	outFrame = (out.asFloat.round(0.001) * buffer.sampleRate);
+	if (inFrame < outFrame, { //if sample does not wrap around to beginning of buffer
+		var numFrames = (outFrame - inFrame) + 1;
+		buffer.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int24", numFrames: numFrames, startFrame: inFrame);
+		("WROTE SAMPLE: " ++ ~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++".wav | dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
+		~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+	}, {//if sample wraps around to beginning of buffer
+		var numFrames, chunk1frames, chunk2frames, copyBuf;
+		chunk1frames = buffer.numFrames - inFrame; //inclusive frame count from inFrame to last frame in buffer
+		chunk2frames = outFrame + 1; //inclusive frame count (b/c buffers start at frame 0)
+		numFrames = chunk1frames + chunk2frames;
+		copyBuf = Buffer.alloc(s, numFrames, 1);
+		buffer.copyData(copyBuf, dstStartAt: 0, srcStartAt: inFrame, numSamples: chunk1frames);
+		buffer.copyData(copyBuf, dstStartAt: (chunk1frames - 1), srcStartAt: 0, numSamples: chunk2frames);
+		copyBuf.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int24");
+		copyBuf.free;
+		("WROTE SAMPLE: " ++ ~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++".wav | dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
+		~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+	} );
 };
 
 ~writeSampFromBufCopy_input = {
@@ -702,7 +720,7 @@ SystemClock.play(~audifyRout);
 } );
 
 
-~randomRoutine_outputLevel = Routine.new ( {  //randomly adjust main output level
+~randomRoutine_outputLevel = Routine.new ( {  //randomly adjust main output level (crude anti-feedback measure)
 	var time2nextRandomize, randNum, interpLevel, interpTime;
 	//("***OUTPUTlevl_randomRoutine***").postln;
 
