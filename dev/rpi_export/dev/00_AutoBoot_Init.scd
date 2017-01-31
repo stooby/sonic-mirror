@@ -10,7 +10,7 @@ s.waitForBoot({
 		0.25.yield;
 		(~dir ++ "04_Functions.scd").load;        // Functions and Routines
 		0.25.yield;
-		(~dir ++ "01_AutoBoot_Launch").load;
+		(~dir ++ "01_AutoBoot_Launch.scd").load;
 		0.25.yield;
 		AppClock.play(~initSMpreset_1);
 	});

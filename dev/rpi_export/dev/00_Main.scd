@@ -1,8 +1,32 @@
-(
-//INITIALIZE - Env Variables, Set Busses, Routine Defs, Func Defs?, GUI - #3 ============================
+//Sonic Mirror - 00_Main:
+
+//== Main Performance Doc ==
+
+//~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
+//~writeSampFromBuf.(~audioBuf0, 58, 8.37);
+
+//~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 14, cycle: 2, rate: 48, pitch: -48);
+//SystemClock.play(~audifyRout);
+//~audifyRout.stop;
+//~audifyRout.reset;
+
+//---- refactor in progress ----
+
+~dir = "/home/pi/Desktop/dev/";
+
+(~dir ++ "01_Startup.scd").load;           // Server Options and Startup
+(~dir ++ "02_SynthDefs.scd").load;       // SynthDefs
+(~dir ++ "03_Busses.scd").load;            // Busses
+(~dir ++ "04_Functions.scd").load;        // Functions and Routines
+
+s.quit;  //convenience method (for cleanup)
+s.plotTree; //for debugging
+Buffer.freeAll; //for cleanup
+
+( //INITIALIZE - Env Variables, Set Busses, Routine Defs, Func Defs?, GUI - #3 ============================
 
 ////GLOBAL VARIABLES
-~sampBitDepth = "int16"; //(specify bit depth for all samples recorded by SM)
+~sampBitDepth = "int16"; //alt = "int16"  (specify bit depth for all samples recorded by SM)
 
 ~audioBuf0_dur = 60.0;
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
@@ -1039,7 +1063,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		obj.value == 1,
 		{//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
 			~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int16", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
 			~recSamp_input = true; //<--- not sure if this flag's needed right now...
 		} ,
@@ -1067,7 +1091,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		obj.value == 1,
 		{//BEGIN RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
 			~audioBuf_outMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-			~audioBuf_outMainWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".wav").standardizePath, "wav", "int16", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+			~audioBuf_outMainWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 			~write2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_outMainWrite, \inBus, 0] ); //record audio sent to bus 0 to buffer writing to audio file
 			~recSamp_output = true;  //<--- not sure if this flag's needed right now...
 		} ,
@@ -1681,26 +1705,17 @@ GUI.skin.plot.gridColorY = Color.cyan;
 		obj.value == 1, // when randomize button enabled
 		{
 			~randomRoutine_rate.reset;
+			//~updateGUI_counter_rateT2rand.reset;
 			~updateGUI_rate.reset; //<---not sure if this is necessary here, but buggy rate random rate interp behavior may have been caused when commenting it out...
-			~randomRoutine_freq.reset;
-			~randomRoutine_pitchShiftMix.reset;
-			~randomRoutine_reverse.reset;
-			~randomRoutine_playHeadBehavior.reset;
 			AppClock.play(~randomRoutine_rate);
-			AppClock.play(~randomRoutine_freq);
-			AppClock.play(~randomRoutine_pitchShiftMix);
-			AppClock.play(~randomRoutine_reverse);
-			AppClock.play(~randomRoutine_playHeadBehavior);
+			//AppClock.play(~updateGUI_counter_rateT2rand);
 		},
 		{ //when randomize button disabled
 			~randomRoutine_rate.stop;
+			//~updateGUI_counter_rateT2rand.stop;
+			//~playHeadFollowRecHead.stop;
 			~updateGUI_rate.stop;
-			~randomRoutine_freq.stop;
-			~randomRoutine_pitchShiftMix.stop;
-			~randomRoutine_reverse.stop;
-			~randomRoutine_playHeadBehavior.stop;
-			~playHeadFollowRecHead.stop;
-
+			//~numBox_counter_rateT2rand.value_(0.0);
 		}
 	);
 } )
@@ -1730,13 +1745,25 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when button enabled
+		obj.value == 1, // when enabled
 		{
+			~randomRoutine_freq.reset;
+			~randomRoutine_pitchShiftMix.reset;
+			//~randomRoutine_outputLevel.reset;
+			//~updateGUI_counter_rateT2rand.reset;
+			//~playHeadFollowRecHead.reset;
+			//~updateGUI_rate.reset;
 
-
+			AppClock.play(~randomRoutine_freq);
+			AppClock.play(~randomRoutine_pitchShiftMix);
+			//AppClock.play(~randomRoutine_outputLevel);
 		},
-		{ //when button disabled
-
+		{ //when randomize button disabled
+			//~randomRoutine.stop;
+			~randomRoutine_freq.stop;
+			~randomRoutine_pitchShiftMix.stop;
+			//~randomRoutine_outputLevel.stop;
+			//~numBox_counter_rateT2rand.value_(0.0);
 		}
 	);
 } )
@@ -1751,12 +1778,17 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when button enabled
+		obj.value == 1, // when randomize button enabled
 		{
-
+			~randomRoutine_reverse.reset;
+			~randomRoutine_playHeadBehavior.reset;
+			AppClock.play(~randomRoutine_reverse);
+			AppClock.play(~randomRoutine_playHeadBehavior);
 		},
-		{ //when button disabled
-
+		{ //when randomize button disabled
+			~randomRoutine_reverse.stop;
+			~randomRoutine_playHeadBehavior.stop;
+			~playHeadFollowRecHead.stop;
 		}
 	);
 } )
@@ -2113,4 +2145,4 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .string_("PitchShiftMix")
 .font_(Font("Monaco", 12) )
 .align_(\left);
-);
+)
