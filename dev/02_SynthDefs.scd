@@ -8,7 +8,7 @@
 SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 	arg phaseBus, buf, sendBus, loCutoff = 90, rQ = 1, mul = 1;
 	//var sig = SoundIn.ar(bus: 0, mul: mul);
-	var sig = BHiPass4.ar( SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
+	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
 	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
 	//OffsetOut.ar(sendBus, sig);  //would this provide better sample accurate scope plotting and recording?
 	Out.ar(sendBus, sig);
@@ -197,6 +197,19 @@ SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out;
 	Out.ar(out, sig);
 }).add;
 
+SynthDef.new(\startupTone_1, {
+	var sig, amp, env;
+	env = EnvGen.kr(
+		Env.new( [0, 1, 0], [6, 4], [1, -1] ),
+		doneAction: 2
+	);
+	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1); //double check what .range is doing to sound...
+	sig = SinOsc.ar( {ExpRand(300, 1200)} ! 3);
+	sig = sig * amp * env; //amp mod
+	sig = Mix.ar(sig) * 0.20;
+	Out.ar(0, sig);
+} ).add;
+
 //  FEATURE EXTRACTORS --------------
 
 SynthDef.new(\Loudness, {
@@ -218,6 +231,14 @@ SynthDef.new(\RMS, {
 	rms = (RunningSum.kr(sigIn.squared, numSamp) / numSamp).sqrt;
 	//rms.poll(trig: 10, label: "RMS");
 	Out.kr(outBus, rms);
+}).add;
+
+SynthDef.new(\RMSdb, {
+	arg input, numSamp = 40, outBus;
+	var sigIn, rms;
+	sigIn = In.ar(input);
+	rms = (RunningSum.kr(sigIn.squared, numSamp) / numSamp).sqrt;
+	Out.kr(outBus, rms.ampdb);
 }).add;
 
 SynthDef.new(\Pitch, {

@@ -1,26 +1,9 @@
-//Sonic Mirror - 00_Main:
-
-//== Main Performance Doc ==
-
-//---- refactor in progress ----
-
-~dir = "/home/pi/Desktop/dev/";
-
-(~dir ++ "01_Startup.scd").load;           // Server Options and Startup
-(~dir ++ "02_SynthDefs.scd").load;       // SynthDefs
-(~dir ++ "03_Busses.scd").load;            // Busses
-(~dir ++ "04_Functions.scd").load;        // Functions and Routines
-
-s.quit;  //convenience method (for cleanup)
-s.plotTree; //for debugging
-Buffer.freeAll; //for cleanup
-
-( //INITIALIZE - Env Variables, Set Busses, Routine Defs, Func Defs?, GUI - #3 ============================
-
-~debugCatch = false;
-~debugCatchTime = 6.5;
+(
+//INITIALIZE - Env Variables, Set Busses, Routine Defs, Func Defs?, GUI - #3 ============================
 
 ////GLOBAL VARIABLES
+~sampBitDepth = "int16"; //(specify bit depth for all samples recorded by SM)
+
 ~audioBuf0_dur = 60.0;
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
 
@@ -32,9 +15,6 @@ Buffer.freeAll; //for cleanup
 ~playPosLatchTrig = false;
 ~recPosLatchTrig = false;
 ~fixPlayRecOffset = false;
-
-~loCutVal_in = 90; //<-----NEW initialization val for loCut (and also stores ongoing values?)
-~loCutVal_out = 90; //<-----NEW ...for initialization
 
 ~pitchShiftValPrev_rate;
 ~pitchShiftValTarget_rate = 0;
@@ -81,29 +61,31 @@ Buffer.freeAll; //for cleanup
 
 ~inputLevelBus.set(1);
 ~play1LevelBus.set(1); //<--NO SLIDER CREATED YET!!!!!....
-~inputStreamLevelBus.set(1);  //<---NEW
-~fileOutputLevelBus.set(1);  //<---NEW
+~inputStreamLevelBus.set(1);
+~fileOutputLevelBus.set(1);
 
 ~outMainLevelBus.set(1);
 
 ~phaseBusMonPly.set(0);
 ~phaseBusMonRec.set(0);
 
-~loCutBus_in.set(~loCutVal_in); //<---NEW
-~loCutBus_out.set(~loCutVal_out); //<----NEW
+
+~loCutVal_in = 90;
+~loCutVal_out = 90;
+~loCutBus_in.set(~loCutVal_in);
+~loCutBus_out.set(~loCutVal_out);
 //-----------------
 
 // --------- SET UP SOME INITIAL SYNTHS? ------------
 ~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);
 //Synth(\pitchShift1)???
 
-NodeWatcher.new(s);
 //-------------------
 
 ////
 Window.closeAll;
 //w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
-w = Window.new("SonicMirror", Rect.new(100, 300, 792, 380), resizable: false)
+w = Window.new("SonicMirror", Rect.new(335, 330, 792, 380), resizable: false)
 .front
 .alwaysOnTop_(true);
 
@@ -277,9 +259,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~playSamp = false; //<--- flag:  playing audio file from disk
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
-~fileAudio_writeOut_lastPath = "/home/pi/Desktop/SMaudio/SM_"; //stores string of file path for last written audio file from disk
+~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
 ~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name
-~fileAudio_writeIn_lastPath = "/home/pi/Desktop/SMaudio/SM_"; //stores string of file path for last written audio file
+~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir/SncMir-In_"; //stores string of file path for last written audio file
 ~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++ ".wav").standardizePath;
 
 ~fileAudio_writeIn_lastFileDur; //<--------NEW (not currently being used)
@@ -304,6 +286,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ~loudnessThresh = 5; //set w/ ~senseNoiseFloor eventually?
 ~pitchThresh = 0.55;
+
+//~hearFeedback = false;
+//~fdbackDetect = false;
+~input_loud = 0; //consider integer scale: 0 = < min thresh | 1 = > lowThresh, < uprThresh, 2 = > uprThres
+~input_loudSus = false;
+~listen_input_loudness = false; //flag indicating activity of loudness monitoring function (active / disabled)
 
 ~hearSound = false;
 ~listening = false;  //flag indicates audio analysis activity
@@ -363,7 +351,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					//---e.g. routines checking machine listening ugen output control busses...
 
 					~playSamp = true; //set flag
-					//("--->autoPlayStartAt:" + Main.elapsedTime.round(0.01)).postln;
+					//pitch = 1; //<--
+					//mix = 0; //<--
 
 					/*
 					//<--- this chunk no longer necessary???
@@ -430,17 +419,18 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 						rand = rrand(1.0, 10.0);
 
 						procSelect = case
+						//{rand <= 10} {
 						{rand <= 6} {
 							"==randAudify==".postln;
 							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
-							NodeWatcher.register(~samp0);
 						}
 						{rand > 8.5} {
+						//{rand == 11} {
 							"==NOIZ MANGLE==".postln;
 							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
-							NodeWatcher.register(~samp0);
 						}
 						{rand > 6 && rand <= 8.5} {
+						//{rand == 12} {
 							var lfoFreq, loFreq, hiFreq;
 							"==SINE MODs==".postln;
 							lfoFreq = rrand(0.1, 1.0).round(0.01);
@@ -451,26 +441,17 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								{
 									("---SineSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;
 									//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-
-									//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]).onFree{{if((~playSamp == true) && (~samp0.isRunning == false), {~debugCatch = true; "DEBUG CATCH".postln;});}.defer(~debugCatchTime);};  //<----UNCOMMENT TO RESTORE
-
 									~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-
-								NodeWatcher.register(~samp0);
 								},
 								{
 									("---NoiseSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;
 									//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-
-									//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]).onFree{{if((~playSamp == true) && (~samp0.isRunning == false), {~debugCatch = true; "DEBUG CATCH".postln;});}.defer(~debugCatchTime);}; //<----UNCOMMENT TO RESTORE
-
 									~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-
-								NodeWatcher.register(~samp0);
 								}
 							);
 						};
 
+						//NodeWatcher.register(~samp0);
 						~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
 						("PLAYING BACK FILE:" + fileDir).postln;
 
@@ -483,22 +464,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					{~button_playSamp.value = 1;}.defer; //update GUI
 					("Pre-yield samp Dur = " ++ duration).postln;
 
-					s.sync; //<---WORKS ON MAC
-					//1.0.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
-
-					/*if (duration == nil, { //<------------NEW RPI DEBUG
-						//set duration to something or will it eventually be updated via Buffer.read?
-						//file = SoundFile.new(fileDir); //<--- new
-						//file.openRead; //<--- new
-						//0.5.yield;
-						//duration = file.duration; //<--- new, BUT this DOESN'T have different effect b/c being changed inside action function....
-						"EXTRA YIELD 4 DEBUG???".postln;
-						1.0.yield;
-					});  */
-
+					s.sync; //<------USING THIS INSTEAD OF YIELD, FIXES RPI ISSUE AND NO MORE NEED FOR YIELD!!
+					//0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
 					("Post-yield samp Dur = " ++ duration).postln;
+
 					//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
-					(duration + 0.02).round(0.01).yieldAndReset; //<---probs not necessary to add much time CAUSES ERROR ON PI WHEN duration == nil
+					(duration + 0.02).round(0.01).yieldAndReset; //<--maybe not necessary to add more time
 					//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
 				},
 				{0.25.yieldAndReset;} //else if (~recSoundInput == true)
@@ -517,7 +488,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					{
 						("----------").postln;
 						("RECORDING.....").postln;
-						//("currentTime:" + currentTime + "< ~time_minRec:" + ~time_minRec).postln;
+						("currentTime:" + currentTime + "< ~time_minRec:" + ~time_minRec).postln;
 					},
 					{
 						featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
@@ -525,9 +496,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								{//SOUND DETECTED
 									~hearSound = true;
 									//CONTINUE RECORDING / DO NOTHING....
-									//("-----=======-----").postln;
-									//("**Recording... SOUND DETECTED").postln;
-									//("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+									("-----=======-----").postln;
+									("**Recording... SOUND DETECTED").postln;
+									("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 
 									//anti-troll / runaway recording measure...
 									if (currentTime >= ~time_recTimeOut, //terminate recording if we've exceeded recTimeOut
@@ -548,33 +519,31 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 											if (currentTime >= ~time_listenTimeOut, //<---
 												{
 													//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
-													//("--------++++++++-------").postln;
+													("--------++++++++-------").postln;
 													("**Recording... SOUND STOP CONFIRMED").postln;
-													//("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+													("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 													~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
 
-													//{ //<---RPI DEBUG --- DEFER TO AVOID BUFFER.READ ERROR??? (try commenting out if s.sync works)
-														~autoRecPlay_state = 1; //advance state to trigger ~autoPlay
-														("~autoRecPlay_state = " ++ ~autoRecPlay_state + "| ~autoPlay").postln;
-														//("---.....---").postln;
-													//}.defer(0.5); //<---MAYBE THIS WILL HELP AVOID RPI BUFF.READ ERROR???
+													~autoRecPlay_state = 1; //advance state to trigger ~autoPlay before next ~autoRec
+													("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
+													("---.....---").postln;
 
 													//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
 													//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
-												}//,
-												//{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
-													//("----").postln;
-													//("**Testing for sound stop...** - Current Time:" + currentTime).postln;
-													//("---Terminate Test at:" + ~time_listenTimeOut).postln;
-												//}
+												},
+												{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
+													("----").postln;
+													("**Testing for sound stop...** - Current Time:" + currentTime).postln;
+													("---Terminate Test at:" + ~time_listenTimeOut).postln;
+												}
 											);
 										},
 										{//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
 											//~time_listenTimeOut = ~listenDur_intraSound + Main.elapsedTime.round(0.001);
 											~time_listenTimeOut = ~listenDur_intraSound + currentTime; //<---
-											//("-------").postln;
-											//("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
-											//("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											("-------").postln;
+											("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
+											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 
 											//GET recHead phasor position and log "STOP  SAMPLE TIME"
 											~phaseBusMonRec.get({|val|
@@ -582,7 +551,9 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 												if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
 													~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
 												} );
-												//("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+												("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+
+												//~time_lastRec_stop = Main.elapsedTime.round(0.001); //<--- NEW - log sound rec stop time
 												~time_lastRec_stop = currentTime; //<---
 												~hearSound = false;
 											});
@@ -612,12 +583,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								});
 
 								//GET SUM BUS
-								featureBus.get({|val|
+								featureBus.get({|val|  //<----- MOVE THIS TO ~listen_sound function?  < -----<--!!!!
 									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
 										{//SOUND DETECTED
-											//("---").postln;
-											//("**HEAR SOUND**").postln;
-											//("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											("---").postln;
+											("**HEAR SOUND**").postln;
+											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 
 											if (~hearSound == false, //TEST SOUND START...
 												{
@@ -626,8 +597,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 														if (~recSamp_input_startFrame < 0, { //if startFrame is negative...
 															~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
 														});
-														//("---------").postln;
-														//("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
+														("---------").postln;
+														("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
 														~hearSound = true; //<--- moved inside get
 													});
 												},
@@ -638,24 +609,24 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 													~time_lastRec_start = currentTime - rate; //<---NEW - subtract rate b/c sound detected in previous cycle of routine
 													~time_recTimeOut = ~time_lastRec_start + ~maxRecDur; //<--NEW - prevent runaway recordings and trolls
 
-													//("- - - - -").postln;
-													//("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
-													//("--REC Sample Start").postln;
+													("- - - - -").postln;
+													("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
+													("--REC Sample Start").postln;
 													~recSamp_input = true; //causes us to LEAVE THIS SIDE OF ROUTINE
 													{~button_recIn.value = 1;}.defer;
 												}
 											);
 										},
 										{//if NO SOUND DETECTED ........
-											//("--- NO SOUND ---").postln;
-											//("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											("--- NO SOUND ---").postln;
+											("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
 											if (~hearSound == true,
 												{
 													~hearSound = false;
-													//("--> ...false alarm?...").postln;
+													("--> ...false alarm?...").postln;
 												},
 												{ //else if ~hearSound == false
-													//("-->...silence...").postln;
+													("-->...silence...").postln;
 
 													if (~fileHistory_play[0] != nil, {//if recorded & played @ least 1 sound
 														var currentTime = Main.elapsedTime.round(0.001);
@@ -674,13 +645,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 								});
 							},
 							{ //else if (~playSamp == true)
-								//var currentTime = Main.elapsedTime.round(0.001); //<---UNCOMMENT TO RESTORE
-
 								//("---Can't record when playSamp == true || autoRecPlay_state != 0").postln;
-
-								//if (((~autoRecPlay_state == 1) && (~debugCatch == true)),{~autoPlay_soundTrigAuto.reset; ~autoPlay_soundTrigAuto.play; "==>DEBUG: RESET AUTOPLAY!!!".postln; ~debugCatch = false;}); //<----UNCOMMENT TO RESTORE
-
-								//if (((~playSamp == true) && (~autoRecPlay_state == 1) && (~time_lastPlay_start != nil) && (currentTime >= (~time_lastPlay_start + 10)) && (~samp0.isRunning == false)), {~autoPlay_soundTrigAuto.reset; ~autoPlay_soundTrigAuto.play; "==>DEBUG: RESET AUTOPLAY!!!".postln;}); //older debug
 								0.25.yieldAndReset;
 							}
 						);
@@ -837,24 +802,132 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-~listen = { |active = 1, rate = 0.1, post = 0| //setup and trigger all automated feature extractors???
+/*s.plotTree;
+~inputSendLoudSus
+~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, post: 1);
+~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus);
+//~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1);
+*/
+
+//<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
+//double check ~listen_loudness and ~monitor_loudness routine......
+
+/*~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
+	if (active == 1, {//start detecting feedback
+		if (~bufRecorder.isRunning, {
+			var thisOutBus;
+			//RMS monitor
+			outBus.envirPut(Bus.control(s, 1));
+			thisOutBus = outBus.envirGet;
+			featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, thisOutBus]).moveAfter(~bufRecorder));
+			NodeWatcher.register(featSynth.envirGet);
+			//featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, ~bus_rms]).moveAfter(~bufRecorder));
+			//RMS > ~.47 || db > -6 == verging on clipping and feedback <-----
+
+			//LOUDNESS monitor  input = ~inputSendBus
+			//l = Synth(\Loudness, [\input, input, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+
+			//outBus.envirPut(~sumFunc_xin.([~bus_rms], sumSynth)); //assign bus and resulting summing synth to new env vars
+
+			if (post == 1, { //only run this routine to monitor features w/ post window...
+				~listenPost = ~streamFeatures.value(bus: thisOutBus, rate: rate, post: post);
+				//~listenPost = ~streamFeatures.value(bus: ~bus_rms, rate: rate, post: post);
+				SystemClock.play(~listenPost);
+			});
+
+			//~input_loud = 0; //maybe assign this via arg instead...DON'T HARDCODE!!! not necessary here, in else
+			loudFlag.envirPut(0);
+			//~input_loudSus = false; //maybe assign this via arg instead...DON'T HARDCODE!!! not necessary here, in else
+			loudSusFlag.envirPut(false);
+			//~listen_input_loudness = true; //maybe assign this via arg instead...DON'T HARDCODE!!!
+
+			//START LOUDNESS/FEEDBACK MONITOR ROUTINE
+			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, lowThreshDur: lowThreshDur, uprThresh: uprThresh, rate: rate)); //<----UNTESTED---!!!!
+
+			"====FEEDBACK DETECTION ACTIVE====".postln;
+		}, {
+			"===CAN'T DETECT FEEDBACK UNLESS BUF RECORDER ACTIVE===".postln;
+		} );
+	}, {//if active == 0, stop feature extraction and clean up...
+		//if (~fdbackDetect == true, { //only free synths and cleanup if we were detecting feedback in the first place, otherwise don't do anything and avoid server errors....
+		if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
+
+		//STOP LOUDNESS/FEEDBACK MONITOR ROUTINE
+
+		featSynth.envirGet.free; //free RMS feature extractor synth
+		//sumSynth.envirGet.free;
+		outBus.envirGet.free;
+
+		loudFlag.envirPut(0);
+		//~input_loud = 0; //maybe assign this via arg instead...DON'T HARDCODE!!!
+		loudSusFlag.envirPut(false);
+		//~input_loudSus = false; //maybe assign this via arg instead...DON'T HARDCODE!!!
+		//~listen_input_loudness = false; //maybe assign this via arg instead...DON'T HARDCODE!!!
+
+		"====FEEDBACK DETECTION DISABLED====".postln;
+		//});
+	} );
+};
+
+//IN PROGRESS <-------------
+~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, lastLowThreshTime, rate = 0.1|
+	Routine({
+		input.get({|val|
+			switch (val,
+				(val >= lowThresh && val < upThresh), {
+					if (loudFlag.envirGet == 0,
+						{
+							loudFlag.envirPut(1);
+							lastLowThreshTime.envirPut(Main.elapsedTime.round(0.001));
+							("-->LOUD SOUND! (low thresh): input db =" + val + "|" + lastLowThreshTime + "=" + lastLowThreshTime.envirGet).postln;
+						},
+						{//else if loudFlag already == 1 (or higher...)
+							if ((Main.elapsedTime.round(0.001) - lastLowThreshTime.envirGet) >= lowThreshDur, {
+								loudSusFlag.envirPut(true);
+								("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
+							}, {
+								("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
+							});
+						}
+					);
+				},
+				(val >= upThresh), {
+					loudFlag.envirPut(2);
+					("-->VERY LOUD SOUND!!!: input db =" + val).postln;
+				},
+				(val < lowThresh), {
+					if (loudFlag.envirGet > 0, {
+						loudFlag.envirPut(0);
+						loudSusFlag.envirPut(false);
+						("-->LOUDNESS STOPPED: input db =" + val).postln;
+					});
+				}
+			);
+		});
+		s.sync;
+		rate.yieldAndReset;
+	});
+}; */
+
+~listen_sound = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 0| //setup/shutdown feat extractors on a bus
+	//|active = 1, input, rate = 0.1, post = 0| //orig args...
 	if (active == 1, {//start feature extraction...
 		if (~bufRecorder.isRunning, {
-			//LOUDNESS monitor
-			l = Synth(\Loudness, [\input, ~inputSendBus, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+			//LOUDNESS monitor  input = ~inputSendBus
+			l = Synth(\Loudness, [\input, input, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
 			//PITCH tracker
-			p = Synth(\Pitch, [\input, ~inputSendBus, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
+			p = Synth(\Pitch, [\input, input, \outBus, ~bus_pitch, \ampThresh, 0.02, \clar, 1]).moveAfter(l);
 			//ONSET detector
-			n = Synth(\onsets, [\input, ~inputSendBus, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);  //<--- this should be okay here one SynthDef is tweaked (Env or EnvGen is culprit)
+			n = Synth(\onsets, [\input, input, \outBus, ~bus_onsets, \threshold, 0.5, \trigtime, 0.25]).moveAfter(l);
 			//etc....
 
 			//fire off ~senseNoiseFloor routine....?
 
-			~busSum_lop = ~sumFunc_xin.value([~bus_loudness, ~bus_onsets, ~bus_pitch]); //4 feats
+			outBus.envirPut(~sumFunc_xin.([~bus_loudness, ~bus_onsets, ~bus_pitch], sumSynth)); //assign bus and resulting summing synth to new env vars
 
 			if (post == 1, { //only run this routine to monitor features w/ post window...
 				//===THIS IS WHERE ~transmit feature via OSC routine from SCML could live if needed
-				~listenPost = ~streamFeatures.value(bus: ~busSum_lop, rate: rate, post: post);
+				~listenPost = ~streamFeatures.value(bus: outBus.envirGet, rate: rate, post: post);
 				SystemClock.play(~listenPost);
 			});
 
@@ -868,15 +941,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		if (~listening == true, { //only free synths and cleanup if we were listening in the first place, otherwise don't do anything and avoid server errors....
 			if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
 
-			~sumSyn_xin.free;
-			~busSum_lop.free;
+			sumSynth.envirGet.free;
+			outBus.envirGet.free;
 			l.free;
 			p.free;
 			n.free;
 			~listening = false;
 			~hearSound = false;
 
-			~bus_onsets.set(0); //<----
+			~bus_onsets.set(0); //reset value in case mouse click triggers onset detector at termination of routine
 			//zero out loudness and other feature busses here too???
 
 			"====STOPPED LISTENING====".postln;
@@ -896,10 +969,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	if (
 		obj.value == 1,
 		{
-			~listen.value(1, post: 0); //start listening
+			//~listen_sound.value(active: 1, input: ~inputSendBus, post: 0); //start listening
+			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //start listening
 			~autoRecStartTrig = true; //enables debounce when ~autoRecStart initialized
 
-			//~autoRecStart = ~autoRec_soundTrig1.value(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.7);
 			~autoRecStart = ~autoRec_soundTrigAuto.value(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.5);
 			SystemClock.play(~autoRecStart);
 
@@ -927,7 +1000,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 				~autoRecPlay_state = 0; //<----- NEW
 			});
 
-			~listen.value(0); //stop listening
+			~listen_sound.(0, outBus: \busSum_lop, sumSynth: \sumSyn_1); //stop listening
 
 			/*if (~recSamp_input == true, { //pertains to ~autoRec_random routine only...
 				~writeIn2Disk.free;
@@ -1159,7 +1232,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~scopeView.yZoom = 1.0;
 */
 
-/*
+
 //-------- PLOTTER ----------//
 GUI.skin.plot.fontColor = Color.red;
 GUI.skin.plot.plotColor = Color.blue;
@@ -1268,7 +1341,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	);
 	0.5.yieldAndReset;
 });
-*/
+
 //----------
 
 /*~phaseBusMonRec.get({|val| (val/s.sampleRate).postln;});  //junk for monitoring
@@ -1311,8 +1384,8 @@ GUI.skin.plot.gridColorY = Color.cyan;
 			AppClock.play(~getBus_updateGUI_recPhase);
 
 			//////PLOTTER ----------
-			//~updateBufPlot.reset;
-			//AppClock.play(~updateBufPlot);
+			~updateBufPlot.reset;
+			AppClock.play(~updateBufPlot);
 
 			/*
 			//////////////SCOPE
@@ -1337,7 +1410,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 			~getBus_updateGUI_recPhase.stop;
 
-			//~updateBufPlot.stop;  //PLOTTER
+			~updateBufPlot.stop;  //PLOTTER
 
 			/*
 			 ///FOR SCOPE
@@ -1607,17 +1680,26 @@ GUI.skin.plot.gridColorY = Color.cyan;
 		obj.value == 1, // when randomize button enabled
 		{
 			~randomRoutine_rate.reset;
-			//~updateGUI_counter_rateT2rand.reset;
-			~updateGUI_rate.reset;
+			~updateGUI_rate.reset; //<---not sure if this is necessary here, but buggy rate random rate interp behavior may have been caused when commenting it out...
+			~randomRoutine_freq.reset;
+			~randomRoutine_pitchShiftMix.reset;
+			~randomRoutine_reverse.reset;
+			~randomRoutine_playHeadBehavior.reset;
 			AppClock.play(~randomRoutine_rate);
-			//AppClock.play(~updateGUI_counter_rateT2rand);
+			AppClock.play(~randomRoutine_freq);
+			AppClock.play(~randomRoutine_pitchShiftMix);
+			AppClock.play(~randomRoutine_reverse);
+			AppClock.play(~randomRoutine_playHeadBehavior);
 		},
 		{ //when randomize button disabled
 			~randomRoutine_rate.stop;
-			//~updateGUI_counter_rateT2rand.stop;
-			//~playHeadFollowRecHead.stop;
 			~updateGUI_rate.stop;
-			//~numBox_counter_rateT2rand.value_(0.0);
+			~randomRoutine_freq.stop;
+			~randomRoutine_pitchShiftMix.stop;
+			~randomRoutine_reverse.stop;
+			~randomRoutine_playHeadBehavior.stop;
+			~playHeadFollowRecHead.stop;
+
 		}
 	);
 } )
@@ -1647,25 +1729,13 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when enabled
+		obj.value == 1, // when button enabled
 		{
-			~randomRoutine_freq.reset;
-			~randomRoutine_pitchShiftMix.reset;
-			~randomRoutine_outputLevel.reset;
-			//~updateGUI_counter_rateT2rand.reset;
-			//~playHeadFollowRecHead.reset;
-			//~updateGUI_rate.reset;
 
-			AppClock.play(~randomRoutine_freq);
-			AppClock.play(~randomRoutine_pitchShiftMix);
-			AppClock.play(~randomRoutine_outputLevel);
+
 		},
-		{ //when randomize button disabled
-			//~randomRoutine.stop;
-			~randomRoutine_freq.stop;
-			~randomRoutine_pitchShiftMix.stop;
-			~randomRoutine_outputLevel.stop;
-			//~numBox_counter_rateT2rand.value_(0.0);
+		{ //when button disabled
+
 		}
 	);
 } )
@@ -1680,17 +1750,12 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when randomize button enabled
+		obj.value == 1, // when button enabled
 		{
-			~randomRoutine_reverse.reset;
-			~randomRoutine_playHeadBehavior.reset;
-			AppClock.play(~randomRoutine_reverse);
-			AppClock.play(~randomRoutine_playHeadBehavior);
+
 		},
-		{ //when randomize button disabled
-			~randomRoutine_reverse.stop;
-			~randomRoutine_playHeadBehavior.stop;
-			~playHeadFollowRecHead.stop;
+		{ //when button disabled
+
 		}
 	);
 } )
@@ -2047,4 +2112,4 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .string_("PitchShiftMix")
 .font_(Font("Monaco", 12) )
 .align_(\left);
-)
+);

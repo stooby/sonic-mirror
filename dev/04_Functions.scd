@@ -57,6 +57,9 @@
 					("Onset Detected:" + val[2]).postln;
 					("-------").postln;
 				},
+				/*~bus_rms, {
+					("RMS:" + val.round(0.0001) + "| db:" + val.ampdb.round(0.01)).postln;
+				}, */
 				{//all other busses (cases)
 					if (numCh > 1,
 						{
@@ -95,7 +98,7 @@
 	outFrame = (out.asFloat.round(0.001) * buffer.sampleRate);
 	if (inFrame < outFrame, { //if sample does not wrap around to beginning of buffer
 		var numFrames = (outFrame - inFrame) + 1;
-		buffer.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int24", numFrames: numFrames, startFrame: inFrame);
+		buffer.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, numFrames: numFrames, startFrame: inFrame);
 		("WROTE SAMPLE: " ++ ~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++".wav | dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
 		~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
 	}, {//if sample wraps around to beginning of buffer
@@ -106,7 +109,7 @@
 		copyBuf = Buffer.alloc(s, numFrames, 1);
 		buffer.copyData(copyBuf, dstStartAt: 0, srcStartAt: inFrame, numSamples: chunk1frames);
 		buffer.copyData(copyBuf, dstStartAt: (chunk1frames - 1), srcStartAt: 0, numSamples: chunk2frames);
-		copyBuf.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int24");
+		copyBuf.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth);
 		copyBuf.free;
 		("WROTE SAMPLE: " ++ ~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++".wav | dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
 		~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
@@ -123,7 +126,7 @@
 
 			var recFrames = (~recSamp_input_stopFrame - ~recSamp_input_startFrame) + 1; //+1 to include stopFrame in frame count
 
-			~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int16", startFrame: ~recSamp_input_startFrame, numFrames: recFrames); // write sampled buffer to audio file - directly from original buffer...
+			~audioBuf0.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, startFrame: ~recSamp_input_startFrame, numFrames: recFrames); // write sampled buffer to audio file - directly from original buffer...
 
 			//LOG DURATION OF THIS RECORDED SAMPLE HERE, OR EMBED IN FILE NAME? <-----
 
@@ -149,7 +152,7 @@
 			~audioBuf0.copyData(~audioBuf_inMainWrite, dstStartAt: (bufChunk1frames - 1), srcStartAt: 0, numSamples: bufChunk2frames);
 
 			//write ~audioBuf_inMainWrite to an audio file
-			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int16");
+			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth);
 
 			("--WRAP AROUND 2-STEP WRITE--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
@@ -382,9 +385,39 @@ SystemClock.play(~audifyRout);
 ~audifyRout.reset;
 */
 
-
-
 //====== ROUTINES ==========================
+
+~initSMpreset_1 = Routine({ //auto-startup routine for RPI
+	"...starting...".postln;
+	2.yield;
+	"...test tone...".postln;
+	Synth(\startupTone_1);
+	10.yield;
+	//SET LEVELS
+	"...set levels...".postln;
+	~inputStreamLevelBus.set(0.3);
+	~slider_inFlow1_level.value = (0.3);
+	~numBox_inFlow1_level.value= (0.3);
+
+	~fileOutputLevelBus.set(0.9);
+	~slider_sampOut_level.value = (0.9);
+	~numBox_sampOut_level.value =  (0.9);
+	0.5.yield;
+	~button_recBuf.valueAction = 1;
+	"START STREAMING TO BUF0...".postln;
+	"...buffering audio for 4 more seconds...".postln;
+	4.yield;
+	"START BUF0 PLAYBACK".postln;
+	~button_playBuf.valueAction = 1;
+	"...waiting a couple more seconds...".postln;
+	2.yield;
+	"STARTING RT proc behaviors...".postln;
+	~button_Behavior1.valueAction = 1;
+	"...waiting a few more seconds...".postln;
+	3.yield;
+	"STARTING AUTO-REC-PLAY behavior...".postln;
+	~button_autoRecPlay.valueAction = 1;
+});
 
 //--------- BUS GET / GUI UPDATE ROUTINES ---------
 ~getBus_updateGUI_playPhase = Routine({
@@ -1052,7 +1085,7 @@ SystemClock.play(~audifyRout);
 					~recSamp_input = true;
 					{~button_recIn.value = 1;}.defer;
 					~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".aiff").standardizePath, "aiff", "int24", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+					~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 					~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
 					("AutoRecRand -- WRITING AUDIO-IN SAMP_" ++ ~fileAudio_writeIn_nameNum).postln;
 					("AutoRecRand: -- recTime = " ++ recTime).postln;
@@ -1120,7 +1153,7 @@ SystemClock.play(~audifyRout);
 							//<----***could alternatively insert other file picking behaviors or mappings here****
 
 							//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
-							fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath;
+							fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".wav").standardizePath;
 
 							//PLAY SOUND FILE from disk
 							~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
@@ -1129,7 +1162,7 @@ SystemClock.play(~audifyRout);
 								~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
 								//NodeWatcher.register(~samp0);
 
-								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".aiff").standardizePath).postln;
+								("PLAYING BACK FILE:" + (~fileAudio_writeIn_lastPath++randFilePick++".wav").standardizePath).postln;
 
 							});
 							{~button_playSamp.value = 1;}.defer; //update GUI
