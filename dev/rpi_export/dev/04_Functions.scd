@@ -299,14 +299,14 @@
 };
 
 ~sample_noiseMangle = {|buffer, duration, ampBus, outBus|
-	if (duration <= 6,
+	if (duration <= 5,
 		{
 			//("TRIPLE SHORT: OrigDur =" + duration + ">").post;
-			duration = (duration * 3).round(0.001);
+			duration = (duration * 2).round(0.001);
 			//("newDur =" + duration).postln;
 		},
 		{
-			if (duration <= 12,
+			if (duration <= 8,
 				{
 					//("1.5X MED: OrigDur =" + duration + ">").post;
 					duration = (duration * 1.5).round(0.001);
@@ -324,7 +324,7 @@
 		{//straight noise
 			var freq;
 			//"-x-x-STRAIGHT NOISE-x-x-".postln;
-			freq = rrand(0.5, 5.0).round(0.01);
+			freq = rrand(0.5, 4.2).round(0.01);
 			//("--freq = " ++ freq).postln;
 			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus.asMap, \out, outBus]);
 		},
@@ -333,7 +333,7 @@
 			//"-x-x-MOD NOISE-x-x-".postln;
 			mod = rrand(0.1, 1.0).round(0.1);
 			lo = rrand(0.25, 1.0).round(0.01);
-			hi = rrand(1.25, 5.0).round(0.01);
+			hi = rrand(1.25, 4.2).round(0.01);
 			//("mod = " ++ mod + "| lo =" + lo + "| hi =" + hi).postln;
 			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus.asMap, \out, outBus]);
 		}

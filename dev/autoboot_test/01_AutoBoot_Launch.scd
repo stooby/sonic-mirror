@@ -1,8 +1,7 @@
-(
-//INITIALIZE - Env Variables, Set Busses, Routine Defs, Func Defs?, GUI - #3 ============================
+( //INITIALIZE - Env Variables, Set Busses, Routine Defs, Func Defs?, GUI - #3 ============================
 
 ////GLOBAL VARIABLES
-~sampBitDepth = "int16"; //(specify bit depth for all samples recorded by SM)
+~sampBitDepth = "int24"; //alt = "int16"  (specify bit depth for all samples recorded by SM)
 
 ~audioBuf0_dur = 60.0;
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
@@ -420,16 +419,16 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 						procSelect = case
 						//{rand <= 10} {
-						{rand <= 6} {
+						{rand <= 6.5} {
 							"==randAudify==".postln;
 							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
-						{rand > 8.5} {
+						{rand > 8.7} {
 						//{rand == 11} {
 							"==NOIZ MANGLE==".postln;
 							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
-						{rand > 6 && rand <= 8.5} {
+						{rand > 6.5 && rand <= 8.7} {
 						//{rand == 12} {
 							var lfoFreq, loFreq, hiFreq;
 							"==SINE MODs==".postln;
@@ -802,23 +801,27 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-/*s.plotTree;
-~inputSendLoudSus
-~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, post: 1);
-~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus);
+/*
+s.plotTree;
+~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -12, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
+~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon);
 //~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1);
 */
 
 //<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
 //double check ~listen_loudness and ~monitor_loudness routine......
 
-/*~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
+~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, lastLowThreshTime, uprThresh = -4, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
 	if (active == 1, {//start detecting feedback
 		if (~bufRecorder.isRunning, {
-			var thisOutBus;
+			var thisOutBus, thisLastLowThreshTime;
 			//RMS monitor
 			outBus.envirPut(Bus.control(s, 1));
 			thisOutBus = outBus.envirGet;
+
+			lastLowThreshTime.envirPut(nil); //<---
+			thisLastLowThreshTime = lastLowThreshTime.envirGet; //<---
+
 			featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, thisOutBus]).moveAfter(~bufRecorder));
 			NodeWatcher.register(featSynth.envirGet);
 			//featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, ~bus_rms]).moveAfter(~bufRecorder));
@@ -842,7 +845,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			//~listen_input_loudness = true; //maybe assign this via arg instead...DON'T HARDCODE!!!
 
 			//START LOUDNESS/FEEDBACK MONITOR ROUTINE
-			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, lowThreshDur: lowThreshDur, uprThresh: uprThresh, rate: rate)); //<----UNTESTED---!!!!
+			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, lowThreshDur: lowThreshDur, lastLowThresTime: thisLastLowThreshTime, uprThresh: uprThresh, rate: rate));
+			SystemClock.play(monRoutine.envirGet);
 
 			"====FEEDBACK DETECTION ACTIVE====".postln;
 		}, {
@@ -853,16 +857,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
 
 		//STOP LOUDNESS/FEEDBACK MONITOR ROUTINE
+		monRoutine.envirGet.stop;
+		monRoutine.envirGet.free;
+
+		outBus.envirGet.free; //free RMS feature extractor output bus
 
 		featSynth.envirGet.free; //free RMS feature extractor synth
-		//sumSynth.envirGet.free;
-		outBus.envirGet.free;
 
 		loudFlag.envirPut(0);
-		//~input_loud = 0; //maybe assign this via arg instead...DON'T HARDCODE!!!
 		loudSusFlag.envirPut(false);
-		//~input_loudSus = false; //maybe assign this via arg instead...DON'T HARDCODE!!!
-		//~listen_input_loudness = false; //maybe assign this via arg instead...DON'T HARDCODE!!!
 
 		"====FEEDBACK DETECTION DISABLED====".postln;
 		//});
@@ -872,42 +875,46 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //IN PROGRESS <-------------
 ~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, lastLowThreshTime, rate = 0.1|
 	Routine({
+		var x;
 		input.get({|val|
-			switch (val,
-				(val >= lowThresh && val < upThresh), {
-					if (loudFlag.envirGet == 0,
-						{
-							loudFlag.envirPut(1);
-							lastLowThreshTime.envirPut(Main.elapsedTime.round(0.001));
-							("-->LOUD SOUND! (low thresh): input db =" + val + "|" + lastLowThreshTime + "=" + lastLowThreshTime.envirGet).postln;
-						},
-						{//else if loudFlag already == 1 (or higher...)
-							if ((Main.elapsedTime.round(0.001) - lastLowThreshTime.envirGet) >= lowThreshDur, {
-								loudSusFlag.envirPut(true);
-								("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
-							}, {
-								("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
-							});
-						}
-					);
-				},
-				(val >= upThresh), {
-					loudFlag.envirPut(2);
-					("-->VERY LOUD SOUND!!!: input db =" + val).postln;
-				},
-				(val < lowThresh), {
-					if (loudFlag.envirGet > 0, {
-						loudFlag.envirPut(0);
-						loudSusFlag.envirPut(false);
-						("-->LOUDNESS STOPPED: input db =" + val).postln;
-					});
-				}
-			);
+			x = case
+			{(val >= lowThresh) && (val < uprThresh)} {
+				("-->LOUD SOUND! (low thresh): input db =" + val.round(0.01)).postln;
+				if (loudFlag.envirGet == 0,
+					{
+						var currentTime = Main.elapsedTime.round(0.01);
+						loudFlag.envirPut(1);
+						lastLowThreshTime.envirPut(currentTime);
+						("-->LOUD SOUND! (low thresh): input db =" + val + "| lastLowThreshTime =" + lastLowThreshTime.envirGet).postln;
+					},
+					{//else if loudFlag already == 1 (or higher...)
+						/*var currentTime = Main.elapsedTime.round(0.01);
+						if ((currentTime - lastLowThreshTime.envirGet) >= lowThreshDur, {
+							loudSusFlag.envirPut(true);
+							("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
+						}, {
+							("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
+						}); */
+					}
+				);
+			}
+			{val >= uprThresh} {
+				loudFlag.envirPut(2);
+				("-->VERY LOUD SOUND!!!: input db =" + val.round(0.01)).postln;
+			}
+			{val < lowThresh} {
+				if (loudFlag.envirGet > 0, {
+					loudFlag.envirPut(0);
+					loudSusFlag.envirPut(false);
+					("-->LOUDNESS STOPPED: input db =" + val.round(0.01)).postln;
+				});
+			};
 		});
 		s.sync;
+		//("-------loudmonroutine-running-------").postln;
 		rate.yieldAndReset;
 	});
-}; */
+};
 
 ~listen_sound = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 0| //setup/shutdown feat extractors on a bus
 	//|active = 1, input, rate = 0.1, post = 0| //orig args...
@@ -1039,7 +1046,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		obj.value == 1,
 		{//BEGIN RECORDING / WRITING AUDIO INPUT TO FILE
 			~audioBuf_inMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", "int16", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+			~audioBuf_inMainWrite.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 			~writeIn2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_inMainWrite, \inBus, ~inputSendBus] ); //record audio from rec playhead (bufRead synth sends audio input to ~inputSendBus), and write an audio file to hard disk
 			~recSamp_input = true; //<--- not sure if this flag's needed right now...
 		} ,
@@ -1067,7 +1074,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		obj.value == 1,
 		{//BEGIN RECORDING / WRITING MAIN AUDIO OUTPUT TO FILE
 			~audioBuf_outMainWrite = Buffer.alloc(s, 65536, 1); //allocate a disk i/o buffer (min rec frame size is 65536)
-			~audioBuf_outMainWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".wav").standardizePath, "wav", "int16", 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
+			~audioBuf_outMainWrite.write((~fileAudio_writeOut_lastPath++~fileAudio_writeOut_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, 0, 0, true); // create an output file for this buffer, leaving it "open" (not recording yet, just created file w/ format header)
 			~write2Disk = Synth.tail(nil, \write2Disk, [\buf, ~audioBuf_outMainWrite, \inBus, 0] ); //record audio sent to bus 0 to buffer writing to audio file
 			~recSamp_output = true;  //<--- not sure if this flag's needed right now...
 		} ,
@@ -1680,26 +1687,17 @@ GUI.skin.plot.gridColorY = Color.cyan;
 		obj.value == 1, // when randomize button enabled
 		{
 			~randomRoutine_rate.reset;
+			//~updateGUI_counter_rateT2rand.reset;
 			~updateGUI_rate.reset; //<---not sure if this is necessary here, but buggy rate random rate interp behavior may have been caused when commenting it out...
-			~randomRoutine_freq.reset;
-			~randomRoutine_pitchShiftMix.reset;
-			~randomRoutine_reverse.reset;
-			~randomRoutine_playHeadBehavior.reset;
 			AppClock.play(~randomRoutine_rate);
-			AppClock.play(~randomRoutine_freq);
-			AppClock.play(~randomRoutine_pitchShiftMix);
-			AppClock.play(~randomRoutine_reverse);
-			AppClock.play(~randomRoutine_playHeadBehavior);
+			//AppClock.play(~updateGUI_counter_rateT2rand);
 		},
 		{ //when randomize button disabled
 			~randomRoutine_rate.stop;
+			//~updateGUI_counter_rateT2rand.stop;
+			//~playHeadFollowRecHead.stop;
 			~updateGUI_rate.stop;
-			~randomRoutine_freq.stop;
-			~randomRoutine_pitchShiftMix.stop;
-			~randomRoutine_reverse.stop;
-			~randomRoutine_playHeadBehavior.stop;
-			~playHeadFollowRecHead.stop;
-
+			//~numBox_counter_rateT2rand.value_(0.0);
 		}
 	);
 } )
@@ -1729,13 +1727,25 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when button enabled
+		obj.value == 1, // when enabled
 		{
+			~randomRoutine_freq.reset;
+			~randomRoutine_pitchShiftMix.reset;
+			//~randomRoutine_outputLevel.reset;
+			//~updateGUI_counter_rateT2rand.reset;
+			//~playHeadFollowRecHead.reset;
+			//~updateGUI_rate.reset;
 
-
+			AppClock.play(~randomRoutine_freq);
+			AppClock.play(~randomRoutine_pitchShiftMix);
+			//AppClock.play(~randomRoutine_outputLevel);
 		},
-		{ //when button disabled
-
+		{ //when randomize button disabled
+			//~randomRoutine.stop;
+			~randomRoutine_freq.stop;
+			~randomRoutine_pitchShiftMix.stop;
+			//~randomRoutine_outputLevel.stop;
+			//~numBox_counter_rateT2rand.value_(0.0);
 		}
 	);
 } )
@@ -1750,12 +1760,17 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when button enabled
+		obj.value == 1, // when randomize button enabled
 		{
-
+			~randomRoutine_reverse.reset;
+			~randomRoutine_playHeadBehavior.reset;
+			AppClock.play(~randomRoutine_reverse);
+			AppClock.play(~randomRoutine_playHeadBehavior);
 		},
-		{ //when button disabled
-
+		{ //when randomize button disabled
+			~randomRoutine_reverse.stop;
+			~randomRoutine_playHeadBehavior.stop;
+			~playHeadFollowRecHead.stop;
 		}
 	);
 } )
@@ -2112,4 +2127,4 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .string_("PitchShiftMix")
 .font_(Font("Monaco", 12) )
 .align_(\left);
-);
+)

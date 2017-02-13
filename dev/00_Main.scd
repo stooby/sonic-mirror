@@ -5,10 +5,11 @@
 //~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
 //~writeSampFromBuf.(~audioBuf0, 58, 8.37);
 
-//~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 14, cycle: 2, rate: 48, pitch: -48);
-//SystemClock.play(~audifyRout);
-//~audifyRout.stop;
-//~audifyRout.reset;
+~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 2, cycle: 4, rate: 36, pitch: -36);
+SystemClock.play(~audifyRout);
+~audifyRout.stop;
+~audifyRout.reset;
+s.plotTree;
 
 //---- refactor in progress ----
 
@@ -444,16 +445,16 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 						procSelect = case
 						//{rand <= 10} {
-						{rand <= 6} {
+						{rand <= 6.5} {
 							"==randAudify==".postln;
 							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
-						{rand > 8.5} {
+						{rand > 8.7} {
 						//{rand == 11} {
 							"==NOIZ MANGLE==".postln;
 							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
-						{rand > 6 && rand <= 8.5} {
+						{rand > 6.5 && rand <= 8.7} {
 						//{rand == 12} {
 							var lfoFreq, loFreq, hiFreq;
 							"==SINE MODs==".postln;
@@ -826,23 +827,27 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-/*s.plotTree;
-~inputSendLoudSus
-~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, post: 1);
-~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus);
+/*
+s.plotTree;
+~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -12, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
+~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon);
 //~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1);
 */
 
 //<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
 //double check ~listen_loudness and ~monitor_loudness routine......
 
-/*~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
+~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, lastLowThreshTime, uprThresh = -4, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
 	if (active == 1, {//start detecting feedback
 		if (~bufRecorder.isRunning, {
-			var thisOutBus;
+			var thisOutBus, thisLastLowThreshTime;
 			//RMS monitor
 			outBus.envirPut(Bus.control(s, 1));
 			thisOutBus = outBus.envirGet;
+
+			lastLowThreshTime.envirPut(nil); //<---
+			thisLastLowThreshTime = lastLowThreshTime.envirGet; //<---
+
 			featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, thisOutBus]).moveAfter(~bufRecorder));
 			NodeWatcher.register(featSynth.envirGet);
 			//featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, ~bus_rms]).moveAfter(~bufRecorder));
@@ -866,7 +871,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 			//~listen_input_loudness = true; //maybe assign this via arg instead...DON'T HARDCODE!!!
 
 			//START LOUDNESS/FEEDBACK MONITOR ROUTINE
-			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, lowThreshDur: lowThreshDur, uprThresh: uprThresh, rate: rate)); //<----UNTESTED---!!!!
+			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, lowThreshDur: lowThreshDur, lastLowThresTime: thisLastLowThreshTime, uprThresh: uprThresh, rate: rate));
+			SystemClock.play(monRoutine.envirGet);
 
 			"====FEEDBACK DETECTION ACTIVE====".postln;
 		}, {
@@ -877,16 +883,15 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 		if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
 
 		//STOP LOUDNESS/FEEDBACK MONITOR ROUTINE
+		monRoutine.envirGet.stop;
+		monRoutine.envirGet.free;
+
+		outBus.envirGet.free; //free RMS feature extractor output bus
 
 		featSynth.envirGet.free; //free RMS feature extractor synth
-		//sumSynth.envirGet.free;
-		outBus.envirGet.free;
 
 		loudFlag.envirPut(0);
-		//~input_loud = 0; //maybe assign this via arg instead...DON'T HARDCODE!!!
 		loudSusFlag.envirPut(false);
-		//~input_loudSus = false; //maybe assign this via arg instead...DON'T HARDCODE!!!
-		//~listen_input_loudness = false; //maybe assign this via arg instead...DON'T HARDCODE!!!
 
 		"====FEEDBACK DETECTION DISABLED====".postln;
 		//});
@@ -896,42 +901,46 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //IN PROGRESS <-------------
 ~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, lastLowThreshTime, rate = 0.1|
 	Routine({
+		var x;
 		input.get({|val|
-			switch (val,
-				(val >= lowThresh && val < upThresh), {
-					if (loudFlag.envirGet == 0,
-						{
-							loudFlag.envirPut(1);
-							lastLowThreshTime.envirPut(Main.elapsedTime.round(0.001));
-							("-->LOUD SOUND! (low thresh): input db =" + val + "|" + lastLowThreshTime + "=" + lastLowThreshTime.envirGet).postln;
-						},
-						{//else if loudFlag already == 1 (or higher...)
-							if ((Main.elapsedTime.round(0.001) - lastLowThreshTime.envirGet) >= lowThreshDur, {
-								loudSusFlag.envirPut(true);
-								("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
-							}, {
-								("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
-							});
-						}
-					);
-				},
-				(val >= upThresh), {
-					loudFlag.envirPut(2);
-					("-->VERY LOUD SOUND!!!: input db =" + val).postln;
-				},
-				(val < lowThresh), {
-					if (loudFlag.envirGet > 0, {
-						loudFlag.envirPut(0);
-						loudSusFlag.envirPut(false);
-						("-->LOUDNESS STOPPED: input db =" + val).postln;
-					});
-				}
-			);
+			x = case
+			{(val >= lowThresh) && (val < uprThresh)} {
+				("-->LOUD SOUND! (low thresh): input db =" + val.round(0.01)).postln;
+				if (loudFlag.envirGet == 0,
+					{
+						var currentTime = Main.elapsedTime.round(0.01);
+						loudFlag.envirPut(1);
+						lastLowThreshTime.envirPut(currentTime);
+						("-->LOUD SOUND! (low thresh): input db =" + val + "| lastLowThreshTime =" + lastLowThreshTime.envirGet).postln;
+					},
+					{//else if loudFlag already == 1 (or higher...)
+						/*var currentTime = Main.elapsedTime.round(0.01);
+						if ((currentTime - lastLowThreshTime.envirGet) >= lowThreshDur, {
+							loudSusFlag.envirPut(true);
+							("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
+						}, {
+							("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
+						}); */
+					}
+				);
+			}
+			{val >= uprThresh} {
+				loudFlag.envirPut(2);
+				("-->VERY LOUD SOUND!!!: input db =" + val.round(0.01)).postln;
+			}
+			{val < lowThresh} {
+				if (loudFlag.envirGet > 0, {
+					loudFlag.envirPut(0);
+					loudSusFlag.envirPut(false);
+					("-->LOUDNESS STOPPED: input db =" + val.round(0.01)).postln;
+				});
+			};
 		});
 		s.sync;
+		//("-------loudmonroutine-running-------").postln;
 		rate.yieldAndReset;
 	});
-}; */
+};
 
 ~listen_sound = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 0| //setup/shutdown feat extractors on a bus
 	//|active = 1, input, rate = 0.1, post = 0| //orig args...

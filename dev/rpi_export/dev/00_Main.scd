@@ -440,20 +440,20 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 						duration = buffer.numFrames/buffer.sampleRate; //<--orig
 
 						//EVENTUALLY consider selecting proc behaviors based on features of analyzed audio <<<<
-						rand = rrand(1.0, 10.0);
+						rand = rrand(1.0, 10.0).round(0.1);
 
 						procSelect = case
 						//{rand <= 10} {
-						{rand <= 6} {
+						{rand <= 6.5} {
 							"==randAudify==".postln;
 							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
-						{rand > 8.5} {
+						{rand > 8.7} {
 						//{rand == 11} {
 							"==NOIZ MANGLE==".postln;
 							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
 						}
-						{rand > 6 && rand <= 8.5} {
+						{rand > 6.5 && rand <= 8.7} {
 						//{rand == 12} {
 							var lfoFreq, loFreq, hiFreq;
 							"==SINE MODs==".postln;
