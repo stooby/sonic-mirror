@@ -302,6 +302,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~minNumFilesB4Playback = 1; // file # threshold before file playback routine commences
 ~fileAudio_writeIn_maxNum = 30; //max # of audio samples written per session (wrap-around & overwrite limit - inclusive of 0)
 ~fileAudio_writeOut_maxNum = 30;  //max # of audio out samples written per session (wrap-around & overwrite limit)
+~fileAudio_writeIn_maxNum_exceeded = false; //<--- NEW
 
 //---
 ~listenDur_noiseFloor = 5.0; //<---not currently being used....
@@ -394,45 +395,108 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 					//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
 
-					//---------------!!!!!!!
-					//>-----FILE SELECTION CONDITIONS GO HERE-----<<<<<<------------DO
-					// IF IT'S BEEN AWHILE since last recorded sound OR if have played back previous sample already, be more likely to play a random sample or second to last sample or older samples <--------- DO THIS ---<<<<<!!!
+					//>-----FILE SELECTION CONDITIONS --- (basics implemented, could be refined)
 
-					/*
-					currentTime = Main.elapsedTime.round(0.001); //<----IN PROGRESS
+					///-----vvvvvvv---------NEW--------vvvvvv---------///////
+					currentTime = Main.elapsedTime.round(0.001);
 					if (currentTime <= (~time_lastRec_stop + 5),
 						{//if just recorded new sound, play last recorded sound
+							"---SOUND JUST RECORDED - PLAYING LAST SOUND".postln;
 							fileDir = ~fileAudio_writeIn_lastFile;
 						},
 						{//else if it's been awhile since last recorded sound
-							if (~fileHistory_play[0] != ~fileHistory_play[1], //if last played sound isn't the same as previously played sound
-								{
-									if (0.85.coin == true,
-										{fileDir = ~fileAudio_writeIn_lastFile;}, //~85% select last recorded file for playback
-										{fileDir = ~fileHistory_play[1];}//else select second to last played file
-									);
-									if (fileDir == nil, {fileDir = ~fileAudio_writeIn_lastFile;}); //safe driving
-								}
-							);
+							var playCase, randNum = rrand(1.0, 10.0).round(0.01);
+							"---LAST SOUND RECORDED > 5 SECONDS AGO....".postln;
 
-							if (~fileHistory_play[0] == ~fileHistory_play[1], //if played same sound twice
-								{
+							playCase = case
+							{randNum <= 7} { //70% of time, play last recorded file
+								//("---->PLAYING LAST REC FILE (70%):" + ~fileAudio_writeIn_lastFile).postln;
+								fileDir = ~fileAudio_writeIn_lastFile;
+							}
+							{randNum > 7 && randNum <= 9} {//20% of time play recent rec file
+								//"---->PLAYING RECENT REC FILE (20%)".post;
+								if (0.75.coin == true,
+									{fileDir = ~fileHistory_rec[1];
+										//" | second-to-last | ".post;
+									}, //play second to last rec file
+									{fileDir = ~fileHistory_rec[2];
+										//" | third-to-last | ".post;
+									} //or play third to last rec file
+								);
+								//("FILE:" + fileDir).postln;
+								if (fileDir == nil, {//safe driving
+									fileDir = ~fileAudio_writeIn_lastFile;
+									//".....safe-driving...playing last rec file".postln;
+								});
+							}
+							{randNum > 9} { //10% of time play older or random file....
+							//{randNum > 9 && randNum <= 9.5} { //5% of time play older or random file....
+								//("---->PLAYING OLDER / RAND FILE (5%):").postln;
+								if (~fileAudio_writeIn_maxNum_exceeded == false,
+									{
+										var fileNum;
+										//("-----maxNumFiles NOT EXCEEDED-----").postln;
+										if (~fileAudio_writeIn_nameNum >= ~fileHistory_rec.size, //if rec mem is full
+											{
+												if (0.5.coin == true,
+													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]}, //select oldest file in rec mem
+													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]} //or select second-oldest file in rec mem
+												);
+												//("---->REC MEM FULL - Playing:" + fileDir).postln;
+											},
+											{//else if rec mem is not full
+												fileDir = ~fileHistory_rec[~fileAudio_writeIn_nameNum - 1]; //select older file...
+												//("---->REC MEM NOT FULL - Playing:" + fileDir).postln;
+											}
+										);
+										if (fileDir == nil, {//safe driving
+											fileDir = ~fileAudio_writeIn_lastFile;
+											//".....safe-driving...playing last rec file".postln;
+										});
+									},
+									{ //else if max files written > maxNum limit
+										//("-----maxNumFiles EXCEEDED-----").postln;
+										if (0.5.coin == true,
+											{//play oldest or second-oldest file in rec mem
+												if (0.5.coin == true,
+													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1];
+														//("----> Playing OLDEST file in recMem:" + fileDir).postln;
+													}, //oldest file in rec mem
+													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2];
+														//("----> Playing SECOND-OLDEST file in recMem:" + fileDir).postln;
+													} //second-oldest file in rMem
+												);
+											},
+											{
+												var randFile, selectFile;
+												//"---->RANDOM FILE SELECTION ----->".postln;
+												randFile = rrand(0, (~fileAudio_writeIn_maxNum - 1)).round(1);
+												fileDir = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+												/*selectFile = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+												if (selectFile == ~fileHistory_rec[0], {
+													"-----Selected File == last REC file...picking oldest file----".postln;
 
-									if ((~fileHistory_play[2] != nil) && (~fileHistory_play[2] != ~fileHistory_play[0]),
-										{fileDir = ~fileHistory_play[2];}
-									);
-								}
-							);
+												}, {
+
+												}); */
+											}
+										);
+										if (fileDir == nil, {//safe driving
+											fileDir = ~fileAudio_writeIn_lastFile;
+											//".....safe-driving...playing last rec file".postln;
+										});
+									}
+								);
+							};
+							//{randNum > 9.5} { //5% of time audify sound scene... <-----ADD!!!!
+
+							//};
 						}
-					); //<---IN PROGRESS - END
-					*/
+					); //<---setup, BUT sample selection conditions could be refined...
 
-					fileDir = ~fileAudio_writeIn_lastFile; //orig
+					///-----^^^^^^^---------NEW--------^^^^^^^---------///////
 
-					//file = SoundFile.new(fileDir); //<--- new
-					//file.openRead; //<--- new
-					//0.5.yield;  //<----testing for RPI, might help? not sure....
-					//duration = file.duration; //<--- new, BUT this DOESN'T have different effect b/c being changed inside action function....
+					//fileDir = ~fileAudio_writeIn_lastFile; //<-------orig
 
 					//PLAY SOUND FILE from disk
 					~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
@@ -659,7 +723,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 															{
 																~autoRecPlay_state = 1;
 																//adjust ~listenDur_soundPatience based on timespan since ~time_lastRec_stop; ? <--------CONSIDER DOING THIS ----------------<<<<<<<<<<
-																~listenDur_soundPatience = rrand(6.0, 20.0); //temporary<---?
+																~listenDur_soundPatience = rrand(6.0, 20.0).round(0.01); //temporary
+																//~listenDur_soundPatience = 3; //for testing
 															}
 														);
 													});
@@ -827,12 +892,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	} );
 };
 
-/*
-s.plotTree;
-~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -12, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
+
+/*s.plotTree;
+~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -30, uprThresh: -15, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
 ~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon);
 //~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1);
 */
+
 
 //<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
 //double check ~listen_loudness and ~monitor_loudness routine......

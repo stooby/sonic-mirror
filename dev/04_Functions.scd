@@ -172,6 +172,7 @@
 	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
 	if (~fileAudio_writeIn_nameNum > (~fileAudio_writeIn_maxNum - 1), { //cap max file count...
 		~fileAudio_writeIn_nameNum = 0;
+		~fileAudio_writeIn_maxNum_exceeded = true;
 	});
 
 	(">>>RECORDING COMPLETE<<<").postln;
