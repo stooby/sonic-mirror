@@ -2,8 +2,8 @@
 
 //== Main Performance Doc ==
 
-//~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
-//~writeSampFromBuf.(~audioBuf0, 58, 8.37);
+~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
+~writeSampFromBuf.(~audioBuf0, 58, 8.37);
 
 ~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 2, cycle: 4, rate: 36, pitch: -36);
 SystemClock.play(~audifyRout);
@@ -41,12 +41,12 @@ Buffer.freeAll; //for cleanup
 ~recPosLatchTrig = false;
 ~fixPlayRecOffset = false;
 
-~pitchShiftValPrev_rate;
+~pitchShiftValPrev_rate = 0;
 ~pitchShiftValTarget_rate = 0;
 ~pitchInterp_rate = false;
 
-~pitchShiftValPrev_freq;
-~pitchShiftValTarget_freq;
+~pitchShiftValPrev_freq = 0;
+~pitchShiftValTarget_freq = 0;
 ~pitchInterp_freq = false;
 
 ~outMainLevVal_prev; //<--
@@ -60,9 +60,9 @@ Buffer.freeAll; //for cleanup
 ~time2NextRandom_freq = 0;
 ~time2NextRandom_pitchShiftMix = 0;
 
-~pitchShiftMix_prev;
-~pitchShiftMix_target; //<- not using right now, might not need unless interpolating
-~pitchShiftMix_prevChangeTime = 0;
+~pitchShiftMix_prev = 0;
+~pitchShiftMix_target = 0; //<- not using right now
+~pitchShiftMix_prevChangeTime = 0; //<-not being used
 ~pitchShiftMix_interp = false;
 
 ~playInFrame = 0;  //<--- consider renaming
@@ -901,7 +901,7 @@ s.plotTree;
 //IN PROGRESS <-------------
 ~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, lastLowThreshTime, rate = 0.1|
 	Routine({
-		var x;
+		var x, cond = Condition.new; //<---NEW
 		input.get({|val|
 			x = case
 			{(val >= lowThresh) && (val < uprThresh)} {
@@ -914,13 +914,13 @@ s.plotTree;
 						("-->LOUD SOUND! (low thresh): input db =" + val + "| lastLowThreshTime =" + lastLowThreshTime.envirGet).postln;
 					},
 					{//else if loudFlag already == 1 (or higher...)
-						/*var currentTime = Main.elapsedTime.round(0.01);
+						var currentTime = Main.elapsedTime.round(0.01);
 						if ((currentTime - lastLowThreshTime.envirGet) >= lowThreshDur, {
 							loudSusFlag.envirPut(true);
 							("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
 						}, {
 							("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
-						}); */
+						});
 					}
 				);
 			}
@@ -929,14 +929,17 @@ s.plotTree;
 				("-->VERY LOUD SOUND!!!: input db =" + val.round(0.01)).postln;
 			}
 			{val < lowThresh} {
-				if (loudFlag.envirGet > 0, {
+				if (loudFlag.envirGet > 0, { //<-----PUT TIMING THRESHOLD HERE, DON'T ZERO THINGS OUT IMMEDIATELY AFTER LOUD SOUND DETECTED, ADD A hysteresis
 					loudFlag.envirPut(0);
 					loudSusFlag.envirPut(false);
 					("-->LOUDNESS STOPPED: input db =" + val.round(0.01)).postln;
 				});
 			};
+			//cond.unhang; <----CONSIDER USING THIS OR .getSync
 		});
-		s.sync;
+		//cond.hang;
+		s.sync; //<----DON'T USE THIS
+
 		//("-------loudmonroutine-running-------").postln;
 		rate.yieldAndReset;
 	});
@@ -1557,7 +1560,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	if (
 		obj.value == 1,
 		{  //reverse playback when enabled
-			~rateBus.get( {
+			~rateBus.get({
 				arg val;
 				if (val > 0, {
 					var newRate = -1 * val;
@@ -1691,43 +1694,13 @@ GUI.skin.plot.gridColorY = Color.cyan;
 			{~lastPlayPhasePos = ~play2recOffset;}
 		);
 	} );
-	0.1.yield; //<--------------IS THERE ANY OTHER WAY???????????
+	0.1.yield; //<-------- not ideal, but works
 
 	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
 	nil;
 } );
 
 //--------------------
-
-//-------------- BEHAVIOR BUTTONS ------------
-
-~button_Behavior1 = Button(~view_perfButtons, Rect(0, 25, 55, 25)) //randomize rate control
-.states_( [
-	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
-	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
-] )
-.font_(Font("Monaco", 18) )
-.action_( {
-	arg obj;
-	if (
-		obj.value == 1, // when randomize button enabled
-		{
-			~randomRoutine_rate.reset;
-			//~updateGUI_counter_rateT2rand.reset;
-			~updateGUI_rate.reset; //<---not sure if this is necessary here, but buggy rate random rate interp behavior may have been caused when commenting it out...
-			AppClock.play(~randomRoutine_rate);
-			//AppClock.play(~updateGUI_counter_rateT2rand);
-		},
-		{ //when randomize button disabled
-			~randomRoutine_rate.stop;
-			//~updateGUI_counter_rateT2rand.stop;
-			//~playHeadFollowRecHead.stop;
-			~updateGUI_rate.stop;
-			//~numBox_counter_rateT2rand.value_(0.0);
-		}
-	);
-} )
-.value_(0);
 
 /*
 //Monitoring support GUI objects for ~button_Behavior1 activity
@@ -1744,6 +1717,50 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .align_(\left);
 */
 
+//-------------- BEHAVIOR BUTTONS ------------
+
+~button_Behavior1 = Button(~view_perfButtons, Rect(0, 25, 55, 25)) //randomize rate and pitchShift over time
+.states_( [
+	["!!!", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
+	["!!!", Color.white, Color(0.8, 0.3, 0.8)]
+] )
+.font_(Font("Monaco", 18) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1, // when randomize button enabled
+		{
+			~randomRoutine_rate.reset;
+			~randomRoutine_freq.reset;
+			~randomRoutine_pitchShiftMix.reset;
+			~randomRoutine_reverse.reset;
+			~randomRoutine_playHeadBehavior.reset;
+
+			AppClock.play(~randomRoutine_rate);
+			AppClock.play(~randomRoutine_freq);
+			AppClock.play(~randomRoutine_pitchShiftMix);
+			AppClock.play(~randomRoutine_reverse);
+			AppClock.play(~randomRoutine_playHeadBehavior); //<---spruce this routine up to be consistent w/ above
+
+		},
+		{ //when randomize button disabled
+			~randomRoutine_rate.stop;
+			~updateGUI_rate.stop;
+
+			~randomRoutine_freq.stop;
+			~updateGUI_freq.stop;
+
+			~randomRoutine_pitchShiftMix.stop;
+			~updateGUI_pitchShiftMix.stop;
+
+			~randomRoutine_reverse.stop;
+			~randomRoutine_playHeadBehavior.stop;
+			~playHeadFollowRecHead.stop;
+		}
+	);
+} )
+.value_(0);
+
 ~button_Behavior2 = Button(~view_perfButtons, Rect(55, 25, 30, 25)) //Randomize pitch shift, pitch shift mix, and output level control
 .states_( [
 	["!!", Color.black, Color(0.0, 0.3, 0.9, 0.3)] ,
@@ -1753,25 +1770,12 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when enabled
+		obj.value == 1, // when button enabled
 		{
-			~randomRoutine_freq.reset;
-			~randomRoutine_pitchShiftMix.reset;
-			//~randomRoutine_outputLevel.reset;
-			//~updateGUI_counter_rateT2rand.reset;
-			//~playHeadFollowRecHead.reset;
-			//~updateGUI_rate.reset;
 
-			AppClock.play(~randomRoutine_freq);
-			AppClock.play(~randomRoutine_pitchShiftMix);
-			//AppClock.play(~randomRoutine_outputLevel);
 		},
-		{ //when randomize button disabled
-			//~randomRoutine.stop;
-			~randomRoutine_freq.stop;
-			~randomRoutine_pitchShiftMix.stop;
-			//~randomRoutine_outputLevel.stop;
-			//~numBox_counter_rateT2rand.value_(0.0);
+		{ //when button disabled
+
 		}
 	);
 } )
@@ -1786,17 +1790,12 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	if (
-		obj.value == 1, // when randomize button enabled
+		obj.value == 1, // when button enabled
 		{
-			~randomRoutine_reverse.reset;
-			~randomRoutine_playHeadBehavior.reset;
-			AppClock.play(~randomRoutine_reverse);
-			AppClock.play(~randomRoutine_playHeadBehavior);
+
 		},
-		{ //when randomize button disabled
-			~randomRoutine_reverse.stop;
-			~randomRoutine_playHeadBehavior.stop;
-			~playHeadFollowRecHead.stop;
+		{ //when button disabled
+
 		}
 	);
 } )
@@ -2049,13 +2048,13 @@ GUI.skin.plot.gridColorY = Color.cyan;
 .action_( {
 	arg obj;
 	var pos;
-	pos = obj.value.linlin(0, 1, -48, 48).round(0.01); //used to be round(1)
+	pos = obj.value.linlin(0, 1, -48, 48).round(0.01);
 	if (~button_rev.value == 1,
 		{~rateBus.set(pos.midiratio * -1);}, //negative rate when REV button enabled
-		{~rateBus.set(pos.midiratio); //positive rate when REV button disabled
-	} );
-	 //change playback pitch!
+		{~rateBus.set(pos.midiratio);} //positive rate when REV button disabled
+	);
 	~numBox_rate.value_(pos); //update numBoxPitch value
+	~pitchShiftValPrev_rate = pos; //<---NEW, to support ~randomRoutine_reverse
 } ) ;
 
 ~numBox_rate = NumberBox(~view_procControls1, Rect(308, 0, 48, 20))
@@ -2070,9 +2069,13 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	arg obj;
 	var semiToneVal, pos;
 	semiToneVal = obj.value.clip(-48, 48).round(0.01);
-	~rateBus.set(semiToneVal.midiratio); //change playback rate (in semi tones)
+	if (~button_rev.value == 1,
+		{~rateBus.set(semiToneVal.midiratio * -1);}, //negative rate when REV button enabled
+		{~rateBus.set(semiToneVal.midiratio);} //positive rate when REV button disabled
+	);
 	pos = obj.value.clip(-48, 48).linlin(-48, 48, 0, 1).round(0.001);
 	~slider_rate.value_(pos);
+	~pitchShiftValPrev_rate = semiToneVal; //<---NEW, to support ~randomRoutine_reverse
 } );
 
 ~label_rate = StaticText(~view_procControls1, Rect(358, 4, 80, 10))
@@ -2091,6 +2094,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	pos = obj.value.linlin(0, 1, -48, 24).round(0.01);
 	~pitchBus.set(pos.midiratio);
 	~numBox_pitch.value_(pos);
+	~pitchShiftValPrev_freq = pos; //<---new, to support ~randomRoutine_pitchShiftMix
 } );
 
 ~numBox_pitch = NumberBox(~view_procControls1, Rect(308, 22, 48, 20))
@@ -2108,6 +2112,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	~pitchBus.set(semiToneVal.midiratio); //change pitch (in semi tones)
 	pos = obj.value.linlin(-48, 24, 0, 1).round(0.001);
 	~slider_pitch.value_(pos);
+	~pitchShiftValPrev_freq = semiToneVal; //<---new, to support ~randomRoutine_pitchShiftMix
 } );
 
 ~label_pitch = StaticText(~view_procControls1, Rect(358, 27, 80, 10))
@@ -2142,9 +2147,9 @@ GUI.skin.plot.gridColorY = Color.cyan;
 	arg obj;
 	var mixVal, pos;
 	mixVal = obj.value.clip(0, 100).round(1);
-	("mixValIn=" + mixVal).post;
+	//("mixValIn=" + mixVal).post;
 	mixVal = mixVal/100;
-	(" | mixValToPbus=" + mixVal).postln;
+	//(" | mixValToPbus=" + mixVal).postln;
 	~pitchShiftMixValBus.set(mixVal); //change pitch (in semi tones)
 	~slider_pitchShiftMix.value_(mixVal);
 } );

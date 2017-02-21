@@ -358,7 +358,7 @@
 		for (fileStart, (fileNum - 1), {|i|
 			("~buf" ++ i ++ "= ~sampBuf.(~fileAudio_writeIn_lastPath," ++ i ++ "," ++ thisRate ++ ")" ).interpret;
 		});
-		s.sync;
+		s.sync; //<----DON'T USE .SYNC,
 
 		cycle.do({ //trigger synths (one per sample played)
 			for (fileStart, (fileNum - 1), {|i|
@@ -370,6 +370,8 @@
 				(thisDur - overlap).yield; //slight overlap between samples...
 			});
 		});
+
+		//0.25.yield; //<---consider slight yield here to avoid Buffer.read error?
 
 		for (fileStart, (fileNum - 1), {|i|  //free all buffers
 			("~buf" ++ i ++ ".free").interpret;
@@ -477,11 +479,9 @@ SystemClock.play(~audifyRout);
 	~rateBus.get( {
 		arg val;
 		var thisVal = val.abs; //in case "Reverse" enabled and rate is negative...   <-----
-		AppClock.sched(0.0, { //this is necessary for some reason... I think can be replaced by .defer
+		AppClock.sched(0.0, { //errors thrown w/out this for some reason... I think can be replaced by .defer
 			//"pitchBusVal= ".post; val.ratiomidi.round(0.01).postln;
-			//~slider_rate.value_(val.ratiomidi.linlin(-48, 48, 0, 1) );
 			~slider_rate.value_(thisVal.ratiomidi.linlin(-48, 48, 0, 1) );
-			//~numBox_rate.value_(val.ratiomidi.round(0.01));
 			~numBox_rate.value_(thisVal.ratiomidi.round(0.01));
 			nil;
 		} );
@@ -526,7 +526,7 @@ SystemClock.play(~audifyRout);
 	0.1.yieldAndReset;
 } );
 
-~updateGUI_counter_rateT2rand = Routine.new( { //crude somewhat inaccurate way to do this but good enough for now
+~updateGUI_counter_rateT2rand = Routine.new( { //not being used anymore, for old GUI monitoring tool
 	if (~time2NextRandom_rate <= 0, {~time2NextRandom_rate = 0;} );
 	~numBox_counter_rateT2rand.value_(~time2NextRandom_rate);
 	~time2NextRandom_rate = ~time2NextRandom_rate - 0.1;
@@ -537,22 +537,35 @@ SystemClock.play(~audifyRout);
 
 //----- RANDOMIZE ROUTINES -----
 ~randomRoutine_rate = Routine.new ( { //Automatically randomize playback rate and adjust playHead
-	var time2nextRandomize, randNum4transp, newPitch, pitchCase, pitchInterp, interpTime;
+	var time2nextRandomize, randNum4transp, newPitch, pitchCase, pitchInterp, interpTime, cond = Condition.new; //<---
 
-	~rateBus.get( {
+	/*~rateBus.get( { //<---OLD
 		arg val;
 		//("*****currentRate=" + val).post;
-			~pitchShiftValPrev_rate = val.ratiomidi;
-			//("---prevPitch=" + ~pitchShiftValPrev_rate).postln;
-	} );
+		~pitchShiftValPrev_rate = val.ratiomidi;
+		//("---prevPitch=" + ~pitchShiftValPrev_rate).postln;
+	} ); */
+	//0.1.yield; //<<<<< not ideal
 
-	0.1.yield; //<<<<<works, but not ideal b/c of added latency...  HOW CAN I ENABLE THIS ROUTINE TO FUNCTION W/OUT SLIGHT TIME YIELD HERE?
+	//~pitchShiftValPrev_rate = ~rateBus.getSynchronous.ratiomidi; //<----NEW (consider this instead)
+
+	~rateBus.get({|val|  //<---(NEW) DO THIS IF STICKING W/ GET...safer than using s.sync....
+		//("*****currentRate=" + val).post;
+		~pitchShiftValPrev_rate = val.ratiomidi.round(0.01);
+		//("---prevPitch=" + ~pitchShiftValPrev_rate).postln;
+		cond.unhang;
+		//("=== RATE SHIFT - GET - UNHANG").postln;
+		//("====RATE SHIFT - prevFreq =" + ~pitchShiftValPrev_rate).postln;
+	});
+	//("=== RATE SHIFT - PRE-HANG").postln;
+	cond.hang;
 
 	randNum4transp = rrand(1, 10); //based on random # from 1-10, determine type of pitch transposition
 	//"randNum4transp= ".post; randNum4transp.postln;
 	pitchCase = case
 	{randNum4transp <= 4} { //40% chance of lowering pitch
-		newPitch = rrand(-7.0, -0.2).round(0.01);
+		//newPitch = rrand(-7.0, -0.2).round(0.01);
+		newPitch = rrand(-12.0, -0.2).round(0.01);
 		//("--newPitch=" + newPitch).post;
 	}
 	{randNum4transp >= 5 && randNum4transp <= 8} { //40% chance of no pitch change
@@ -560,12 +573,13 @@ SystemClock.play(~audifyRout);
 		//("--newPitch=" + newPitch).post;
 	}
 	{randNum4transp >= 9} { //20% chance of raising pitch
-		newPitch = rrand(1.0, 5.0).round(0.01);
+		//newPitch = rrand(1.0, 5.0).round(0.01);
+		newPitch = rrand(1.0, 12.0).round(0.01);
 		//("--newPitch=" + newPitch).post;
 	};
 
 	~pitchShiftValTarget_rate = newPitch; //set target pitch to shift to
-	//(" | targetPitch=" + ~pitchShiftValTarget_rate).postln;
+	//("====RATE SHIFT - targetFreq =" + ~pitchShiftValTarget_rate).postln;
 
 	if (newPitch != ~pitchShiftValPrev_rate, {
 		interpTime = rrand(1.2, 7.0);
@@ -574,21 +588,12 @@ SystemClock.play(~audifyRout);
 		//interpolate to new rate, is able to reverse during interpolation
 		pitchInterp = Synth(\LinInterp_rate, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime, \rateMod, ~revRateBusMon.asMap] );
 
-		//pitchInterp = Synth(\LinInterp_pitch, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime] );
-		/*
-		if (~button_rev.value == 1, { //when REVERSE mode enabled  <-----worked, but not during interp-------
-			pitchInterp = Synth(\LinPitchInterpRev, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime] );
-		} , { //when REVERSE mode disabled
-			pitchInterp = Synth(\LinInterp_pitch, [\out, ~rateBus, \startVal, ~pitchShiftValPrev_rate, \stopVal, ~pitchShiftValTarget_rate, \duration, interpTime] );
-		} ); */
-
 		~pitchInterp_rate = true; //flag (currently prevents playRecOffsetAdjust routine from interrupting pitchInterp)
 		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
 		~updateGUI_rate.reset;
 		AppClock.play(~updateGUI_rate);
 
 		(interpTime + 0.1).yield;
-		//1.3.yield; //keep or no!??? <-----
 
 		~pitchInterp_rate = false;
 		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
@@ -597,25 +602,39 @@ SystemClock.play(~audifyRout);
 	} , {
 		time2nextRandomize = rrand(5, 10); //reduced possible time2nextRand in case newPitch == prevPitch
 	} );
+
+	~pitchShiftValPrev_rate = ~pitchShiftValTarget_rate; //<---don't like this, but need until I devise better solution...
+
 	~time2NextRandom_rate = time2nextRandomize; //for populating GUI
+	//("----TIME2NEXT - RANDOM RATE =" + ~time2NextRandom_rate.round(0.01)).postln;
 	time2nextRandomize.yieldAndReset;
 } );
 
 
 ~randomRoutine_freq = Routine.new ( {
 	//Automatically randomize pitch w/out time change (granular pitch shift)
-	var time2nextRandomize, randNum4transp, newPitch, pitchCase, pitchInterp, interpTime;
+	var time2nextRandomize, randNum4transp, newPitch, pitchCase, pitchInterp, interpTime, cond = Condition.new;
 
-	~pitchBus.get( {
+	//~pitchShiftValPrev_freq = ~pitchBus.getSynchronous.ratiomidi; //<---NEW (consider this instead)
+
+	~pitchBus.get( {|val| //<---DO THIS IF STICKING W/ GET...safer than using s.sync....
+		~pitchShiftValPrev_freq = val.ratiomidi.round(0.01);
+		cond.unhang;
+		//("=== PITCH SHIFT - GET - UNHANG").postln;
+		//("====PITCH SHIFT - prevFreq =" + ~pitchShiftValPrev_freq).postln;
+	} );
+	//("=== PITCH SHIFT - PRE-HANG").postln;
+	cond.hang;
+
+	/*~pitchBus.get( {
 		arg val;
 		//AppClock.sched(0.0, {
 			~pitchShiftValPrev_freq = val.ratiomidi;
 			//("-*-prevFreq=" + ~pitchShiftValPrev_freq).postln;
 			//nil;
 		//} );
-	} );
-
-	0.1.yield; //<<<<<works, but not sure if ideal way...???
+	} );*/
+	//0.1.yield; //<<<<<works, but not ideal way
 
 	randNum4transp = rrand(1.0, 10.0); //based on random # from 1-10, determine type of pitch transposition
 	pitchCase = case
@@ -632,7 +651,7 @@ SystemClock.play(~audifyRout);
 		newPitch = ~pitchShiftValPrev_freq;
 	};
 	~pitchShiftValTarget_freq = newPitch; //set target pitch to shift to
-	//(" | targetPitch_freq=" + ~pitchShiftValTarget_freq).postln;
+	//("====PITCH SHIFT - targetPitch =" + ~pitchShiftValTarget_freq).postln;
 
 	if (newPitch != ~pitchShiftValPrev_freq, { //if newPitch isn't the same as the last...
 		var thisDangoRandomNum;
@@ -645,8 +664,7 @@ SystemClock.play(~audifyRout);
 		~updateGUI_freq.reset;
 		AppClock.play(~updateGUI_freq);
 
-		(interpTime + 0.1).yield; //<----IS IT ALWAYS NECESSARY TO ADD 0.1 to accommodate Synth interp? ?????????????????
-		//1.3.yield; //keep or no!??? <-----
+		(interpTime + 0.1).yield; //<----IS IT NECESSARY TO ADD 0.1 to accommodate Synth interp?
 
 		~pitchInterp_freq = false;
 		//("*****pitchInterp=" + ~pitchInterp_rate).postln;
@@ -661,97 +679,179 @@ SystemClock.play(~audifyRout);
 	} , { //ELSE
 		time2nextRandomize = rrand(4, 10);  //if newPitch == last pitch
 	} );
+
+	if (~pitchShiftValTarget_freq == 0, { //if current pShift val == 0, turn pShiftMix to 0%
+		var currentMixVal, interpMix;
+		currentMixVal = ~pitchShiftMixValBus.getSynchronous.round(0.01);
+		interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, currentMixVal, \stopVal, 0, \duration, 0.25] );
+		~pitchShiftMix_interp = true;
+		~updateGUI_pitchShiftMix.reset;
+		AppClock.play(~updateGUI_pitchShiftMix);
+		0.35.yield; //+0.1 longer than duration in above interpMix synth, maybe not necessary to add 0.1...
+		~pitchShiftMix_interp = false;
+		~updateGUI_pitchShiftMix.stop;
+		~pitchShiftMix_prev = 0;
+	});
+
+	~pitchShiftValPrev_freq = ~pitchShiftValTarget_freq; //<---don't like this, but need until I devise better solution...
+
 	~time2NextRandom_freq = time2nextRandomize; //for populating GUI
+	//("---->TIME 2 NEXT RAND - PITCH SHIFT =" + time2nextRandomize.round(0.01)).postln;
 	time2nextRandomize.yieldAndReset;
 } );
 
-~randomRoutine_pitchShiftMix = Routine.new ( {
-	var time2nextRandomize, randNum, mixCase, interpMix, interpTime;
+~randomRoutine_pitchShiftMix = Routine.new ({
+	var time2nextRandomize, currentPitch, randNum, mixCase, interpMix, interpTime;
 
-	~pitchShiftMixValBus.get( {
-		arg val;
-		~pitchShiftMix_prev = val;
-	} );
+	/*~pitchBus.get({|val|
+		currentPitch = val.ratiomidi.round(0.01); //convert pitch ratio to transposition value in semitones
+		("---BEFORE SYNC:  currentPitch =" + currentPitch).postln;
+	}); */
+	//("---AFTER SYNC:  currentPitch =" + currentPitch).postln;
 
-	//!!!!!CONSIDER ALSO GETTING CURRENT pitchShift value....if == 0 make mixVal = 0
+	//currentPitch = ~pitchBus.getSynchronous.ratiomidi.round(0.01); //<----NEW (WATCH OUT, DON'T GET FROM SAME BUS FROM TWO ROUTINES AT ONCE!!!!)
 
-	0.1.yield; //<<<<<works, but not sure if ideal way...
+	currentPitch = ~pitchShiftValPrev_freq; //<---use this instead of getting from pitchBus
 
-	if (~pitchShiftMix_prev == 0, {  //<-----CONSIDER CHANGING THIS TO CASE INSTEAD BASED ON PRECISE CURRENT VALUE OF PITCH SHIFT MIX TO AVOID NEEDLESS GUI INTERPOLATION ROUTINES-------
-		randNum = rrand(1.0, 10.0);
-		mixCase = case
-		{randNum <= 4} { //set mix to 100%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 1.0, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
+	//("---currentPitch =" + currentPitch).postln;
 
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop;
+	if (currentPitch == 0,
+		{
+			//(">NO PSHIFT - PSHIFT =" + currentPitch).postln;
+			if (~pitchShiftMix_prev > 0, //if PitchShift = 0 but pShiftMix > 0, set pShiftMix to 0
+				{
+					var currentMixVal, cond = Condition.new;
+
+					//~pitchShiftMixValBus.get({|val| currentMixVal = val;});
+					//0.2.yield; //<----not ideal
+
+					//currentMixVal = ~pitchShiftMixValBus.getSynchronous.round(0.01); //<---NEW (consider)
+
+					~pitchShiftMixValBus.get({|val| //<---DO THIS IF STICKING W/ GET...
+						currentMixVal = val.round(0.01);
+						cond.unhang;
+						//("---->pShiftMix - GET - UNHANG").postln;
+					});
+					//("---->pShiftMix - PRE-HANG").postln;
+					cond.hang;
+
+					if (currentMixVal > 0, { //if current pShiftMix val > 0%, set it to 0%
+						//("--PSHIFT == 0 - pShiftMix =" + currentMixVal + "SET pShiftMix to 0%").postln;
+						interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, currentMixVal, \stopVal, 0, \duration, 0.25] );
+						~pitchShiftMix_interp = true;
+						~updateGUI_pitchShiftMix.reset;
+						AppClock.play(~updateGUI_pitchShiftMix);
+						0.35.yield; //+0.1 longer than duration in above interpMix synth, maybe not necessary to add 0.1...
+						~pitchShiftMix_interp = false;
+						~updateGUI_pitchShiftMix.stop;
+						~pitchShiftMix_prev = 0;
+					}, {//else if current pShiftMix == 0%, update env variable to stop querying server for its value...
+						//("--PSHIFT == 0 - pShiftMix =" + currentMixVal + "SET pShiftMix to 0%").postln;
+						~pitchShiftMix_prev = 0;
+					});
+					1.yieldAndReset;
+				},
+				{
+					//("--pShiftMixAlready 0%, nothing to do...").postln;
+					2.yieldAndReset;
+				}
+			);
+		},
+		{
+			var cond = Condition.new; //<---NEW (if using .get method instead of .getSync)
+			//(">PSHIFT DETECTED - PSHIFT =" + currentPitch + "- CHANGING PSHIFTMIX---").postln;
+
+			//~pitchShiftMixValBus.get({|val| ~pitchShiftMix_prev = val;});
+			//0.2.yield; //<---not ideal
+
+			//~pitchShiftMix_prev = ~pitchShiftMixValBus.getSynchronous.round(0.01); //<---NEW (consider)
+
+			~pitchShiftMixValBus.get({|val| //<---DO THIS IF STICKING W/ GET...
+				~pitchShiftMix_prev = val.round(0.01);
+				cond.unhang;
+				//("---->pShiftMix - GET - UNHANG").postln;
+			});
+			//("---->pShiftMix - PRE-HANG").postln;
+			cond.hang;
+
+			if (~pitchShiftMix_prev == 0, { //if current pShiftMix val == 0%
+				randNum = rrand(1.0, 10.0).round(0.01);
+				mixCase = case
+				{randNum <= 4} { //set mix to 100%
+					interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
+					interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 1.0, \duration, interpTime] );
+					~pitchShiftMix_interp = true;
+					~updateGUI_pitchShiftMix.reset;
+					AppClock.play(~updateGUI_pitchShiftMix);
+					(interpTime + 0.1).yield;
+					~pitchShiftMix_interp = false;
+					~updateGUI_pitchShiftMix.stop;
+					//~pitchShiftMix_prev = 1; //<--- only implement this if its decided to maintain current mixVal in env variable globally throughout code....would need to update throughout...
+				}
+				{randNum > 4 && randNum <= 7} { //set mix to 50%
+					interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
+					interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0.5, \duration, interpTime] );
+					~pitchShiftMix_interp = true;
+					~updateGUI_pitchShiftMix.reset;
+					AppClock.play(~updateGUI_pitchShiftMix);
+					(interpTime + 0.1).yield;
+					~pitchShiftMix_interp = false;
+					~updateGUI_pitchShiftMix.stop
+				};
+				//else if randNum > 7, leave mix at 0%
+			} , { //else if current pitchShiftMix > 0%
+				randNum = rrand(1.0, 10.0).round(0.01);
+				mixCase = case
+				{randNum <= 4} { //set mix to 100%
+					if (~pitchShiftMix_prev != 1, //if pShiftMix isn't already 100%, interp to 100%...
+						{
+							interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
+							interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 1.0, \duration, interpTime] );
+							~pitchShiftMix_interp = true;
+							~updateGUI_pitchShiftMix.reset;
+							AppClock.play(~updateGUI_pitchShiftMix);
+							(interpTime + 0.1).yield;
+							~pitchShiftMix_interp = false;
+							~updateGUI_pitchShiftMix.stop
+						}//,
+						//{">>>PshiftMix 100% selected. Already at 100%. No interp initiated...".postln;} //else if already 100%
+					);
+				}
+				{randNum > 4 && randNum <= 7} { //set mix to 50%
+					if (~pitchShiftMix_prev != 0.5, //if pShiftMix isn't already 50%, interp to 50%
+						{
+							interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
+							interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0.5, \duration, interpTime] );
+							~pitchShiftMix_interp = true;
+							~updateGUI_pitchShiftMix.reset;
+							AppClock.play(~updateGUI_pitchShiftMix);
+							(interpTime + 0.1).yield;
+							~pitchShiftMix_interp = false;
+							~updateGUI_pitchShiftMix.stop
+						}//,
+						//{">>>PshiftMix 50% selected. Already at 50%. No interp initiated...".postln;} //else if already 50%
+					);
+				}
+				{randNum > 7} { //set mix to 0%
+					interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
+					interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0, \duration, interpTime] );
+					~pitchShiftMix_interp = true;
+					~updateGUI_pitchShiftMix.reset;
+					AppClock.play(~updateGUI_pitchShiftMix);
+					(interpTime + 0.1).yield;
+					~pitchShiftMix_interp = false;
+					~updateGUI_pitchShiftMix.stop
+				};
+			} );
+
+			time2nextRandomize = rrand(5, 15).round(0.01);
+			//time2nextRandomize = rrand(3, 6).round(0.01);
+			//("----> TIME 2 NEXT - PSHIFTMIX RAND =" + time2nextRandomize).postln;
+			~time2NextRandom_pitchShiftMix = time2nextRandomize;
+			time2nextRandomize.yieldAndReset;
 		}
-		{randNum > 4 && randNum <= 7} { //set mix to 50%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0.5, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		};
-		//else if randNum > 7, leave mix at 0%
-
-	} , { //else if pitchShiftMix != 0
-		randNum = rrand(1.0, 10.0);
-		mixCase = case
-		{randNum <= 4} { //set mix to 100%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 1.0, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		}
-		{randNum > 4 && randNum <= 7} { //set mix to 50%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0.5, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		}
-		{randNum > 7} { //set mix to 0%
-			interpTime = rrand(0.25, 5.0); //("interpTime=" + interpTime).postln;
-			interpMix = Synth(\LinInterp_num, [\out, ~pitchShiftMixValBus, \startVal, ~pitchShiftMix_prev, \stopVal, 0, \duration, interpTime] );
-			~pitchShiftMix_interp = true;
-			~updateGUI_pitchShiftMix.reset;
-			AppClock.play(~updateGUI_pitchShiftMix);
-			(interpTime + 0.1).yield;
-
-			~pitchShiftMix_interp = false;
-			~updateGUI_pitchShiftMix.stop
-		};
-	} );
-
-	time2nextRandomize = rrand(5, 20);
-	~time2NextRandom_pitchShiftMix = time2nextRandomize;
-	time2nextRandomize.yieldAndReset;
-
-	//------more complicated chance and time based method-------
-
-	//currentTime = Date.localtime;
-	//~pitchShiftMix_prevChangeTime = currentTime.rawSeconds;
-} );
-
+	);
+});
 
 ~randomRoutine_outputLevel = Routine.new ( {  //randomly adjust main output level (crude anti-feedback measure)
 	var time2nextRandomize, randNum, interpLevel, interpTime;
@@ -762,7 +862,7 @@ SystemClock.play(~audifyRout);
 		~outMainLevVal_prev = val;
 		//("--OutputLvlRtn: CURRENTLVL =" + val).postln;
 	} );
-	0.1.yield; //<<<<<works, but not sure if ideal way...
+	0.1.yield; //<<<<<works, but not ideal way...
 
 	if (~outMainLevVal_prev < 1.0, { //if outMainLevel is 0 or less than 1, SET LVL BACK TO 1
 		//("--CASE1-SET LVL TO 1: outLevelPrev=" + ~outMainLevVal_prev).postln;
@@ -777,7 +877,7 @@ SystemClock.play(~audifyRout);
 		~updateGUI_outMainLevel.reset;
 		AppClock.play(~updateGUI_outMainLevel);
 
-		(interpTime + 0.1).yield; //<----IS IT ALWAYS NECESSARY TO ADD 0.1 to accommodate Synth interp?
+		(interpTime + 0.1).yield; //<----probs not necessary  to add 0.1 to accommodate Synth interp.....
 
 		~outMainLevInterp = false;
 		~updateGUI_outMainLevel.stop;
@@ -838,44 +938,60 @@ SystemClock.play(~audifyRout);
 } );
 
 ~randomRoutine_reverse = Routine.new ( {
-	var time2nextRandomize, thisRandomNum;
-	thisRandomNum = rrand(1.0, 10.0);
+	var time2nextRandomize, thisRandomNum, revState, cond = Condition.new;
+	thisRandomNum = rrand(1.0, 10.0).round(0.01);
 	//("randRoutine: randNum=" + thisRandomNum).postln;
-	if (~button_rev.value == 0, { //if REVERSE disabled
-		if (thisRandomNum <= 3.2, { //32% chance REVERSE enabled
-			~button_rev.valueAction_(1);
-			//~revRateBusMon.set(-1); // <--DO THIS instead of valueAction !!!!!!!!!!
-			//~button_rev.value_(1); // <--DO THIS instead of valueAction !!!!!!!!!!!!
+
+	~revRateBusMon.get({|val|
+		revState = val.round(1);
+		cond.unhang;
+		//("---->RANDREV - GET - UNHANG").postln;
+	});
+	//("---->RANDREV - PRE-HANG").postln;
+	cond.hang;
+
+	if (revState > 0, { //if REVERSE disabled //reverse disabled when ~revRateBusMon == 1
+		if (thisRandomNum <= 3.5, { //35% chance REVERSE enabled
+			var revRate = ~pitchShiftValPrev_rate.midiratio * -1;
+			~rateBus.set(revRate);
+			~revRateBusMon.set(-1);
+			~button_rev.value_(1);
 			thisRandomNum = rrand(1, 10);
 			//("***thisRandNum-reroll" + thisRandomNum).postln;
 			if (thisRandomNum <= 8,
-				{time2nextRandomize = rrand(3.5, 6.0);},
-				{time2nextRandomize = rrand(6.0, 10.0);} );
-			//("time2NextRand=" + time2nextRandomize).postln;
+				{time2nextRandomize = rrand(3.5, 6.0).round(0.01);},
+				{time2nextRandomize = rrand(6.0, 10.0).round(0.01);} );
+			//("--> RAND REV: REV ENABLED").postln;
+			//("---> RAND REV: time2NextRand=" + time2nextRandomize).postln;
 			time2nextRandomize.yieldAndReset;
 		}, { //71% chance REVERSE remains disabled
-			time2nextRandomize = rrand(9, 20);
-			//("time2NextRand=" + time2nextRandomize).postln;
+			time2nextRandomize = rrand(9, 20).round(0.01);
+			//time2nextRandomize = rrand(3, 6).round(0.01);
+			//("--> RAND REV: REV REMAINS DISABLED").postln;
+			//("---> RAND REV: time2NextRand=" + time2nextRandomize).postln;
 			time2nextRandomize.yieldAndReset;
 		} );
 	}, { //if REVERSE enabled
-		if (thisRandomNum <= 9, {
-			~button_rev.valueAction_(0); //90% chance REVERSE disabled
-			//~revRateBusMon.set(1); // <--DO THIS instead of valueAction !!!!!!!!!!
-			//~button_rev.value_(0); // <--DO THIS instead of valueAction !!!!!!!!!!!!
-
-			time2nextRandomize = rrand(9, 20);
-			//("time2NextRand=" + time2nextRandomize).postln;
+		if (thisRandomNum < 9, {//80% chance REVERSE disabled
+			var currentRate = ~pitchShiftValPrev_rate.midiratio.abs; //.abs just to ensure it's positive rate value
+			~rateBus.set(currentRate);
+			~revRateBusMon.set(1);
+			~button_rev.value_(0);
+			time2nextRandomize = rrand(9, 20).round(0.01);
+			//time2nextRandomize = rrand(3, 6).round(0.01);
+			//("--> RAND REV: REV DISABLED").postln;
+			//("---> RAND REV: time2NextRand=" + time2nextRandomize).postln;
 			time2nextRandomize.yieldAndReset;
-		}, {
-			time2nextRandomize = rrand(3.0, 5.0); //20% chance REVERSE remains enabled
-			//("time2NextRand=" + time2nextRandomize).postln;
+		}, {//20% chance REVERSE remains enabled
+			time2nextRandomize = rrand(3.0, 5.0).round(0.01);
+			//("--> RAND REV: REV REMAINS ENABLED").postln;
+			//("---> RAND REV: time2NextRand=" + time2nextRandomize).postln;
 			time2nextRandomize.yieldAndReset;
 		} );
 	} );
 } );
 
-
+//<-------UPDATE this routine to be consistent w/ others (no conditionals based on GUI objects & safer .get methods)
 ~randomRoutine_playHeadBehavior = Routine.new ( { //Randomize playHead behavior (Following or Random)
 
 //CONSIDER AUGMENTING EVENTUALLY to be aware of current rate and pitchShift values (so it can avoid feedback if randomRate or randomPitch routines not enabled by disabling playRecOffset if this is the case, for example) AAAANNDD ALSO BE AWARE OF previous and current playBehavior states to more intelligently govern probability of transitioning to new state (e.g. if previously was at randomState, increase the chances of reverting back to followPlayhead state upon next state change)
@@ -910,7 +1026,7 @@ SystemClock.play(~audifyRout);
 			//(" | lastPlayPhasePos=" + ~lastPlayPhasePos).postln;
 		} );
 
-		0.1.yield;
+		0.1.yield; //<----works, but not ideal use Condition.hang/unhang w/ .get or .getSync instead
 
 		offsetSec = rrand(minOffsetSec, maxOffsetSec); //generate random offset value (in seconds)
 		//("offsetSec=" + offsetSec).postln;
@@ -976,7 +1092,7 @@ SystemClock.play(~audifyRout);
 ~playHeadFollowRecHead = Routine.new( {  //set playhead based on current RecHead-PlayHead offset AND playback Rate value --- used in ~randomRoutine_playHeadBehavior
 	//"**playRecOffsetIsGoing**  ".post;
 	//("revFlag=" + ~reverseFlag).postln;
-	if ((~pitchInterp_rate == false) && (~button_rev.value == 0) /*&& (~pitchInterp_freq == false) */, { //<---ADDED reverse & pitchInterp detection---
+	if ((~pitchInterp_rate == false) && (~button_rev.value == 0) /*&& (~pitchInterp_freq == false) */, { //<---ADDED reverse & pitchInterp detection---DON'T USE GUI OBJECT FOR CONDITION, POLL CONTROL BUS<----------
 		var currentTimeOffset, newOffsetPos, newOffsetAmount, pitchCase;
 
 		~phaseBusMonRec.get( {
