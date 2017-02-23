@@ -372,7 +372,7 @@
 			});
 		});
 
-		//0.25.yield; //<---consider slight yield here to avoid Buffer.read error?
+		0.25.yield; //slight yield to give enough time to read last buffer and avoid Buffer.read error
 
 		for (fileStart, (fileNum - 1), {|i|  //free all buffers
 			("~buf" ++ i ++ ".free").interpret;
@@ -515,7 +515,24 @@ SystemClock.play(~audifyRout);
 	0.1.yieldAndReset;
 } );
 
-~updateGUI_outMainLevel = Routine.new ( {
+
+~updateGUI_sub1 = Routine.new ({ //<--- will eventually optimize this & turn into a function w/ env variables and assigned GUI objects as args...
+	var level;
+	level = ~inputStreamLevelBus.getSynchronous;
+	~slider_inFlow1_level.value_(level);
+	~numBox_inFlow1_level.value_(level);
+	0.1.yieldAndReset;
+});
+
+~updateGUI_sub2 = Routine.new ({ //<--- will eventually optimize this & turn into a function w/ env variables and assigned GUI objects as args...
+	var level;
+	level = ~fileOutputLevelBus.getSynchronous;
+	~slider_sampOut_level.value_(level);
+	~numBox_sampOut_level.value_(level);
+	0.1.yieldAndReset;
+});
+
+~updateGUI_outMainLevel = Routine.new ( { //<--- will eventually optimize this & turn into a function w/ env variables and assigned GUI objects as args...
 	~outMainLevelBus.get( {
 		arg val;
 		AppClock.sched(0.0, { //this is necessary for some reason...??????

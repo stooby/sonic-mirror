@@ -33,6 +33,10 @@
 ~outMainLevelBus = Bus.control(s, 1);
 ~outMainBus = Bus.audio(s, 1);
 
+~outMainPeakFreq = Bus.control(s, 1);
+~outMainPeakQ = Bus.control(s, 1);
+~outMainPeakGain = Bus.control(s, 1);
+
 // Busses for Feature Extractor Synths (from SCML) ---------------
 
 ~bus_loudness = Bus.control(s, 1);

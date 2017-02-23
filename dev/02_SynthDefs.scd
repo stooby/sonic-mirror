@@ -6,9 +6,10 @@
 (
 //Record audio input to buffer using audio-rate input Phasor to control position in buffer
 SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
-	arg phaseBus, buf, sendBus, loCutoff = 90, rQ = 1, mul = 1;
+	|phaseBus, buf, sendBus, loCut = 90, loCutQ = 1, /*peak = 120, peakQ = 1, peakGain = 0,*/ mul = 1|
 	//var sig = SoundIn.ar(bus: 0, mul: mul);
-	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
+	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCut, rq: loCutQ, mul: mul); //pass SoundIn through HiPass
+	//sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain); //<----consider
 	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
 	//OffsetOut.ar(sendBus, sig);  //would this provide better sample accurate scope plotting and recording?
 	Out.ar(sendBus, sig);
@@ -152,14 +153,15 @@ SynthDef.new(\subMix, {
 	Out.ar(out, sig);
 } ).add;
 
-SynthDef.new(\mainOut, { //w/ Lo-cut
-	|in, loCutoff = 90, rQ = 1, amp = 1|
+SynthDef.new(\mainOut, { //w/ Lo-cut and Peak EQ
+	|in, loCut = 90, loCutQ = 1, amp = 1, peak = 120, peakQ = 1, peakGain = 0|
 	var sig;
-	sig = BHiPass4.ar(In.ar(in), loCutoff, rq: rQ, mul: amp);
+	sig = BHiPass4.ar(In.ar(in), freq: loCut, rq: loCutQ);
+	sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain); //<----NEW
 	//sig = In.ar(in) * amp;
 	//sig = InFeedback.ar(in) * amp;
 	//OffsetOut.ar(0, sig);
-	Out.ar([0, 1], sig);
+	Out.ar([0, 1], sig * amp);
 } ).add;
 
 /*  //<------ADDING ---- Main Out w/ soft Limiter

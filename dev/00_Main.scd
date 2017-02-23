@@ -5,11 +5,12 @@
 ~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
 ~writeSampFromBuf.(~audioBuf0, 58, 8.37);
 
-~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 2, cycle: 4, rate: 36, pitch: -36);
+~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 5, cycle: 1, rate: 6, pitch: -6);
 SystemClock.play(~audifyRout);
 ~audifyRout.stop;
 ~audifyRout.reset;
 s.plotTree;
+
 
 //---- refactor in progress ----
 
@@ -28,6 +29,7 @@ Buffer.freeAll; //for cleanup
 
 ////GLOBAL VARIABLES
 ~sampBitDepth = "int24"; //alt = "int16"  (specify bit depth for all samples recorded by SM)
+~plotterEnabled = true; //set to false for RPi (or until I optimize plotter code, it's not efficient now.
 
 ~audioBuf0_dur = 60.0;
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
@@ -88,23 +90,26 @@ Buffer.freeAll; //for cleanup
 ~play1LevelBus.set(1); //<--NO SLIDER CREATED YET!!!!!....
 ~inputStreamLevelBus.set(1);
 ~fileOutputLevelBus.set(1);
-
 ~outMainLevelBus.set(1);
 
-~phaseBusMonPly.set(0);
-~phaseBusMonRec.set(0);
-
+~outMainPeakFreq.set(120); //<---NEW
+~outMainPeakQ.set(1); //technically reciprocal of Q... <---NEW
+~outMainPeakGain.set(0); //in db  <---NEW
 
 ~loCutVal_in = 90;
 ~loCutVal_out = 90;
 ~loCutBus_in.set(~loCutVal_in);
 ~loCutBus_out.set(~loCutVal_out);
+
+~phaseBusMonPly.set(0);
+~phaseBusMonRec.set(0);
 //-----------------
 
 // --------- SET UP SOME INITIAL SYNTHS? ------------
-~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCutoff, ~loCutBus_out.asMap, \amp, ~outMainLevelBus.asMap]);
+~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCut, ~loCutBus_out.asMap, \loCutQ, 10, \amp, ~outMainLevelBus.asMap, \peak, ~outMainPeakFreq.asMap, \peakQ, ~outMainPeakQ.asMap, \peakGain, ~outMainPeakGain.asMap]);
 //Synth(\pitchShift1)???
 
+~mainOut.set(\loCutQ, 2);
 //-------------------
 
 ////
@@ -117,7 +122,7 @@ w = Window.new("SonicMirror", Rect.new(335, 330, 792, 380), resizable: false)
 w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;}; // clean up when window is closed
 
 ~view_main = CompositeView(w, Rect(3, 3, 788, 380));
-~view_MainLevels = CompositeView(~view_main, Rect(625, 26, 75, 147));
+~view_MainLevels = CompositeView(~view_main, Rect(625, 26, 135, 147));
 ~view_altLevels = CompositeView(~view_main, Rect(693, 26, 68, 105));
 ~view_bufConfig = CompositeView(~view_main, Rect(625, 0, 160, 25));
 ~view_bufPlot = CompositeView(~view_main, Rect(0, 0, 620, 170)).background_(Color.gray).resize_(1);
@@ -230,6 +235,56 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .string_("LoCut-Hz")
 .font_(Font("Monaco", 10) )
 .align_(\left);
+
+~numBox_outMainLoCut= NumberBox(~view_MainLevels, Rect(32, 120, 30, 14))//<---
+.value_(~loCutVal_out)
+.clipLo_(10) //smallest possible length of buffer (in seconds)
+.clipHi_(20000) //longest possible length of buffer (in seconds)
+.font_(Font("Monaco", 8) )
+.decimals_(2)
+.action_( {
+	arg obj;
+	~loCutVal_out = obj.value.round(0.01);
+	~loCutBus_out.set(~loCutVal_out);
+	//~loCutBus_out.setSynchronous([~loCutVal_out]); //??????? for synchronous control? is this better?
+	("***LoCutFreq_out=" ++ ~loCutVal_out ++ "Hz").postln;
+} );
+
+~numBox_outMainPeak= NumberBox(~view_MainLevels, Rect(68, 118, 30, 14))//<--- NEW
+.value_(~outMainPeakFreq.getSynchronous)
+.clipLo_(20) //smallest possible length of buffer (in seconds)
+.clipHi_(20000) //longest possible length of buffer (in seconds)
+.font_(Font("Monaco", 8) )
+.decimals_(0)
+.align_(\center)
+.action_( {
+	arg obj;
+	~outMainPeakFreq.setSynchronous(obj.value.round(1));
+} );
+
+~numBox_outMainPeakGain= NumberBox(~view_MainLevels, Rect(65, 104, 35, 14))//<--- NEW
+.value_(~outMainPeakGain.getSynchronous)
+.clipLo_(-inf) //smallest possible length of buffer (in seconds)
+.clipHi_(12) //longest possible length of buffer (in seconds)
+.font_(Font("Monaco", 8) )
+.decimals_(2)
+.align_(\center)
+.action_( {
+	arg obj;
+	~outMainPeakGain.setSynchronous(obj.value.round(0.01));
+} );
+
+~numBox_outMainPeakQ = NumberBox(~view_MainLevels, Rect(68, 132, 30, 14))//<--- NEW
+.value_(~outMainPeakQ.getSynchronous)
+.clipLo_(0.1) //smallest possible length of buffer (in seconds)
+.clipHi_(100) //longest possible length of buffer (in seconds)
+.font_(Font("Monaco", 8) )
+.decimals_(1)
+.align_(\center)
+.action_( {
+	arg obj;
+	~outMainPeakQ.setSynchronous(obj.value.round(0.1));
+} );
 //------------
 
 //----- AUDIO BUFFER --------
@@ -488,9 +543,43 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 									}
 								);
 							};
-							//{randNum > 9.5} { //5% of time audify sound scene... <-----ADD!!!!
-
-							//};
+							/*{randNum > 9.5} { //5% of time audify sound scene... <---IN PROGRESS, ALMOST DONE...
+								var fileNum, rate, cycle = 1;
+								if (~fileAudio_writeIn_maxNum_exceeded == false,
+									{
+										"[AUDIFY] -- files < maxNum: ".post;
+										fileNum = ~fileAudio_writeIn_nameNum;
+										if (fileNum <= 15,
+											{
+												"fileNum <= 15 | ".post;
+												rate = rrand(12.0, 24.0).round(0.01);
+												("rate =" + rate).postln;
+												if (fileNum <= 6, {cycle = 2; " | cycle = 2".postln;
+												});
+											},
+											{
+												"fileNum > 15 | ".post;
+												rate = rrand(24.0, 36.0).round(0.01);
+												("rate =" + rate).postln;
+											}
+										);
+										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: -rate);
+									},
+									{ //else if we have maximum # of samples saved...
+										"[AUDIFY] -- filesMax Exceeded: ".post;
+										rate = rrand(28.0, 36.0).round(0.01);
+										(" rate =" + rate).postln;
+										fileNum = ~fileAudio_writeIn_maxNum;
+										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: -rate);
+									}
+								);
+								"[AUDIFY] -- STARTING... ".post;
+								SystemClock.play(~audifyRout);
+								0.25.yield; //short yield //<----------- devise way to time longer .yield...
+								//routine updates global variable after starting....
+								//switch state variable to switch to terminating portion of ~autoPlay routine...
+								//~audifyYieldTime.yieldAndReset;
+							};*/
 						}
 					); //<---setup, BUT sample selection conditions could be refined...
 
@@ -893,11 +982,12 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 };
 
 
-/*s.plotTree;
-~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -30, uprThresh: -15, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
-~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon);
+/*
+s.plotTree;
+~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -35, uprThresh: -15, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
+~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon);*/
 //~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1);
-*/
+
 
 
 //<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
@@ -967,11 +1057,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //IN PROGRESS <-------------
 ~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, lastLowThreshTime, rate = 0.1|
 	Routine({
-		var x, cond = Condition.new; //<---NEW
+		var x, thisLoudFlag, cond = Condition.new; //<---NEW
+		thisLoudFlag = loudFlag.envirGet;
 		input.get({|val|
 			x = case
 			{(val >= lowThresh) && (val < uprThresh)} {
 				("-->LOUD SOUND! (low thresh): input db =" + val.round(0.01)).postln;
+				//if (thisLoudFlag == 0,
 				if (loudFlag.envirGet == 0,
 					{
 						var currentTime = Main.elapsedTime.round(0.01);
@@ -1001,10 +1093,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					("-->LOUDNESS STOPPED: input db =" + val.round(0.01)).postln;
 				});
 			};
-			//cond.unhang; <----CONSIDER USING THIS OR .getSync
+			cond.unhang; //<----CONSIDER USING THIS OR .getSync
 		});
-		//cond.hang;
-		s.sync; //<----DON'T USE THIS
+		cond.hang;
+		//s.sync; //<----DON'T USE THIS
 
 		//("-------loudmonroutine-running-------").postln;
 		rate.yieldAndReset;
@@ -1286,7 +1378,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } );
 
 ~label_inFlow1_level = StaticText(~view_altLevels, Rect(0, 94, 30, 8))
-.string_("IN+FX")
+.string_("S1-IN")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
@@ -1317,7 +1409,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 } );
 
 ~label_sampOut_level = StaticText(~view_altLevels, Rect(35, 94, 30, 8) )
-.string_("SAMP")
+.string_("S2-SP")
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
@@ -1336,113 +1428,116 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 
 //-------- PLOTTER ----------//
-GUI.skin.plot.fontColor = Color.red;
-GUI.skin.plot.plotColor = Color.blue;
-GUI.skin.plot.background = Color.black;
-GUI.skin.plot.gridColorX = Color.white;
-GUI.skin.plot.gridColorY = Color.cyan;
-//GUI.skin.plot.gridOnY = false;
-//GUI.skin.plot.gridOnX = false;
+if (~plotterEnabled == true, {
+	GUI.skin.plot.fontColor = Color.red;
+	GUI.skin.plot.plotColor = Color.blue;
+	GUI.skin.plot.background = Color.black;
+	GUI.skin.plot.gridColorX = Color.white;
+	GUI.skin.plot.gridColorY = Color.cyan;
+	//GUI.skin.plot.gridOnY = false;
+	//GUI.skin.plot.gridOnX = false;
 
-~bufPlot = Plotter.new("Buffer", parent: ~view_bufPlot); //CREATE PLOTTER
+	~bufPlot = Plotter.new("Buffer", parent: ~view_bufPlot); //CREATE PLOTTER
 
-~audioBuf0.loadToFloatArray(action: {arg array;
-	{~bufPlot.value = array}.defer; //create bufPlot matrix w/ as many values as buffer (very big...should probably scale this to be smaller more light weight plotter, i.e. divide buffer frames by 10 or 100 to represent average of every 10 - 100ms slices of buffer...
+	~audioBuf0.loadToFloatArray(action: {arg array;
+		{~bufPlot.value = array}.defer; //create bufPlot matrix w/ as many values as buffer (very big...should probably scale this to be smaller more light weight plotter, i.e. divide buffer frames by 10 or 100 to represent average of every 10 - 100ms slices of buffer...
+	});
+
+	{
+		~bufPlot.setProperties(
+			\gridOnY, false,
+			\gridOnX, true
+		);
+		~bufPlot.plotMode = \linear;
+		~bufPlot.domainSpecs = ControlSpec(0, ~audioBuf0_dur);
+		//~bufPlot.resolution = 1; //<---too coarse...
+		~bufPlot.resolution = 0.04; //good compromise for GUI speed, smaller resos (.02, .01) causes GUI to lag...
+		~bufPlot.updatePlots.refresh;
+	}.defer(0.2); //<--if this is any shorter, these properties won't be set for some reason....
+
+	~updateBufPlot_prevUpdateFrame = nil;
+
+	~updateBufPlot = Routine({ //basic incremental buf plotter
+		if (~updateBufPlot_prevUpdateFrame == nil,
+			{//if first time routine's run since program launch
+				var plotDur, currentFrame;
+
+				0.5.yield; //wait for buffer to fill w/ values...
+
+				//then evaluate bufPlot function from frame 0 to currentFrame
+				currentFrame = ~lastRecPhasePos;
+
+				//plotDur = ~lastRecPhasePos + 1; //inclusive of frame 0
+				plotDur = currentFrame + 1; //inclusive of frame 0
+				~audioBuf0.loadToFloatArray(index: 0, count: plotDur, action: {|array|
+					{
+						//(">>>INIT PLOT<<<").postln;
+						//("startFrame: 0 | count:" + plotDur + "| stopFrame:" + currentFrame).postln;
+						array.collect({|item, i| ~bufPlot.value[i] = item;});
+						~bufPlot.updatePlots.refresh;
+						//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
+						~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
+					}.defer;
+				});
+			},
+			{//else if routine's been running: plot from prevUpdateFrame+1 to currentFrame
+				var startFrame, currentFrame;
+
+				startFrame = ~updateBufPlot_prevUpdateFrame + 1;
+				if (startFrame >= ~audioBuf0.numFrames, {startFrame = 0;}); //if ~prevUpdateFrame == lastBufFrame, wrap around to 0
+				currentFrame = ~lastRecPhasePos; //store in local var b/c env var frequently updated by other routine
+
+				//if(~lastRecPhasePos > startFrame,
+				if (currentFrame > startFrame,
+					{//simple contiguous span
+						var plotDur;
+						//plotDur = ~lastRecPhasePos - ~updateBufPlot_prevUpdateFrame; //inclusive of startFrame
+						plotDur = currentFrame - ~updateBufPlot_prevUpdateFrame; //inclusive of startFrame
+						~audioBuf0.loadToFloatArray(index: startFrame, count: plotDur, action: {|array|
+							{
+								//(">>>SIMPLE PLOT<<<").postln;
+								//("startFrame:" + startFrame + "| count:" + plotDur + "| stopFrame:" + currentFrame).postln;
+								array.collect({|item, i| ~bufPlot.value[startFrame + i] = item;});
+								~bufPlot.updatePlots.refresh;
+								//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
+								~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
+							}.defer;
+						});
+					},
+					{//wrapped around buffer, two chunks...
+						var chunk1Dur, chunk2Dur;
+						chunk1Dur = ~audioBuf0.numFrames - startFrame; //dur from start frame to last buf frame (inclusive of startFrame)
+						//chunk2Dur = ~lastRecPhasePos + 1; //dur from frame 0 to lastRecPhasePos (inclusive of frame 0)
+						chunk2Dur = currentFrame + 1; //dur from frame 0 to lastRecPhasePos (inclusive of frame 0)
+
+						//plot from startFrame to lastBufFrame
+						~audioBuf0.loadToFloatArray(index: startFrame, count: chunk1Dur, action: {|array|
+							{
+								//(">>>WRAP PLOT<<<").postln;
+								//("CHUNK1 - startFrame:" + startFrame + "| chunk1Dur:" + chunk1Dur).postln;
+								array.collect({|item, i| ~bufPlot.value[startFrame + i] = item;});
+							}.defer;
+						});
+
+						//plot from frame 0 to ~lastRecPhasePos
+						~audioBuf0.loadToFloatArray(index: 0, count: chunk2Dur, action: {|array|
+							{
+								//("CHUNK2 - startFrame: 0" + "| count:" + chunk2Dur + "| stopFrame:" + currentFrame).postln;
+								//("TOTAL - startFrame:" + startFrame + "| dur:" + (chunk1Dur + chunk2Dur) + "| stopFrame:" + currentFrame).postln;
+								array.collect({|item, i| ~bufPlot.value[i] = item;});
+								~bufPlot.updatePlots.refresh;
+								//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
+								~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
+							}.defer;
+						});
+					}
+				);
+			}
+		);
+		0.5.yieldAndReset;
+	});
 });
 
-{
-	~bufPlot.setProperties(
-		\gridOnY, false,
-		\gridOnX, true
-	);
-	~bufPlot.plotMode = \linear;
-	~bufPlot.domainSpecs = ControlSpec(0, ~audioBuf0_dur);
-	//~bufPlot.resolution = 1; //<---too coarse...
-	~bufPlot.resolution = 0.04; //good compromise for GUI speed, smaller resos (.02, .01) causes GUI to lag...
-	~bufPlot.updatePlots.refresh;
-}.defer(0.2); //<--if this is any shorter, these properties won't be set for some reason....
-
-~updateBufPlot_prevUpdateFrame = nil;
-
-~updateBufPlot = Routine({ //basic incremental buf plotter
-	if (~updateBufPlot_prevUpdateFrame == nil,
-		{//if first time routine's run since program launch
-			var plotDur, currentFrame;
-
-			0.5.yield; //wait for buffer to fill w/ values...
-
-			//then evaluate bufPlot function from frame 0 to currentFrame
-			currentFrame = ~lastRecPhasePos;
-
-			//plotDur = ~lastRecPhasePos + 1; //inclusive of frame 0
-			plotDur = currentFrame + 1; //inclusive of frame 0
-			~audioBuf0.loadToFloatArray(index: 0, count: plotDur, action: {|array|
-				{
-					//(">>>INIT PLOT<<<").postln;
-					//("startFrame: 0 | count:" + plotDur + "| stopFrame:" + currentFrame).postln;
-					array.collect({|item, i| ~bufPlot.value[i] = item;});
-					~bufPlot.updatePlots.refresh;
-					//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
-					~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
-				}.defer;
-			});
-		},
-		{//else if routine's been running: plot from prevUpdateFrame+1 to currentFrame
-			var startFrame, currentFrame;
-
-			startFrame = ~updateBufPlot_prevUpdateFrame + 1;
-			if (startFrame >= ~audioBuf0.numFrames, {startFrame = 0;}); //if ~prevUpdateFrame == lastBufFrame, wrap around to 0
-			currentFrame = ~lastRecPhasePos; //store in local var b/c env var frequently updated by other routine
-
-			//if(~lastRecPhasePos > startFrame,
-			if (currentFrame > startFrame,
-				{//simple contiguous span
-					var plotDur;
-					//plotDur = ~lastRecPhasePos - ~updateBufPlot_prevUpdateFrame; //inclusive of startFrame
-					plotDur = currentFrame - ~updateBufPlot_prevUpdateFrame; //inclusive of startFrame
-					~audioBuf0.loadToFloatArray(index: startFrame, count: plotDur, action: {|array|
-						{
-							//(">>>SIMPLE PLOT<<<").postln;
-							//("startFrame:" + startFrame + "| count:" + plotDur + "| stopFrame:" + currentFrame).postln;
-							array.collect({|item, i| ~bufPlot.value[startFrame + i] = item;});
-							~bufPlot.updatePlots.refresh;
-							//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
-							~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
-						}.defer;
-					});
-				},
-				{//wrapped around buffer, two chunks...
-					var chunk1Dur, chunk2Dur;
-					chunk1Dur = ~audioBuf0.numFrames - startFrame; //dur from start frame to last buf frame (inclusive of startFrame)
-					//chunk2Dur = ~lastRecPhasePos + 1; //dur from frame 0 to lastRecPhasePos (inclusive of frame 0)
-					chunk2Dur = currentFrame + 1; //dur from frame 0 to lastRecPhasePos (inclusive of frame 0)
-
-					//plot from startFrame to lastBufFrame
-					~audioBuf0.loadToFloatArray(index: startFrame, count: chunk1Dur, action: {|array|
-						{
-							//(">>>WRAP PLOT<<<").postln;
-							//("CHUNK1 - startFrame:" + startFrame + "| chunk1Dur:" + chunk1Dur).postln;
-							array.collect({|item, i| ~bufPlot.value[startFrame + i] = item;});
-						}.defer;
-					});
-
-					//plot from frame 0 to ~lastRecPhasePos
-					~audioBuf0.loadToFloatArray(index: 0, count: chunk2Dur, action: {|array|
-						{
-							//("CHUNK2 - startFrame: 0" + "| count:" + chunk2Dur + "| stopFrame:" + currentFrame).postln;
-							//("TOTAL - startFrame:" + startFrame + "| dur:" + (chunk1Dur + chunk2Dur) + "| stopFrame:" + currentFrame).postln;
-							array.collect({|item, i| ~bufPlot.value[i] = item;});
-							~bufPlot.updatePlots.refresh;
-							//~updateBufPlot_prevUpdateFrame = ~lastRecPhasePos; //set prevUpdateFrame to currentFrame
-							~updateBufPlot_prevUpdateFrame = currentFrame; //set prevUpdateFrame to currentFrame
-						}.defer;
-					});
-				}
-			);
-		}
-	);
-	0.5.yieldAndReset;
-});
 
 //----------
 
@@ -1475,7 +1570,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec); //<--don't fully understand why this allows me to monitor phasor value and why I can't do so by getting value of ~phaseBusRec (doing so always outputs 1)...
 
-			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCutoff, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
+			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCut, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
 
 			NodeWatcher.register(~bufRecorder); //this ensures all synths associated w/ buf play back are positioned after all these buf recording synths in the node-tree, no matter when they're created
 
@@ -1486,8 +1581,10 @@ GUI.skin.plot.gridColorY = Color.cyan;
 			AppClock.play(~getBus_updateGUI_recPhase);
 
 			//////PLOTTER ----------
-			~updateBufPlot.reset;
-			AppClock.play(~updateBufPlot);
+			if (~plotterEnabled == true, {
+				~updateBufPlot.reset;
+				AppClock.play(~updateBufPlot);
+			});
 
 			/*
 			//////////////SCOPE
@@ -1512,7 +1609,7 @@ GUI.skin.plot.gridColorY = Color.cyan;
 
 			~getBus_updateGUI_recPhase.stop;
 
-			~updateBufPlot.stop;  //PLOTTER
+			if (~plotterEnabled == true, {~updateBufPlot.stop;});  //PLOTTER
 
 			/*
 			 ///FOR SCOPE
