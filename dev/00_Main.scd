@@ -106,10 +106,8 @@ Buffer.freeAll; //for cleanup
 //-----------------
 
 // --------- SET UP SOME INITIAL SYNTHS? ------------
-~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCut, ~loCutBus_out.asMap, \loCutQ, 10, \amp, ~outMainLevelBus.asMap, \peak, ~outMainPeakFreq.asMap, \peakQ, ~outMainPeakQ.asMap, \peakGain, ~outMainPeakGain.asMap]);
+~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCut, ~loCutBus_out.asMap, \loCutQ, 2, \amp, ~outMainLevelBus.asMap, \peak, ~outMainPeakFreq.asMap, \peakQ, ~outMainPeakQ.asMap, \peakGain, ~outMainPeakGain.asMap]);
 //Synth(\pitchShift1)???
-
-~mainOut.set(\loCutQ, 2);
 //-------------------
 
 ////
@@ -250,6 +248,13 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	("***LoCutFreq_out=" ++ ~loCutVal_out ++ "Hz").postln;
 } );
 
+~label_peakEQ = StaticText(~view_MainLevels, Rect(101, 106, 25, 38) )//<---
+.string_("db
+Peak
+Q")
+.font_(Font("Monaco", 10) )
+.align_(\left);
+
 ~numBox_outMainPeak= NumberBox(~view_MainLevels, Rect(68, 118, 30, 14))//<--- NEW
 .value_(~outMainPeakFreq.getSynchronous)
 .clipLo_(20) //smallest possible length of buffer (in seconds)
@@ -337,6 +342,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~currentScene = "quiet"; //sound scene index (0 = quiet, 1 = sparse transient sounds, 2 = drone, 3 = noise.........?)
 
 ~playSamp = false; //<--- flag:  playing audio file from disk
+~playAudify = false; //flag: audify sound routine active...  <---NEW
+~trigAudify = false; //flag: tracks whether or not audifyScene routine just triggered... <----NEW
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
@@ -413,16 +420,22 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~autoPlay_soundTrigAuto = Routine({
 	if (~playSamp == true,
 		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
-			~playSamp = false;
-			~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
-			//~audioBuf_play0.close; //not needed? didn't fix bug....
-			~audioBuf_play0.free;
-			{~button_playSamp.value = 0;}.defer; //update GUI button
-			~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
-			0.1.yieldAndReset;
+			if (~playAudify == true, { //check flag to see if audification in progress <----NEW
+				">>>>AUDIFY IN PROGRESS...<<<<".postln;
+				0.2.yieldAndReset;
+			}, { //else if ~playAudify == false
+				">>>>NO AUDIFICATION IN PROGRESS...<<<<".postln;
+				~playSamp = false;
+				~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
+				if (~trigAudify == true, {~trigAudify = false;}, {~audioBuf_play0.free;}); //<---NEW (to avoid error caused by freeing nonexistant ~audioBuf_play0 after ~audifyRout plays...
+				//~audioBuf_play0.free;
+
+				{~button_playSamp.value = 0;}.defer; //update GUI button
+				~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
+				0.1.yieldAndReset;
+			});
 		},
 		{//if not playing a soundFile or autoRecording...
-			//if (((~recSamp_input == false) && (~fileAudio_writeIn_nameNum >= ~minNumFilesB4Playback) && (~autoRecPlay_state == 1)), //second condition ~minNumFilesB4Playback kills playback after filename wraparound
 			if (((~recSamp_input == false) && (~autoRecPlay_state == 1)), //only play back sounds if not recording...
 				{
 					//PLAYBACK AUDIO FILE FROM DISK
@@ -432,26 +445,10 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 					//---e.g. routines checking machine listening ugen output control busses...
 
 					~playSamp = true; //set flag
-					//pitch = 1; //<--
-					//mix = 0; //<--
-
-					/*
-					//<--- this chunk no longer necessary???
-					if (~bufPlayer.isRunning, { //if playing buffer audio, silence it for audio sample playback
-					//get current signal flow/chain level val from ~inputStreamLevelBus and assign to local variable used for \startVal arg in interpSynth below...
-					interpSynth = Synth(\LinInterp_num, [\startVal, 1.0, \stopVal, 0.0, \duration, 0.2, \out, ~inputStreamLevelBus]); //silence input stream in 0.2 sec (***startVal should probs = variable storing current value of inputStreamLevel***
-					{~slider_inFlow1_level.value = 0;}.defer;  //update GUI
-					{~numBox_inFlow1_level.value = 0;}.defer; //update GUI
-					("~bufPlayer.isRunning - 0.2.yield").postln;
-					0.2.yield;
-					});
-					*/
-					//("--after checking ~bufPlayer.isRunning").postln;
 
 					//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
 
 					//>-----FILE SELECTION CONDITIONS --- (basics implemented, could be refined)
-
 					///-----vvvvvvv---------NEW--------vvvvvv---------///////
 					currentTime = Main.elapsedTime.round(0.001);
 					if (currentTime <= (~time_lastRec_stop + 5),
@@ -484,8 +481,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 									//".....safe-driving...playing last rec file".postln;
 								});
 							}
-							{randNum > 9} { //10% of time play older or random file....
-							//{randNum > 9 && randNum <= 9.5} { //5% of time play older or random file....
+							//{randNum > 9} { //10% of time play older or random file....
+							{randNum > 9 && randNum <= 9.5} { //5% of time play older or random file....
 								//("---->PLAYING OLDER / RAND FILE (5%):").postln;
 								if (~fileAudio_writeIn_maxNum_exceeded == false,
 									{
@@ -542,9 +539,11 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 										});
 									}
 								);
-							};
-							/*{randNum > 9.5} { //5% of time audify sound scene... <---IN PROGRESS, ALMOST DONE...
+							} //;
+							//{randNum > 0} {
+							{randNum > 9.5} { //5% of time audify sound scene... <---NEW
 								var fileNum, rate, cycle = 1;
+								~trigAudify = true;
 								if (~fileAudio_writeIn_maxNum_exceeded == false,
 									{
 										"[AUDIFY] -- files < maxNum: ".post;
@@ -563,26 +562,22 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 												("rate =" + rate).postln;
 											}
 										);
-										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: -rate);
+										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
 									},
 									{ //else if we have maximum # of samples saved...
 										"[AUDIFY] -- filesMax Exceeded: ".post;
 										rate = rrand(28.0, 36.0).round(0.01);
 										(" rate =" + rate).postln;
 										fileNum = ~fileAudio_writeIn_maxNum;
-										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: -rate);
+										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
 									}
 								);
 								"[AUDIFY] -- STARTING... ".post;
 								SystemClock.play(~audifyRout);
-								0.25.yield; //short yield //<----------- devise way to time longer .yield...
-								//routine updates global variable after starting....
-								//switch state variable to switch to terminating portion of ~autoPlay routine...
-								//~audifyYieldTime.yieldAndReset;
-							};*/
+								2.yieldAndReset;
+							};
 						}
-					); //<---setup, BUT sample selection conditions could be refined...
-
+					);
 					///-----^^^^^^^---------NEW--------^^^^^^^---------///////
 
 					//fileDir = ~fileAudio_writeIn_lastFile; //<-------orig

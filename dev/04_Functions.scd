@@ -350,16 +350,21 @@
 	});
 };
 
-~audifyScene1 = {|filePath, ampBus, outBus, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1, overlap = 0.02|
+~audifyScene1 = {|filePath, ampBus, outBus, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1, overlap = 0.02, status|
 	var audifyRoutine, thisRate, thisPitch;
 	thisRate = rate.asFloat.round(0.01).midiratio;
 	thisPitch = pitch.asFloat.round(0.01).midiratio;
 
 	audifyRoutine = Routine({
+		status.envirPut(true); //<---NEW
+
 		for (fileStart, (fileNum - 1), {|i|
 			("~buf" ++ i ++ "= ~sampBuf.(~fileAudio_writeIn_lastPath," ++ i ++ "," ++ thisRate ++ ")" ).interpret;
 		});
-		s.sync; //<----DON'T USE .SYNC,
+
+		//could sum all buffer durations to predict when audification will be complete...
+
+		s.sync; //<----CONSIDER CONDITION.HANG INSTEAD OF S.SYNC
 
 		cycle.do({ //trigger synths (one per sample played)
 			for (fileStart, (fileNum - 1), {|i|
@@ -372,7 +377,9 @@
 			});
 		});
 
-		0.25.yield; //slight yield to give enough time to read last buffer and avoid Buffer.read error
+		status.envirPut(false); //<---NEW
+
+		0.2.yield; //slight yield to give enough time to read last buffer and avoid Buffer.read error
 
 		for (fileStart, (fileNum - 1), {|i|  //free all buffers
 			("~buf" ++ i ++ ".free").interpret;
