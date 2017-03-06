@@ -29,7 +29,7 @@ Buffer.freeAll; //for cleanup
 
 ////GLOBAL VARIABLES
 ~sampBitDepth = "int24"; //alt = "int16"  (specify bit depth for all samples recorded by SM)
-~plotterEnabled = true; //set to false for RPi (or until I optimize plotter code, it's not efficient now.
+~plotterEnabled = true; //set to false for RPi (or until I optimize plotter code, it's not efficient now.)
 
 ~audioBuf0_dur = 60.0;
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
@@ -432,7 +432,7 @@ Q")
 
 				{~button_playSamp.value = 0;}.defer; //update GUI button
 				~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
-				0.1.yieldAndReset;
+				0.2.yieldAndReset;
 			});
 		},
 		{//if not playing a soundFile or autoRecording...
@@ -831,269 +831,271 @@ Q")
 	} );
 };
 
-~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceDur = 0.5|
-	Routine( {
-		if (~recSamp_input == true,
-			{
-				// add if (~listening == true, {  }); <---yes or no?
-				var currentTime = Main.elapsedTime.round(0.001);
-				if (currentTime <= ~time_minRec,
-					{
-						("----------").postln;
-						("RECORDING.....").postln;
-						("currentTime:" + currentTime + "< ~time_minRec:" + ~time_minRec).postln;
-					},
-					{
-						featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
-							if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
-								//if (( (val[0] >= ~loudnessThresh) || (val[3] >= ~pitchThresh) ),
-								{//SOUND DETECTED
-									~hearSound = true;
-									//CONTINUE RECORDING / DO NOTHING....
-									("-----=======-----").postln;
-									("**Recording... SOUND DETECTED").postln;
-									("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-								},
-								{//IF NO SOUND DETECTED...
-									if (~hearSound == false,
-										{
-											var currentTime = Main.elapsedTime.round(0.001);
-											if (currentTime >= ~time_listenTimeOut,
-												{
-													//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
-													("--------++++++++-------").postln;
-													("**Recording... SOUND STOP CONFIRMED").postln;
-													("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-
-													~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
-
-													//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
-													//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
-												},
-												{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
-													("----").postln;
-													("**Testing for sound stop...** - Current Time:" + currentTime).postln;
-													("---Terminate Test at:" + ~time_listenTimeOut).postln;
-												}
-											);
-										},
-										{//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
-											~time_listenTimeOut = ~listenDur_intraSound + Main.elapsedTime.round(0.001);
-											("-------").postln;
-											("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
-											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-
-											//GET recHead phasor position and log "STOP  SAMPLE TIME"
-											~phaseBusMonRec.get({|val|
-												~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
-												if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
-													~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
-												} );
-												("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
-												~hearSound = false;
-											});
-										}
-									);
-								}
-							);
-						});
-					}
-				);
-			} ,
-			{//else if ~recSamp_input == false
-				if (~listening == false,
-					{
-						"***Can't record, not listening...***".postln;
-						1.yieldAndReset;
-					},
-					{//if ~listening == true...
-						if (~playSamp == false,
-							{ //don't record if playing back samples...
-								if(~autoRecStartTrig == true, {//DEBOUNCE when routine first launched (avoids false sound detection from mouse click)
-										~hearSound = false; //<--- probs not necessary here....just debugging....
-										~autoRecStartTrig = false;
-										~bus_onsets.set(0);  //<----?
-										("Debounce =" + debounceDur + "sec").postln;
-										debounceDur.yield;
-								});
-
-								//GET SUM BUS
-								featureBus.get({|val|
-									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
-										{//SOUND DETECTED
-											("---").postln;
-											("**HEAR SOUND**").postln;
-											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-
-											if (~hearSound == false, //TEST SOUND START...
-												{
-													~phaseBusMonRec.get({|val| //log recHead pos
-														~recSamp_input_startFrame = (val - (~preRecDur * s.sampleRate)).round(1);
-														if (~recSamp_input_startFrame < 0, { //if startFrame is negative...
-															~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
-														});
-														("---------").postln;
-														("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
-														~hearSound = true; //<--- moved inside get
-													});
-												},
-												{//else ~hearSound == true
-													~time_minRec = Main.elapsedTime.round(0.001) + ~minRecDur; //minimum time stamp to stop recording
-													("- - - - -").postln;
-													("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
-													("--REC Sample Start").postln;
-													~recSamp_input = true; //causes us to LEAVE THIS SIDE OF ROUTINE
-													{~button_recIn.value = 1;}.defer;
-												}
-											);
-										},
-										{//if NO SOUND DETECTED ........
-											("--- NO SOUND ---").postln;
-											("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
-											if (~hearSound == true,
-												{
-													~hearSound = false;
-													("--> ...false alarm?...").postln;
-												},
-												{ //else if ~hearSound == false
-													("-->...silence...").postln;
-												}
-											);
-										}
-									);
-								});
-							},
-							{ //else if (~playSamp == true)
-								("---Can't record when playSamp == true").postln;
-								1.yieldAndReset; //shorten to make more responsive after sample playback ends
-							}
-						);
-					}
-				);
-			}
-		);
-		rate.asFloat.yieldAndReset;
-	} );
-};
-
-
 /*
 s.plotTree;
-~listen_loudness.(1, ~inputSendBus, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lowThresh: -35, uprThresh: -15, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon, post: 1);
-~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1, loudFlag: \inputSendLoud, loudSusFlag: \inputSendLoudSus, lastLowThreshTime: \inLowThreshTime, monRoutine: \inputSendMon);*/
-//~listen_loudness.(0, outBus: \bus_inputdb, featSynth: \rms1);
 
+~listen_loudness.(active: 1,
+	input: ~inputSendBus,
+	outBus: \bus_inputdb,
+	featSynth: \rms1,
+	loudFlag: \inputSendLoud,
+	loudSusFlag: \inputSendLoudSus,
+	lowThresh: -35, uprThresh: -15, threshDur: 1,
+	lastThreshTime: \inputSendThreshTime,
+	monRoutine: \inputSendMon,
+	rate: 0.5,
+	post: 1
+);
+
+~listen_loudness.(active: 0,
+	outBus: \bus_inputdb,
+	featSynth: \rms1,
+	loudFlag: \inputSendLoud,
+	loudSusFlag: \inputSendLoudSus,
+	monRoutine: \inputSendMon
+);
+*/
 
 
 //<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
 //double check ~listen_loudness and ~monitor_loudness routine......
 
-~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, lastLowThreshTime, uprThresh = -4, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
+~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, uprThresh = -4, threshDur = 0.4, lastThreshTime, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
 	if (active == 1, {//start detecting feedback
 		if (~bufRecorder.isRunning, {
-			var thisOutBus, thisLastLowThreshTime;
+			var thisOutBus;
+
 			//RMS monitor
 			outBus.envirPut(Bus.control(s, 1));
 			thisOutBus = outBus.envirGet;
 
-			lastLowThreshTime.envirPut(nil); //<---
-			thisLastLowThreshTime = lastLowThreshTime.envirGet; //<---
+			//lastThreshTime.envirPut(nil); //<---not necessary
 
 			featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, thisOutBus]).moveAfter(~bufRecorder));
 			NodeWatcher.register(featSynth.envirGet);
-			//featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, ~bus_rms]).moveAfter(~bufRecorder));
 			//RMS > ~.47 || db > -6 == verging on clipping and feedback <-----
 
-			//LOUDNESS monitor  input = ~inputSendBus
-			//l = Synth(\Loudness, [\input, input, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
-
-			//outBus.envirPut(~sumFunc_xin.([~bus_rms], sumSynth)); //assign bus and resulting summing synth to new env vars
-
-			if (post == 1, { //only run this routine to monitor features w/ post window...
+			/*if (post == 1, { //only run this routine to monitor features w/ post window... CAUTION: can't .get from single bus using two different routines....will eventually cause one routine's get requests to fail, that's why this is commented out for now, since below monRoutine also has debug post feature...
 				~listenPost = ~streamFeatures.value(bus: thisOutBus, rate: rate, post: post);
-				//~listenPost = ~streamFeatures.value(bus: ~bus_rms, rate: rate, post: post);
 				SystemClock.play(~listenPost);
-			});
+			}); */
 
-			//~input_loud = 0; //maybe assign this via arg instead...DON'T HARDCODE!!! not necessary here, in else
-			loudFlag.envirPut(0);
-			//~input_loudSus = false; //maybe assign this via arg instead...DON'T HARDCODE!!! not necessary here, in else
-			loudSusFlag.envirPut(false);
-			//~listen_input_loudness = true; //maybe assign this via arg instead...DON'T HARDCODE!!!
+			loudFlag.envirPut(0); //loudFlag indicates instantaneous loudness level: 0 = no loudness, 1 = lower loudness threshold exceeded, 2 = upper loudness threshold exceeded
+			loudSusFlag.envirPut(false); //loudSusFlag indicates presence of ongoing loud sound / feedback (e.g. if loudFlag = 1, but loudSusFlag = false, no on-going loudness has been confirmed by monitor_loudness routine)
 
 			//START LOUDNESS/FEEDBACK MONITOR ROUTINE
-			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, lowThreshDur: lowThreshDur, lastLowThresTime: thisLastLowThreshTime, uprThresh: uprThresh, rate: rate));
+			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, uprThresh: uprThresh, threshDur: threshDur, lastThreshTime: lastThreshTime, rate: rate, post: post));
 			SystemClock.play(monRoutine.envirGet);
-
 			"====FEEDBACK DETECTION ACTIVE====".postln;
 		}, {
 			"===CAN'T DETECT FEEDBACK UNLESS BUF RECORDER ACTIVE===".postln;
 		} );
 	}, {//if active == 0, stop feature extraction and clean up...
-		//if (~fdbackDetect == true, { //only free synths and cleanup if we were detecting feedback in the first place, otherwise don't do anything and avoid server errors....
 		if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
-
 		//STOP LOUDNESS/FEEDBACK MONITOR ROUTINE
 		monRoutine.envirGet.stop;
 		monRoutine.envirGet.free;
-
 		outBus.envirGet.free; //free RMS feature extractor output bus
-
 		featSynth.envirGet.free; //free RMS feature extractor synth
-
 		loudFlag.envirPut(0);
 		loudSusFlag.envirPut(false);
-
 		"====FEEDBACK DETECTION DISABLED====".postln;
-		//});
 	} );
 };
 
 //IN PROGRESS <-------------
-~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, lowThreshDur = 0.4, uprThresh = -4, lastLowThreshTime, rate = 0.1|
+~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, uprThresh = -4, threshDur = 0.4,  lastThreshTime, rate = 0.1, post = 0|
 	Routine({
-		var x, thisLoudFlag, cond = Condition.new; //<---NEW
-		thisLoudFlag = loudFlag.envirGet;
+		var x, cond = Condition.new; //<---NEW
+		if (post == 1, {"[MON LOUDNESS]--------".postln;});
 		input.get({|val|
 			x = case
-			{(val >= lowThresh) && (val < uprThresh)} {
-				("-->LOUD SOUND! (low thresh): input db =" + val.round(0.01)).postln;
-				//if (thisLoudFlag == 0,
+			{(val >= lowThresh) && (val < uprThresh)} {//if current db is between lower and upper loudness thresh
+				if (post == 1, {("-->LOUD SIG > (low thresh): input db =" + val.round(0.01)).postln;});
+
 				if (loudFlag.envirGet == 0,
 					{
-						var currentTime = Main.elapsedTime.round(0.01);
 						loudFlag.envirPut(1);
-						lastLowThreshTime.envirPut(currentTime);
-						("-->LOUD SOUND! (low thresh): input db =" + val + "| lastLowThreshTime =" + lastLowThreshTime.envirGet).postln;
+
+						if (loudSusFlag.envirGet == false,
+							{
+								var currentTime = Main.elapsedTime.round(0.001);
+								lastThreshTime.envirPut(currentTime); //log time of threshold transition from loudFlag = 0 to 1
+								if (post == 1, {("---> TRANS from loudFlag = 0: loudFlag = 1 | LOUDNESS STARTING??? | lastThreshTime =" + lastThreshTime.envirGet).postln;});
+							},
+							{//else if loudSusFlag already == true, must have been a false/transient quiet during loudness
+								if (post == 1, {("---> TRANS from loudFlag = 0: loudFlag = 1 | LOUDNESS ONGOING").postln;});
+
+								//<---DO ANYTHING MORE??? ADJUST ANTI-FEEDBACK ROUTINES?????<----------
+							}
+						);
 					},
-					{//else if loudFlag already == 1 (or higher...)
-						var currentTime = Main.elapsedTime.round(0.01);
-						if ((currentTime - lastLowThreshTime.envirGet) >= lowThreshDur, {
-							loudSusFlag.envirPut(true);
-							("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val).postln;
-						}, {
-							("-->LOUD SOUND SUS TEST... (low thresh): input db =" + val).postln;
-						});
+					{//else if loudFlag already == 1 or 2
+						if (loudFlag.envirGet == 1,
+							{
+								if (loudSusFlag.envirGet == false,
+									{
+										var currentTime = Main.elapsedTime.round(0.001);
+										if ((currentTime - lastThreshTime.envirGet) >= threshDur,
+											{
+												loudSusFlag.envirPut(true);
+												if (post == 1, {("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val.round(0.01)).postln;});
+												//<----TRIGGER ANTI-FEEDBACK ROUTINES - ADJUST LEVELS ??? <--------
+											},
+											{
+												if (post == 1, {("-->LOUD SOUND SUS TEST...... (low thresh): input db =" + val.round(0.01)).postln;});
+											}
+										);
+									},
+									{//else if loudSusFlag already == true
+										if (post == 1, {("-->LOUD SOUND SUS continues... (low thresh): input db =" + val.round(0.01)).postln;});
+											//<----INTENSIFY ANTI-FEEDBACK / ADJUST LEVELS MORE ??? <--------
+									}
+								);
+							},
+							{//else if loudFlag == 2
+								loudFlag.envirPut(1);
+
+								if (loudSusFlag.envirGet == false,
+									{
+										var currentTime = Main.elapsedTime.round(0.001);
+										if ((currentTime - lastThreshTime.envirGet) >= threshDur,
+											{
+												loudSusFlag.envirPut(true);
+												if (post == 1, {("-->TRANS from loudFlag = 2: loudFlag = 1 | LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val.round(0.01)).postln;});
+												//<----TRIGGER ANTI-FEEDBACK ROUTINES - ADJUST LEVELS ??? <--------
+											},
+											{
+												if (post == 1, {("---> TRANS from loudFlag = 2: loudFlag = 1 | LOUD SOUND SUS TEST...(low thresh): input db =" + val.round(0.01) + "| lastThreshTime =" + lastThreshTime.envirGet).postln;});
+											}
+										);
+									},
+									{//else if loudSusFlag already == true
+										if (post == 1, {("-->LOUD SOUND SUS diminished from loudFlag = 2, but continues... (low thresh): input db =" + val.round(0.01)).postln;});
+										//<----ADJUST LEVELS / ANTI-FEEDBACK ROUTINES ??? <--------
+									}
+								);
+							}
+						);
 					}
 				);
 			}
-			{val >= uprThresh} {
-				loudFlag.envirPut(2);
-				("-->VERY LOUD SOUND!!!: input db =" + val.round(0.01)).postln;
+			{val >= uprThresh} { //else if current db >= upper loudness threshold -----------------
+				if (loudFlag.envirGet < 2,
+					{
+						if (post == 1, {("-->VERY LOUD SIG: input db =" + val.round(0.01)).postln;});
+
+						if (loudFlag.envirGet == 1,
+							{
+								loudFlag.envirPut(2);
+
+								if (loudSusFlag.envirGet == false,
+									{//we must have transitioned from loudFlag = 1 to loudFlag = 2 between two consec iterations of routine without triggering loudSusFlag...therefore, don't reset lastThreshTime, since it was previously set when loudFlag set to = 1
+										var currentTime = Main.elapsedTime.round(0.001);
+										if (post == 1, {("---DIRECT TRANS FROM: loudFlag = 1 to loudFlag = 2 B4 loudSusFlag set---").postln;});
+										if ((currentTime - lastThreshTime.envirGet) >= threshDur, //<--- or >= rate*2 or rate*3
+											{
+												loudSusFlag.envirPut(true);
+												if (post == 1, {("--->LOUD SOUND SUS CONFIRMED! (UPR thresh): input db =" + val.round(0.01)).postln;});
+												//<------TRIGGER ANTI-FEEDBACK ROUTINES AND ADJUST LEVELS <-----?
+											},
+											{
+												if (post == 1, {("--->LOUD SOUND SUS TEST.... (UPR thresh): input db =" + val.round(0.01)).postln;});
+												//<------DO NOTHING....? .... WAIT AND SEE.....?
+											}
+										);
+									},
+									{//else if loudSusFlag == true
+										if (post == 1, {("--->TRANS FROM: loudFlag = 1 to loudFlag = 2 --- loudSusFlag already = true").postln;});
+
+										//<----TRIGGER MORE EXTREME ANTI-FEEDBACK ROUTINES / SET LEVEL TO -inf ????
+									}
+								);
+							},
+							{//else if transitioning from loudFlag == 0
+								loudFlag.envirPut(2);
+
+								if (loudSusFlag.envirGet == false,
+									{
+										var currentTime = Main.elapsedTime.round(0.001);
+										lastThreshTime.envirPut(currentTime);
+										if (post == 1, {("---> TRANS from 0: loudFlag = 2 | lastThreshTime =" + lastThreshTime.envirGet).postln;});
+									},
+									{//else if loudSusFlag already == true
+										if (post == 1, {("FALSE / SHORT QUIET - LOUDNESS CONTINUING...").postln;});
+
+										//<----TRIGGER MORE EXTREME ANTI-FEEDBACK ROUTINES / SET LEVEL TO -inf ????
+									}
+								);
+							}
+						);
+					},
+					{ //if loudFlag == 2 (a.k.a. if rmsBusVal already >= uprThresh)
+						if (loudSusFlag.envirGet == false,
+							{
+								var currentTime = Main.elapsedTime.round(0.001);
+								if ((currentTime - lastThreshTime.envirGet) >= (rate * 2), { //if the routine's cycled twice
+									loudSusFlag.envirPut(true);
+									if (post == 1, {("-->VERY LOUD SOUND SUS CONFRMD (upr thresh): input db =" + val.round(0.01)).postln;});
+
+									//<------TRIGGER ANTI-FEEDBACK ROUTINES AND ADJUST LEVELS <-----?
+								}, {
+									if (post == 1, {("-->VERY LOUD SOUND SUS TEST...... (upr thresh): input db =" + val.round(0.01)).postln;});
+								});
+							},
+							{//else if loudSusFlag == true
+								if (post == 1, {("-->VERY LOUD SOUND SUS continues... (upr thresh): input db =" + val.round(0.01)).postln;});
+
+								//<----TRIGGER MORE EXTREME ANTI-FEEDBACK ROUTINES / SET LEVEL TO -inf ????
+							}
+						);
+					}
+				);
 			}
-			{val < lowThresh} {
-				if (loudFlag.envirGet > 0, { //<-----PUT TIMING THRESHOLD HERE, DON'T ZERO THINGS OUT IMMEDIATELY AFTER LOUD SOUND DETECTED, ADD A hysteresis
-					loudFlag.envirPut(0);
-					loudSusFlag.envirPut(false);
-					("-->LOUDNESS STOPPED: input db =" + val.round(0.01)).postln;
-				});
+			{val < lowThresh} { //else if current db < lower loudness threshold -------------
+				if (post == 1, {("-->QUIET SIG < lowThresh: input db =" + val.round(0.01)).postln;});
+				if (loudFlag.envirGet > 0,
+					{
+						loudFlag.envirPut(0);
+						if (loudSusFlag.envirGet == false,
+							{
+								if (post == 1, {("FALSE/TRANSIENT LOUD TRIG - loudSusFlag = false").postln;});
+							},
+							{//else if loudSusFlag == true, we're transitioning from loudness, test to see if it's ongoing
+								var currentTime = Main.elapsedTime.round(0.001);
+								lastThreshTime.envirPut(currentTime); //log time of transition from loudFlag > 0 to 0
+								if (post == 1, {("--->TRANS FROM loudFlag > 0 to loudFlag = 0 | lastThreshTime =" + lastThreshTime.envirGet + "| loudSusFlag = true | LOUDNESS PREV OCCURRING...").postln;});
+							}
+						);
+					},
+					{//else if loudFlag already == 0
+						if (loudSusFlag.envirGet == false,
+							{
+								//do nothing...no loudness or feedback has been occurring......
+								if (post == 1, {("--->NO LOUDNESS...cont...").postln;});
+							},
+							{//else if loudSusFlag == true, test to see if loudness has stopped...
+								var currentTime = Main.elapsedTime.round(0.001);
+								if ((currentTime - lastThreshTime.envirGet) >= threshDur, //or set to >= (rate*3) ??? <---
+									{
+										loudSusFlag.envirPut(false);
+										if (post == 1, {("--->NO LOUDNESS CONFIRMED | loudSusFlag = false...").postln;});
+
+										//TERMINATE ANTI-FEEDBACK ROUTINES <--------
+										//RESET LEVELS TO NORMAL, ETC...  <--------
+									},
+									{//else if (currentTime - lastThreshTime < threshDur)
+										if (post == 1, {("--->TESTING FOR END OF LOUDNESS...").postln;});
+									}
+								);
+							}
+						);
+					}
+				);
 			};
-			cond.unhang; //<----CONSIDER USING THIS OR .getSync
+			cond.unhang; //<----THIS OR .getSync
 		});
 		cond.hang;
-		//s.sync; //<----DON'T USE THIS
-
-		//("-------loudmonroutine-running-------").postln;
 		rate.yieldAndReset;
 	});
 };

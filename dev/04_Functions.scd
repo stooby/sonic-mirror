@@ -30,7 +30,7 @@
 
 ~get_busSum = {|bus, post = 1|
 	var numCh = bus.numChannels;
-	bus.get( {arg val; //<---changing to getSynchronous prevents OSC output for some reason...?
+	bus.get( {arg val;
 		if (post == 1, {//monitor feature vals in SC post window
 			switch (bus,
 				~busSum_ldns_mfcc, {
@@ -388,12 +388,151 @@
 
 	audifyRoutine;//return routine
 };
-/* //IMPLEMENTATION OF SOUND SCENE AUDIFY <------------
-~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, fileNum: 15, cycle: 6, rate: 48, pitch: -48); //<----
-SystemClock.play(~audifyRout);
-~audifyRout.stop;
-~audifyRout.reset;
-*/
+
+~autoRec_soundTrig1 =  {|featureBus, rate = 0.1, debounceDur = 0.5| //<---- OLD
+	Routine( {
+		if (~recSamp_input == true,
+			{
+				// add if (~listening == true, {  }); <---yes or no?
+				var currentTime = Main.elapsedTime.round(0.001);
+				if (currentTime <= ~time_minRec,
+					{
+						("----------").postln;
+						("RECORDING.....").postln;
+						("currentTime:" + currentTime + "< ~time_minRec:" + ~time_minRec).postln;
+					},
+					{
+						featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
+							if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
+								//if (( (val[0] >= ~loudnessThresh) || (val[3] >= ~pitchThresh) ),
+								{//SOUND DETECTED
+									~hearSound = true;
+									//CONTINUE RECORDING / DO NOTHING....
+									("-----=======-----").postln;
+									("**Recording... SOUND DETECTED").postln;
+									("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+								},
+								{//IF NO SOUND DETECTED...
+									if (~hearSound == false,
+										{
+											var currentTime = Main.elapsedTime.round(0.001);
+											if (currentTime >= ~time_listenTimeOut,
+												{
+													//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
+													("--------++++++++-------").postln;
+													("**Recording... SOUND STOP CONFIRMED").postln;
+													("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+													~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
+
+													//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
+													//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
+												},
+												{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
+													("----").postln;
+													("**Testing for sound stop...** - Current Time:" + currentTime).postln;
+													("---Terminate Test at:" + ~time_listenTimeOut).postln;
+												}
+											);
+										},
+										{//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
+											~time_listenTimeOut = ~listenDur_intraSound + Main.elapsedTime.round(0.001);
+											("-------").postln;
+											("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
+											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+											//GET recHead phasor position and log "STOP  SAMPLE TIME"
+											~phaseBusMonRec.get({|val|
+												~recSamp_input_stopFrame = (val - (~postRecSnip * s.sampleRate)).round(1);
+												if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
+													~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
+												} );
+												("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+												~hearSound = false;
+											});
+										}
+									);
+								}
+							);
+						});
+					}
+				);
+			} ,
+			{//else if ~recSamp_input == false
+				if (~listening == false,
+					{
+						"***Can't record, not listening...***".postln;
+						1.yieldAndReset;
+					},
+					{//if ~listening == true...
+						if (~playSamp == false,
+							{ //don't record if playing back samples...
+								if(~autoRecStartTrig == true, {//DEBOUNCE when routine first launched (avoids false sound detection from mouse click)
+										~hearSound = false; //<--- probs not necessary here....just debugging....
+										~autoRecStartTrig = false;
+										~bus_onsets.set(0);  //<----?
+										("Debounce =" + debounceDur + "sec").postln;
+										debounceDur.yield;
+								});
+
+								//GET SUM BUS
+								featureBus.get({|val|
+									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
+										{//SOUND DETECTED
+											("---").postln;
+											("**HEAR SOUND**").postln;
+											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+
+											if (~hearSound == false, //TEST SOUND START...
+												{
+													~phaseBusMonRec.get({|val| //log recHead pos
+														~recSamp_input_startFrame = (val - (~preRecDur * s.sampleRate)).round(1);
+														if (~recSamp_input_startFrame < 0, { //if startFrame is negative...
+															~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
+														});
+														("---------").postln;
+														("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
+														~hearSound = true; //<--- moved inside get
+													});
+												},
+												{//else ~hearSound == true
+													~time_minRec = Main.elapsedTime.round(0.001) + ~minRecDur; //minimum time stamp to stop recording
+													("- - - - -").postln;
+													("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
+													("--REC Sample Start").postln;
+													~recSamp_input = true; //causes us to LEAVE THIS SIDE OF ROUTINE
+													{~button_recIn.value = 1;}.defer;
+												}
+											);
+										},
+										{//if NO SOUND DETECTED ........
+											("--- NO SOUND ---").postln;
+											("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											if (~hearSound == true,
+												{
+													~hearSound = false;
+													("--> ...false alarm?...").postln;
+												},
+												{ //else if ~hearSound == false
+													("-->...silence...").postln;
+												}
+											);
+										}
+									);
+								});
+							},
+							{ //else if (~playSamp == true)
+								("---Can't record when playSamp == true").postln;
+								1.yieldAndReset; //shorten to make more responsive after sample playback ends
+							}
+						);
+					}
+				);
+			}
+		);
+		rate.asFloat.yieldAndReset;
+	} );
+};  //<---- OLD
 
 //====== ROUTINES ==========================
 
