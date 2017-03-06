@@ -96,8 +96,8 @@ Buffer.freeAll; //for cleanup
 ~outMainPeakQ.set(1); //technically reciprocal of Q... <---NEW
 ~outMainPeakGain.set(0); //in db  <---NEW
 
-~loCutVal_in = 90;
-~loCutVal_out = 90;
+~loCutVal_in = 110;
+~loCutVal_out = 110;
 ~loCutBus_in.set(~loCutVal_in);
 ~loCutBus_out.set(~loCutVal_out);
 
@@ -206,7 +206,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
 .font_(Font("Monaco", 8) )
-.decimals_(2)
+.decimals_(1)
 .action_( {
 	arg obj;
 	~loCutVal_in = obj.value.round(0.01);
@@ -220,7 +220,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .clipLo_(10) //smallest possible length of buffer (in seconds)
 .clipHi_(20000) //longest possible length of buffer (in seconds)
 .font_(Font("Monaco", 8) )
-.decimals_(2)
+.decimals_(1)
 .action_( {
 	arg obj;
 	~loCutVal_out = obj.value.round(0.01);
@@ -233,20 +233,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .string_("LoCut-Hz")
 .font_(Font("Monaco", 10) )
 .align_(\left);
-
-~numBox_outMainLoCut= NumberBox(~view_MainLevels, Rect(32, 120, 30, 14))//<---
-.value_(~loCutVal_out)
-.clipLo_(10) //smallest possible length of buffer (in seconds)
-.clipHi_(20000) //longest possible length of buffer (in seconds)
-.font_(Font("Monaco", 8) )
-.decimals_(2)
-.action_( {
-	arg obj;
-	~loCutVal_out = obj.value.round(0.01);
-	~loCutBus_out.set(~loCutVal_out);
-	//~loCutBus_out.setSynchronous([~loCutVal_out]); //??????? for synchronous control? is this better?
-	("***LoCutFreq_out=" ++ ~loCutVal_out ++ "Hz").postln;
-} );
 
 ~label_peakEQ = StaticText(~view_MainLevels, Rect(101, 106, 25, 38) )//<---
 .string_("db
@@ -1567,7 +1553,7 @@ if (~plotterEnabled == true, {
 
 			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec); //<--don't fully understand why this allows me to monitor phasor value and why I can't do so by getting value of ~phaseBusRec (doing so always outputs 1)...
 
-			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCut, ~loCutBus_in.asMap, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
+			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCut, ~loCutBus_in.asMap, \loCutQ, 2, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
 
 			NodeWatcher.register(~bufRecorder); //this ensures all synths associated w/ buf play back are positioned after all these buf recording synths in the node-tree, no matter when they're created
 
