@@ -10,7 +10,7 @@ o = Server.local.options;
 o.sampleRate = 48000; //use w/ external USB mic "MiC"
 //o.sampleRate = 96000;
 //o.blockSize = 512;
-o.blockSize = 128; //SC default
+o.blockSize = 256; //SC default
 //s.latency = 0.05; //0.2 is SC default
 
 o.inDevice = "Built-in Microph";

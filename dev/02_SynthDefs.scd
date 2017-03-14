@@ -319,4 +319,70 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 	OffsetOut.ar(outBus, sig);
 }).add;
 
+
+//  IMPULSE SOURCES -------
+
+SynthDef(\impulsePink1, {
+	|decayTime = 2, amp = 0.2, out|
+	var sig = Decay.ar(Impulse.ar(0), decayTime, PinkNoise.ar(amp));
+	DetectSilence.ar(sig, amp: 0.0001, time: 0.5, doneAction: 2);
+	Out.ar(out, sig);
+}).add;
+
+SynthDef(\impulseWhite1, {
+	|decayTime = 2, amp = 0.2, out|
+	var sig = Decay.ar(Impulse.ar(0), decayTime, WhiteNoise.ar(amp));
+	DetectSilence.ar(sig, amp: 0.0001, time: 0.5, doneAction: 2);
+	Out.ar(out, sig);
+}).add;
+
+SynthDef(\impulseWhite2, {
+	|attackTime = 0.01, releaseTime = 1.5, curve =  -4, amp = 0.2, out|
+	var env, sig;
+	env = Env.perc(attackTime, releaseTime, curve: curve);
+	sig = WhiteNoise.ar(1);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\sinSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = SinOsc.ar(freq);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\sawSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = Saw.ar(freq);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\triSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = LFTri.ar(freq);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\pulseSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, width = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = Pulse.ar(freq, width);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
 );

@@ -129,25 +129,57 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 ~view_sampButtons = CompositeView(~view_main, Rect(5, 320, 250, 45));
 ~view_procControls1 = CompositeView(~view_main, Rect(317, 268, 460, 65));
 
+//---
+~spec_slider_dB = ControlSpec(minval: 0.ampdb, maxval: 1.ampdb, warp: \db, default: 0, units: "dB"); //<-- NEW
 
 //------ Main In/Out Controls (Levels & Lo-Cut) -----------
 
 //Main Input Level --
-~slider_inMainLevel = Slider(~view_MainLevels, Rect(8, 2, 15, 90) )
+
+~slider_inMainLevel = Slider(~view_MainLevels, Rect(8, 2, 15, 90)) //<---NEW
+.background_(Color(0.9, 0.0, 0.0, 0.2))
+//.value_(1.0)
+.value_(~spec_slider_dB.unmap(0)) //<--
+.action_({ |obj|
+	var mapVal, val = obj.value.round(0.001);
+	mapVal = ~spec_slider_dB.map(val).round(0.01); //convert linear amp to db scaling
+	~inputLevelBus.set(mapVal.dbamp.round(0.001));  //set level control bus value
+	~numBox_inMainLevel.value_(mapVal); //update numBox
+});
+
+~numBox_inMainLevel = NumberBox(~view_MainLevels, Rect(2, 92, 30, 15)) //<---NEW
+.value_(0.0)
+.clipLo_(-inf)
+.clipHi_(0.0)
+.decimals_(1)
+.scroll_step_(0.1)
+.font_(Font("Monaco", 8) )
+.align_(\center)
+.action_({|obj|
+	var mapVal, val = obj.value.round(0.1);
+	mapVal = ~spec_slider_db.unmap(val); //convert db num into linear amp scaling
+	~inputLevelBus.set(mapVal.round(0.001));
+	~slider_inMainLevel.value_(mapVal.round(0.01));
+});
+
+~label_inMainLevel = StaticText(~view_MainLevels, Rect(10, 103, 12, 20) )
+.string_("IN")
+.font_(Font("Monaco", 10) )
+.align_(\center);
+
+/*
+~slider_inMainLevel = Slider(~view_MainLevels, Rect(8, 2, 15, 90) )  //ORIG
 .background_(Color(0.9, 0.0, 0.0, 0.2))
 .value_(1.0)
-.action_( {
+.action_({
 	arg obj;
 	var val;
 	val = obj.value.round(0.01);
 	~inputLevelBus.set(val);
-	//~bufRecorder.set(\mul, val);
 	~numBox_inMainLevel.value_(val);
-	//~bufRecorder.get(\mul, {arg mulval; mulval.postln;} );
-	//~inputLevelBus.get({arg val; val.postln;} );
-} );
+});
 
-~numBox_inMainLevel = NumberBox(~view_MainLevels, Rect(2, 92, 26, 15))
+~numBox_inMainLevel = NumberBox(~view_MainLevels, Rect(2, 92, 26, 15))  //ORIG
 .value_(1.0)
 .clipLo_(0.0)
 .clipHi_(1.0)
@@ -160,16 +192,37 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	val = obj.value.round(0.01);
 	~inputLevelBus.set(val);
 	~slider_inMainLevel.value_(val);
-} );
+} ); */
 
-~label_inMainLevel = StaticText(~view_MainLevels, Rect(8, 103, 12, 20) )
-.string_("IN")
-.font_(Font("Monaco", 10) )
-.align_(\center);
 
 //Main Out Level --
-//~slider_outMainLevel = Slider(w, Rect(733, 8, 17, 173) )
 ~slider_outMainLevel = Slider(~view_MainLevels, Rect(40, 2, 15, 90) )
+.background_(Color(0.0, 0.8, 0.2, 0.01))
+//.value_(1.0)
+.value_(~spec_slider_dB.unmap(0)) //<--
+.action_( {|obj|
+	var mapVal, val = obj.value.round(0.001);
+	mapVal = ~spec_slider_dB.map(val).round(0.01); //convert linear amp to db scaling
+	~outMainLevelBus.set(mapVal.dbamp.round(0.001)); //set level control bus value
+	~numBox_outMainLevel.value_(mapVal); //update numBox
+} );
+
+~numBox_outMainLevel = NumberBox(~view_MainLevels, Rect(34, 92, 30, 15))
+.value_(0.0)
+.clipLo_(-inf)
+.clipHi_(0.0)
+.decimals_(1)
+.scroll_step_(0.01)
+.font_(Font("Monaco", 8) )
+.align_(\center)
+.action_( {|obj|
+	var mapVal, val = obj.value.round(0.1);
+	mapVal = ~spec_slider_db.unmap(val); //convert db num into linear amp scaling
+	~outMainLevelBus.set(mapVal.round(0.001));
+	~slider_outMainLevel.value_(mapVal.round(0.01));
+} );
+
+/*~slider_outMainLevel = Slider(~view_MainLevels, Rect(40, 2, 15, 90) )
 .background_(Color(0.0, 0.8, 0.2, 0.01))
 .value_(1.0)
 .action_( {
@@ -193,7 +246,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	val = obj.value.round(0.01);
 	~outMainLevelBus.set(val);
 	~slider_outMainLevel.value_(val);
-} );
+} ); */
 
 ~label_outMainLevel = StaticText(~view_MainLevels, Rect(37, 103, 20, 20) )
 .string_("OUT")
@@ -248,10 +301,10 @@ Q")
 .font_(Font("Monaco", 8) )
 .decimals_(0)
 .align_(\center)
-.action_( {
+.action_({
 	arg obj;
 	~outMainPeakFreq.setSynchronous(obj.value.round(1));
-} );
+});
 
 ~numBox_outMainPeakGain= NumberBox(~view_MainLevels, Rect(65, 104, 35, 14))//<--- NEW
 .value_(~outMainPeakGain.getSynchronous)
@@ -1336,8 +1389,34 @@ s.plotTree;
 
 ~slider_inFlow1_level = Slider(~view_altLevels, Rect(9, 2, 12, 73))
 .background_(Color(0.0, 0.5, 0.9))
+//.value_(1.0)
+.value_(~spec_slider_dB.unmap(0)) //<--
+.action_({|obj|
+	var mapVal, val = obj.value.round(0.001);
+	mapVal = ~spec_slider_dB.map(val).round(0.01); //convert linear amp to db scaling
+	~inputStreamLevelBus.set(mapVal.dbamp.round(0.001));
+	~numBox_inFlow1_level.value_(mapVal);
+} );
+
+~numBox_inFlow1_level = NumberBox(~view_altLevels, Rect(2, 75, 30, 15))
+.value_(0.0)
+.clipLo_(-inf)
+.clipHi_(0.0)
+.decimals_(1)
+.scroll_step_(0.1)
+.font_(Font("Monaco", 8) )
+.align_(\center)
+.action_({|obj|
+	var mapVal, val = obj.value.round(0.1);
+	mapVal = ~spec_slider_db.unmap(val); //convert db num into linear amp scaling
+	~inputStreamLevelBus.set(mapVal.round(0.001));
+	~slider_inFlow1_level.value_(mapVal.round(0.01));
+} );
+
+/*~slider_inFlow1_level = Slider(~view_altLevels, Rect(9, 2, 12, 73))
+.background_(Color(0.0, 0.5, 0.9))
 .value_(1.0)
-.action_( {
+.action_({
 	arg obj;
 	var val;
 	val = obj.value.round(0.01);
@@ -1358,7 +1437,7 @@ s.plotTree;
 	val = obj.value.round(0.01);
 	~inputStreamLevelBus.set(val);
 	~slider_inFlow1_level.value_(val);
-} );
+} ); */
 
 ~label_inFlow1_level = StaticText(~view_altLevels, Rect(0, 94, 30, 8))
 .string_("S1-IN")
@@ -1366,6 +1445,32 @@ s.plotTree;
 .align_(\center);
 
 ~slider_sampOut_level = Slider(~view_altLevels, Rect(44, 2, 12, 73))
+.background_(Color(0.0, 0.8, 0.2))
+//.value_(1.0)
+.value_(~spec_slider_dB.unmap(0)) //<--
+.action_({|obj|
+	var mapVal, val = obj.value.round(0.001);
+	mapVal = ~spec_slider_dB.map(val).round(0.01); //convert linear amp to db scaling
+	~fileOutputLevelBus.set(mapVal.dbamp.round(0.001));  //set level control bus value
+	~numBox_sampOut_level.value_(mapVal);
+} );
+
+~numBox_sampOut_level = NumberBox(~view_altLevels, Rect(37, 75, 30, 15))
+.value_(0.0)
+.clipLo_(-inf)
+.clipHi_(0.0)
+.decimals_(1)
+.scroll_step_(0.1)
+.font_(Font("Monaco", 8) )
+.align_(\center)
+.action_({|obj|
+	var mapVal, val = obj.value.round(0.1);
+	mapVal = ~spec_slider_db.unmap(val); //convert db num into linear amp scaling
+	~fileOutputLevelBus.set(mapVal.round(0.001));
+	~slider_sampOut_level.value_(mapVal.round(0.01));
+} );
+
+/*~slider_sampOut_level = Slider(~view_altLevels, Rect(44, 2, 12, 73))
 .background_(Color(0.0, 0.8, 0.2))
 .value_(1.0)
 .action_( {
@@ -1389,7 +1494,7 @@ s.plotTree;
 	val = obj.value.round(0.01);
 	~fileOutputLevelBus.set(val);
 	~slider_sampOut_level.value_(val);
-} );
+} );  */
 
 ~label_sampOut_level = StaticText(~view_altLevels, Rect(35, 94, 30, 8) )
 .string_("S2-SP")
