@@ -3,7 +3,7 @@
 //== Main Performance Doc ==
 
 ~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
-~writeSampFromBuf.(~audioBuf0, 58, 8.37);
+~writeSampFromBuf.(~audioBuf0, 10, 14, filecap: true);
 
 ~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 5, cycle: 1, rate: 6, pitch: -6);
 SystemClock.play(~audifyRout);
@@ -456,241 +456,246 @@ Q")
 
 //AUTO REC / AUTO PLAY ROUTINES ----------
 
-~autoPlay_soundTrigAuto = Routine({
-	if (~playSamp == true,
-		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
-			if (~playAudify == true, { //check flag to see if audification in progress <----NEW
-				">>>>AUDIFY IN PROGRESS...<<<<".postln;
-				0.2.yieldAndReset;
-			}, { //else if ~playAudify == false
-				">>>>NO AUDIFICATION IN PROGRESS...<<<<".postln;
-				~playSamp = false;
-				~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
-				if (~trigAudify == true, {~trigAudify = false;}, {~audioBuf_play0.free;}); //<---NEW (to avoid error caused by freeing nonexistant ~audioBuf_play0 after ~audifyRout plays...
-				//~audioBuf_play0.free;
+~autoPlay_soundTrigAuto = {|post = 0|
+	Routine({
+		if (~playSamp == true,
+			{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
+				if (~playAudify == true, { //check flag to see if audification in progress <----NEW
+					if (post == 1, {">>>>AUDIFY IN PROGRESS...<<<<".postln;});
+					0.2.yieldAndReset;
+				}, { //else if ~playAudify == false
+					if (post == 1, {">>>>NO AUDIFICATION IN PROGRESS...<<<<".postln;});
+					~playSamp = false;
+					~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
+					if (~trigAudify == true, {~trigAudify = false;}, {~audioBuf_play0.free;}); //<---NEW (to avoid error caused by freeing nonexistant ~audioBuf_play0 after ~audifyRout plays...
+					//~audioBuf_play0.free;
 
-				{~button_playSamp.value = 0;}.defer; //update GUI button
-				~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
-				0.2.yieldAndReset;
-			});
-		},
-		{//if not playing a soundFile or autoRecording...
-			if (((~recSamp_input == false) && (~autoRecPlay_state == 1)), //only play back sounds if not recording...
-				{
-					//PLAYBACK AUDIO FILE FROM DISK
-					var interpSynth, fileDir, file, duration, temp, /*rate, pitch, mix,*/ currentTime;
+					{~button_playSamp.value = 0;}.defer; //update GUI button
+					~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
+					0.2.yieldAndReset;
+				});
+			},
+			{//if not playing a soundFile or autoRecording...
+				if (((~recSamp_input == false) && (~autoRecPlay_state == 1)), //only play back sounds if not recording...
+					{
+						//PLAYBACK AUDIO FILE FROM DISK
+						var interpSynth, fileDir, file, duration, temp, /*rate, pitch, mix,*/ currentTime;
 
-					//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
-					//---e.g. routines checking machine listening ugen output control busses...
+						//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
+						//---e.g. routines checking machine listening ugen output control busses...
 
-					~playSamp = true; //set flag
+						~playSamp = true; //set flag
 
-					//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
+						//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
 
-					//>-----FILE SELECTION CONDITIONS --- (basics implemented, could be refined)
-					///-----vvvvvvv---------NEW--------vvvvvv---------///////
-					currentTime = Main.elapsedTime.round(0.001);
-					if (currentTime <= (~time_lastRec_stop + 5),
-						{//if just recorded new sound, play last recorded sound
-							"---SOUND JUST RECORDED - PLAYING LAST SOUND".postln;
-							fileDir = ~fileAudio_writeIn_lastFile;
-						},
-						{//else if it's been awhile since last recorded sound
-							var playCase, randNum = rrand(1.0, 10.0).round(0.01);
-							"---LAST SOUND RECORDED > 5 SECONDS AGO....".postln;
-
-							playCase = case
-							{randNum <= 7} { //70% of time, play last recorded file
-								//("---->PLAYING LAST REC FILE (70%):" + ~fileAudio_writeIn_lastFile).postln;
+						//>-----FILE SELECTION CONDITIONS --- (basics implemented, could be refined)
+						///-----vvvvvvv---------NEW--------vvvvvv---------///////
+						currentTime = Main.elapsedTime.round(0.001);
+						if (currentTime <= (~time_lastRec_stop + 5),
+							{//if just recorded new sound, play last recorded sound
+								if (post == 1, {"---SOUND JUST RECORDED - PLAYING LAST SOUND".postln;});
 								fileDir = ~fileAudio_writeIn_lastFile;
-							}
-							{randNum > 7 && randNum <= 9} {//20% of time play recent rec file
-								//"---->PLAYING RECENT REC FILE (20%)".post;
-								if (0.75.coin == true,
-									{fileDir = ~fileHistory_rec[1];
-										//" | second-to-last | ".post;
-									}, //play second to last rec file
-									{fileDir = ~fileHistory_rec[2];
-										//" | third-to-last | ".post;
-									} //or play third to last rec file
-								);
-								//("FILE:" + fileDir).postln;
-								if (fileDir == nil, {//safe driving
+							},
+							{//else if it's been awhile since last recorded sound
+								var playCase, randNum = rrand(1.0, 10.0).round(0.01);
+								if (post == 1, {"---LAST SOUND RECORDED > 5 SECONDS AGO....".postln;});
+
+								playCase = case
+								{randNum <= 7} { //70% of time, play last recorded file
+									//("---->PLAYING LAST REC FILE (70%):" + ~fileAudio_writeIn_lastFile).postln;
 									fileDir = ~fileAudio_writeIn_lastFile;
-									//".....safe-driving...playing last rec file".postln;
-								});
-							}
-							//{randNum > 9} { //10% of time play older or random file....
-							{randNum > 9 && randNum <= 9.5} { //5% of time play older or random file....
-								//("---->PLAYING OLDER / RAND FILE (5%):").postln;
-								if (~fileAudio_writeIn_maxNum_exceeded == false,
-									{
-										var fileNum;
-										//("-----maxNumFiles NOT EXCEEDED-----").postln;
-										if (~fileAudio_writeIn_nameNum >= ~fileHistory_rec.size, //if rec mem is full
-											{
-												if (0.5.coin == true,
-													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]}, //select oldest file in rec mem
-													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]} //or select second-oldest file in rec mem
-												);
-												//("---->REC MEM FULL - Playing:" + fileDir).postln;
-											},
-											{//else if rec mem is not full
-												fileDir = ~fileHistory_rec[~fileAudio_writeIn_nameNum - 1]; //select older file...
-												//("---->REC MEM NOT FULL - Playing:" + fileDir).postln;
-											}
-										);
-										if (fileDir == nil, {//safe driving
-											fileDir = ~fileAudio_writeIn_lastFile;
-											//".....safe-driving...playing last rec file".postln;
-										});
-									},
-									{ //else if max files written > maxNum limit
-										//("-----maxNumFiles EXCEEDED-----").postln;
-										if (0.5.coin == true,
-											{//play oldest or second-oldest file in rec mem
-												if (0.5.coin == true,
-													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1];
-														//("----> Playing OLDEST file in recMem:" + fileDir).postln;
-													}, //oldest file in rec mem
-													{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2];
-														//("----> Playing SECOND-OLDEST file in recMem:" + fileDir).postln;
-													} //second-oldest file in rMem
-												);
-											},
-											{
-												var randFile, selectFile;
-												//"---->RANDOM FILE SELECTION ----->".postln;
-												randFile = rrand(0, (~fileAudio_writeIn_maxNum - 1)).round(1);
-												fileDir = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
-												/*selectFile = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
-												if (selectFile == ~fileHistory_rec[0], {
+								}
+								{randNum > 7 && randNum <= 9} {//20% of time play recent rec file
+									//"---->PLAYING RECENT REC FILE (20%)".post;
+									if (0.75.coin == true,
+										{fileDir = ~fileHistory_rec[1];
+											//" | second-to-last | ".post;
+										}, //play second to last rec file
+										{fileDir = ~fileHistory_rec[2];
+											//" | third-to-last | ".post;
+										} //or play third to last rec file
+									);
+									//("FILE:" + fileDir).postln;
+									if (fileDir == nil, {//safe driving
+										fileDir = ~fileAudio_writeIn_lastFile;
+										//".....safe-driving...playing last rec file".postln;
+									});
+								}
+								//{randNum > 9} { //10% of time play older or random file....
+								{randNum > 9 && randNum <= 9.5} { //5% of time play older or random file....
+									//("---->PLAYING OLDER / RAND FILE (5%):").postln;
+									if (~fileAudio_writeIn_maxNum_exceeded == false,
+										{
+											var fileNum;
+											//("-----maxNumFiles NOT EXCEEDED-----").postln;
+											if (~fileAudio_writeIn_nameNum >= ~fileHistory_rec.size, //if rec mem is full
+												{
+													if (0.5.coin == true,
+														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]}, //select oldest file in rec mem
+														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]} //or select second-oldest file in rec mem
+													);
+													//("---->REC MEM FULL - Playing:" + fileDir).postln;
+												},
+												{//else if rec mem is not full
+													fileDir = ~fileHistory_rec[~fileAudio_writeIn_nameNum - 1]; //select older file...
+													//("---->REC MEM NOT FULL - Playing:" + fileDir).postln;
+												}
+											);
+											if (fileDir == nil, {//safe driving
+												fileDir = ~fileAudio_writeIn_lastFile;
+												//".....safe-driving...playing last rec file".postln;
+											});
+										},
+										{ //else if max files written > maxNum limit
+											//("-----maxNumFiles EXCEEDED-----").postln;
+											if (0.5.coin == true,
+												{//play oldest or second-oldest file in rec mem
+													if (0.5.coin == true,
+														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1];
+															//("----> Playing OLDEST file in recMem:" + fileDir).postln;
+														}, //oldest file in rec mem
+														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2];
+															//("----> Playing SECOND-OLDEST file in recMem:" + fileDir).postln;
+														} //second-oldest file in rMem
+													);
+												},
+												{
+													var randFile, selectFile;
+													//"---->RANDOM FILE SELECTION ----->".postln;
+													randFile = rrand(0, (~fileAudio_writeIn_maxNum - 1)).round(1);
+													fileDir = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+													/*selectFile = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+													if (selectFile == ~fileHistory_rec[0], {
 													"-----Selected File == last REC file...picking oldest file----".postln;
 
-												}, {
+													}, {
 
-												}); */
-											}
-										);
-										if (fileDir == nil, {//safe driving
-											fileDir = ~fileAudio_writeIn_lastFile;
-											//".....safe-driving...playing last rec file".postln;
-										});
-									}
-								);
-							} //;
-							//{randNum > 0} {
-							{randNum > 9.5} { //5% of time audify sound scene... <---NEW
-								var fileNum, rate, cycle = 1;
-								~trigAudify = true;
-								if (~fileAudio_writeIn_maxNum_exceeded == false,
+													}); */
+												}
+											);
+											if (fileDir == nil, {//safe driving
+												fileDir = ~fileAudio_writeIn_lastFile;
+												//".....safe-driving...playing last rec file".postln;
+											});
+										}
+									);
+								} //;
+								//{randNum > 0} {
+								{randNum > 9.5} { //5% of time audify sound scene... <---NEW
+									var fileNum, rate, cycle = 1;
+									~trigAudify = true;
+									if (~fileAudio_writeIn_maxNum_exceeded == false,
+										{
+											if (post == 1, {"[AUDIFY] -- files < maxNum: ".post;});
+											fileNum = ~fileAudio_writeIn_nameNum;
+											if (fileNum <= 15,
+												{
+													rate = rrand(12.0, 24.0).round(0.01);
+													if (fileNum <= 6, {cycle = 2;});
+													if (post == 1, {
+														"fileNum <= 15 | ".post;
+														("rate =" + rate).post;
+														(" | cycle =" + cycle).postln;
+													});
+												},
+												{
+													rate = rrand(24.0, 36.0).round(0.01);
+													if (post == 1, {
+														"fileNum > 15 | ".post;
+														("rate =" + rate).postln;
+													});
+												}
+											);
+											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+										},
+										{ //else if we have maximum # of samples saved...
+											rate = rrand(28.0, 36.0).round(0.01);
+											fileNum = ~fileAudio_writeIn_maxNum;
+											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											if (post == 1, {"[AUDIFY] -- filesMax Exceeded: ".post; (" rate =" + rate).postln;});
+										}
+									);
+									if (post == 1, {"[AUDIFY] -- STARTING... ".post;});
+									SystemClock.play(~audifyRout);
+									2.yieldAndReset;
+								};
+							}
+						);
+						///-----^^^^^^^---------NEW--------^^^^^^^---------///////
+
+						//fileDir = ~fileAudio_writeIn_lastFile; //<-------orig
+
+						//PLAY SOUND FILE from disk
+						~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
+							var rand, procSelect;
+							//duration = buffer.numFrames/s.sampleRate;
+							duration = buffer.numFrames/buffer.sampleRate; //<--orig
+
+							//EVENTUALLY consider selecting proc behaviors based on features of analyzed audio <<<<
+							rand = rrand(1.0, 10.0);
+
+							procSelect = case
+							//{rand <= 10} {
+							{rand <= 6.5} {
+								if (post == 1, {"==randAudify==".postln;});
+								duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
+							}
+							{rand > 8.7} {
+								//{rand == 11} {
+								if (post == 1, {"==NOIZ MANGLE==".postln;});
+								duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post); //<---THIS
+							}
+							{rand > 6.5 && rand <= 8.7} {
+								//{rand == 12} {
+								var lfoFreq, loFreq, hiFreq;
+								if (post == 1, {"==SINE MODs==".postln;});
+								lfoFreq = rrand(0.1, 1.0).round(0.01);
+								loFreq = rrand(0.05, 0.3).round(0.01);
+								hiFreq = rrand(0.1, 0.7).round(0.01);
+
+								if (0.5.coin == true,
 									{
-										"[AUDIFY] -- files < maxNum: ".post;
-										fileNum = ~fileAudio_writeIn_nameNum;
-										if (fileNum <= 15,
-											{
-												"fileNum <= 15 | ".post;
-												rate = rrand(12.0, 24.0).round(0.01);
-												("rate =" + rate).postln;
-												if (fileNum <= 6, {cycle = 2; " | cycle = 2".postln;
-												});
-											},
-											{
-												"fileNum > 15 | ".post;
-												rate = rrand(24.0, 36.0).round(0.01);
-												("rate =" + rate).postln;
-											}
-										);
-										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+										if (post == 1, {("---SineSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;});
+										//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+										~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
 									},
-									{ //else if we have maximum # of samples saved...
-										"[AUDIFY] -- filesMax Exceeded: ".post;
-										rate = rrand(28.0, 36.0).round(0.01);
-										(" rate =" + rate).postln;
-										fileNum = ~fileAudio_writeIn_maxNum;
-										~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+									{
+										if (post == 1, {("---NoiseSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;});
+										//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+										~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
 									}
 								);
-								"[AUDIFY] -- STARTING... ".post;
-								SystemClock.play(~audifyRout);
-								2.yieldAndReset;
 							};
-						}
-					);
-					///-----^^^^^^^---------NEW--------^^^^^^^---------///////
 
-					//fileDir = ~fileAudio_writeIn_lastFile; //<-------orig
+							//NodeWatcher.register(~samp0);
+							~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
+							if (post == 1, {("PLAYING BACK FILE:" + fileDir).postln;});
 
-					//PLAY SOUND FILE from disk
-					~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
-						var rand, procSelect;
-						//duration = buffer.numFrames/s.sampleRate;
-						duration = buffer.numFrames/buffer.sampleRate; //<--orig
+							~fileAudio_lastPlay = fileDir; //<---NEW - to keep track of last played sample (not needed if using below array for playback memory)
 
-						//EVENTUALLY consider selecting proc behaviors based on features of analyzed audio <<<<
-						rand = rrand(1.0, 10.0);
+							temp = ~fileHistory_play.shift(1, fileDir); //<---NEW - longer-term playback memory
+							~fileHistory_play = temp; //<---NEW - longer-term playback memory
+						});
 
-						procSelect = case
-						//{rand <= 10} {
-						{rand <= 6.5} {
-							"==randAudify==".postln;
-							duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
-						}
-						{rand > 8.7} {
-						//{rand == 11} {
-							"==NOIZ MANGLE==".postln;
-							duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus); //<---THIS
-						}
-						{rand > 6.5 && rand <= 8.7} {
-						//{rand == 12} {
-							var lfoFreq, loFreq, hiFreq;
-							"==SINE MODs==".postln;
-							lfoFreq = rrand(0.1, 1.0).round(0.01);
-							loFreq = rrand(0.05, 0.3).round(0.01);
-							hiFreq = rrand(0.1, 0.7).round(0.01);
+						{~button_playSamp.value = 1;}.defer; //update GUI
+						if (post == 1, {("Pre-yield samp Dur = " ++ duration).postln;});
 
-							if (0.5.coin == true,
-								{
-									("---SineSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;
-									//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-									~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-								},
-								{
-									("---NoiseSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;
-									//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-									~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-								}
-							);
-						};
+						s.sync; //<------USING THIS INSTEAD OF YIELD, FIXES RPI ISSUE AND NO MORE NEED FOR YIELD!!
+						//0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
+						if (post == 1, {("Post-yield samp Dur = " ++ duration).postln;});
 
-						//NodeWatcher.register(~samp0);
-						~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
-						("PLAYING BACK FILE:" + fileDir).postln;
+						//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
+						(duration + 0.02).round(0.01).yieldAndReset; //<--maybe not necessary to add more time
+						//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
+					},
+					{0.25.yieldAndReset;} //else if (~recSoundInput == true)
+				);
+			}
+		);
+	});
+};
 
-						~fileAudio_lastPlay = fileDir; //<---NEW - to keep track of last played sample (not needed if using below array for playback memory)
-
-						temp = ~fileHistory_play.shift(1, fileDir); //<---NEW - longer-term playback memory
-						~fileHistory_play = temp; //<---NEW - longer-term playback memory
-					});
-
-					{~button_playSamp.value = 1;}.defer; //update GUI
-					("Pre-yield samp Dur = " ++ duration).postln;
-
-					s.sync; //<------USING THIS INSTEAD OF YIELD, FIXES RPI ISSUE AND NO MORE NEED FOR YIELD!!
-					//0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
-					("Post-yield samp Dur = " ++ duration).postln;
-
-					//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
-					(duration + 0.02).round(0.01).yieldAndReset; //<--maybe not necessary to add more time
-					//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
-				},
-				{0.25.yieldAndReset;} //else if (~recSoundInput == true)
-			);
-		}
-	);
-});
-
-~autoRec_soundTrigAuto =  {|featureBus, rate = 0.1, debounceDur = 0.5|
+~autoRec_soundTrigAuto =  {|featureBus, rate = 0.1, debounceDur = 0.5, post = 0|
 	Routine( {
 		if (~recSamp_input == true,
 			{
@@ -698,9 +703,11 @@ Q")
 				var currentTime = Main.elapsedTime.round(0.001);
 				if (currentTime <= ~time_minRec,
 					{
-						("----------").postln;
-						("RECORDING.....").postln;
-						("currentTime:" + currentTime + "< ~time_minRec:" + ~time_minRec).postln;
+						if (post == 1, {
+							("----------").postln;
+							("RECORDING.....").postln;
+							("currentTime:" + currentTime + "< ~time_minRec:" + ~time_minRec).postln;
+						});
 					},
 					{
 						featureBus.get({|val| //get sum bus "lop" - 4 features: [Loudness, Onset, Freq, Pitch Measure]
@@ -708,16 +715,18 @@ Q")
 								{//SOUND DETECTED
 									~hearSound = true;
 									//CONTINUE RECORDING / DO NOTHING....
-									("-----=======-----").postln;
-									("**Recording... SOUND DETECTED").postln;
-									("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+									if (post == 1, {
+										("-----=======-----").postln;
+										("**Recording... SOUND DETECTED").postln;
+										("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+									});
 
 									//anti-troll / runaway recording measure...
 									if (currentTime >= ~time_recTimeOut, //terminate recording if we've exceeded recTimeOut
 										{
-											("===MAX RECORD DUR EXCEEDED - STOP RECORDING===" ).postln;
+											if (post == 1, {("===MAX RECORD DUR EXCEEDED - STOP RECORDING===" ).postln;});
 											~recSamp_input_stopFrame = ~lastRecPhasePos;
-											~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
+											~writeSampFromBufCopy_input.(); //sets GUI and ~recSamp_input = false
 											~time_lastRec_stop = currentTime; //<---
 											~hearSound = false;
 											~autoRecPlay_state = 1; //advance state to trigger ~autoPlay before next ~autoRec
@@ -731,31 +740,39 @@ Q")
 											if (currentTime >= ~time_listenTimeOut, //<---
 												{
 													//Sound Stop Confirmed - WRITE AUDIO SAMPLE (sound was stopped since last iteration)
-													("--------++++++++-------").postln;
-													("**Recording... SOUND STOP CONFIRMED").postln;
-													("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+													if (post == 1, {
+														("--------++++++++-------").postln;
+														("**Recording... SOUND STOP CONFIRMED").postln;
+														("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+													});
 													~writeSampFromBufCopy_input.value(); //sets GUI and ~recSamp_input = false
 
 													~autoRecPlay_state = 1; //advance state to trigger ~autoPlay before next ~autoRec
-													("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
-													("---.....---").postln;
+													if (post == 1, {
+														("~autoRecPlay_state = 1 | ~autoPlay ONLY").postln;
+														("---.....---").postln;
+													});
 
 													//Analyze written audio file for features (avg loudness, pitchiness, MFCCs, etc)
 													//Add sound file's extracted feature summary to a ~soundMemory buffer for future analysis and behavior triggering based on past history of sound events...
 												},
 												{//if currentTime < ~time_listenTimeOut....sound may not have stopped yet....
-													("----").postln;
-													("**Testing for sound stop...** - Current Time:" + currentTime).postln;
-													("---Terminate Test at:" + ~time_listenTimeOut).postln;
+													if (post == 1, {
+														("----").postln;
+														("**Testing for sound stop...** - Current Time:" + currentTime).postln;
+														("---Terminate Test at:" + ~time_listenTimeOut).postln;
+													});
 												}
 											);
 										},
 										{//else if ~hearSound == true (test to make sure sound has stopped but continue recording)
 											//~time_listenTimeOut = ~listenDur_intraSound + Main.elapsedTime.round(0.001);
 											~time_listenTimeOut = ~listenDur_intraSound + currentTime; //<---
-											("-------").postln;
-											("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
-											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											if (post == 1, {
+												("-------").postln;
+												("**Recording...SOUND STOP? ... Testing until: " + ~time_listenTimeOut).postln;
+												("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											});
 
 											//GET recHead phasor position and log "STOP  SAMPLE TIME"
 											~phaseBusMonRec.get({|val|
@@ -763,7 +780,7 @@ Q")
 												if (~recSamp_input_stopFrame < 0, { //if presumed stopFrame is negative...
 													~recSamp_input_stopFrame = ~audioBuf0.numFrames + ~recSamp_input_stopFrame; //wrap around buffer and log sound stop frame
 												} );
-												("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;
+												if (post == 1, {("--Sound Stop (in get) = " ++ (~recSamp_input_stopFrame / s.sampleRate)).postln;});
 
 												//~time_lastRec_stop = Main.elapsedTime.round(0.001); //<--- NEW - log sound rec stop time
 												~time_lastRec_stop = currentTime; //<---
@@ -787,20 +804,22 @@ Q")
 						if (~playSamp == false && ~autoRecPlay_state == 0,  //<-------
 							{ //don't enter autorecord mode if playing back samples and not in state 0...
 								if(~autoRecStartTrig == true, {//DEBOUNCE when routine first launched (avoids false sound detection from mouse click)
-										~hearSound = false; //<--- probs not necessary here....just debugging....
-										~autoRecStartTrig = false;
-										~bus_onsets.set(0);  //<----?
-										("Debounce =" + debounceDur + "sec").postln;
-										debounceDur.yield;
+									~hearSound = false; //<--- probs not necessary here....just debugging....
+									~autoRecStartTrig = false;
+									~bus_onsets.set(0);  //<----?
+									if (post == 1, {("Debounce =" + debounceDur + "sec").postln;});
+									debounceDur.yield;
 								});
 
 								//GET SUM BUS
 								featureBus.get({|val|  //<----- MOVE THIS TO ~listen_sound function?  < -----<--!!!!
 									if (( (val[0] >= ~loudnessThresh) || (val[1] == 1) || (val[3] >= ~pitchThresh) ),
 										{//SOUND DETECTED
-											("---").postln;
-											("**HEAR SOUND**").postln;
-											("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											if (post == 1, {
+												("---").postln;
+												("**HEAR SOUND**").postln;
+												("Ldns-Onst-PitchM = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											});
 
 											if (~hearSound == false, //TEST SOUND START...
 												{
@@ -809,8 +828,10 @@ Q")
 														if (~recSamp_input_startFrame < 0, { //if startFrame is negative...
 															~recSamp_input_startFrame = ~audioBuf0.numFrames + ~recSamp_input_startFrame; //wrap around buffer and log sound start frame
 														});
-														("---------").postln;
-														("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
+														if (post == 1, {
+															("---------").postln;
+															("--> Sound START?: " ++( ~recSamp_input_startFrame/s.sampleRate)).postln;
+														});
 														~hearSound = true; //<--- moved inside get
 													});
 												},
@@ -821,24 +842,28 @@ Q")
 													~time_lastRec_start = currentTime - rate; //<---NEW - subtract rate b/c sound detected in previous cycle of routine
 													~time_recTimeOut = ~time_lastRec_start + ~maxRecDur; //<--NEW - prevent runaway recordings and trolls
 
-													("- - - - -").postln;
-													("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
-													("--REC Sample Start").postln;
+													if (post == 1, {
+														("- - - - -").postln;
+														("--> Sound START CONFIRMED:" + ( ~recSamp_input_startFrame/s.sampleRate)).postln;
+														("--REC Sample Start").postln;
+													});
 													~recSamp_input = true; //causes us to LEAVE THIS SIDE OF ROUTINE
 													{~button_recIn.value = 1;}.defer;
 												}
 											);
 										},
 										{//if NO SOUND DETECTED ........
-											("--- NO SOUND ---").postln;
-											("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											if (post == 1, {
+												("--- NO SOUND ---").postln;
+												("Ldns-Onst-pitMsr = [" ++ val[0] ++ ", " ++ val[1] ++ ", " ++ val[3] ++ "]").postln;
+											});
 											if (~hearSound == true,
 												{
 													~hearSound = false;
-													("--> ...false alarm?...").postln;
+													if (post == 1, {("--> ...false alarm?...").postln;});
 												},
 												{ //else if ~hearSound == false
-													("-->...silence...").postln;
+													if (post == 1, {("-->...silence...").postln;});
 
 													if (~fileHistory_play[0] != nil, {//if recorded & played @ least 1 sound
 														var currentTime = Main.elapsedTime.round(0.001);
@@ -1203,18 +1228,21 @@ s.plotTree;
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //start listening
 			~autoRecStartTrig = true; //enables debounce when ~autoRecStart initialized
 
-			~autoRecStart = ~autoRec_soundTrigAuto.value(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.5);
+			~autoRecStart = ~autoRec_soundTrigAuto.(featureBus: ~busSum_lop, rate: 0.1, debounceDur: 0.5, post: 0);
 			SystemClock.play(~autoRecStart);
 
-			~autoPlay_soundTrigAuto.reset;
-			SystemClock.play(~autoPlay_soundTrigAuto);
-
+			//~autoPlay_soundTrigAuto.reset;
+			//SystemClock.play(~autoPlay_soundTrigAuto);
+			~autoPlayRout = ~autoPlay_soundTrigAuto.(post: 0);
+			SystemClock.play(~autoPlayRout);
 		},
 		{
 			~autoRecStart.stop;
-			~autoRecStart.free;
+			~autoRecStart.free;  //doesn't do anything...
 
-			~autoPlay_soundTrigAuto.stop;
+			//~autoPlay_soundTrigAuto.stop;
+			~autoPlayRout.stop;
+			~autoPlayRout.free; //doesn't do anything...
 
 			if (~recSamp_input == true, { //pertains to ~autoRec_soundTrig1
 				if (~hearSound == true, { //if actively "recording" sound, stop recording and write sample file
@@ -1231,18 +1259,6 @@ s.plotTree;
 			});
 
 			~listen_sound.(0, outBus: \busSum_lop, sumSynth: \sumSyn_1); //stop listening
-
-			/*if (~recSamp_input == true, { //pertains to ~autoRec_random routine only...
-				~writeIn2Disk.free;
-				~audioBuf_inMainWrite.close;
-				~audioBuf_inMainWrite.free;
-				~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
-				if (~fileAudio_writeIn_nameNum > ~fileAudio_writeIn_maxNum, { //cap max file count...
-					~fileAudio_writeIn_nameNum = 0;
-				});
-				~recSamp_input = false;
-				~button_recIn.value = 0;
-			} ); */
 
 			if (~playSamp == true, {
 				~samp0.free;

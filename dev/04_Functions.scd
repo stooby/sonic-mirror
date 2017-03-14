@@ -92,15 +92,16 @@
 
 
 //AUTO REC / PLAY HELPER FUNCTIONS -----
-~writeSampFromBuf = {|buffer, in, out| //expecting in and out time in seconds
+~writeSampFromBuf = {|buffer, in, out, filecap = false| //expecting in and out time in seconds
 	var inFrame, outFrame;
 	inFrame = (in.asFloat.round(0.001) * buffer.sampleRate);
 	outFrame = (out.asFloat.round(0.001) * buffer.sampleRate);
+
 	if (inFrame < outFrame, { //if sample does not wrap around to beginning of buffer
 		var numFrames = (outFrame - inFrame) + 1;
 		buffer.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth, numFrames: numFrames, startFrame: inFrame);
 		("WROTE SAMPLE: " ++ ~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++".wav | dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
-		~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+		//~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
 	}, {//if sample wraps around to beginning of buffer
 		var numFrames, chunk1frames, chunk2frames, copyBuf;
 		chunk1frames = buffer.numFrames - inFrame; //inclusive frame count from inFrame to last frame in buffer
@@ -112,8 +113,19 @@
 		copyBuf.write((~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").standardizePath, "wav", ~sampBitDepth);
 		copyBuf.free;
 		("WROTE SAMPLE: " ++ ~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++".wav | dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
-		~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
-	} );
+		//~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+	});
+
+	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+
+	if (filecap == true,
+		{
+			if (~fileAudio_writeIn_nameNum > (~fileAudio_writeIn_maxNum - 1), { //cap max file count...
+				~fileAudio_writeIn_nameNum = 0;
+				~fileAudio_writeIn_maxNum_exceeded = true;
+			});
+		}
+	);
 };
 
 ~writeSampFromBufCopy_input = {
@@ -132,7 +144,7 @@
 
 			("--SIMPLE Write--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
-			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
+			("--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate).round(0.01) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate).round(0.01) ++ " (dur = " ++ (recFrames/s.sampleRate).round(0.01) ++ " sec)").postln;
 		},
 		{ //else if ~recSamp_input_startFrame > stopFrame, we've wrapped around the buffer and will need to copy from it in 2 steps before writing an audio file...
 			var recFrames, bufChunk1frames, bufChunk2frames;
@@ -156,7 +168,7 @@
 
 			("--WRAP AROUND 2-STEP WRITE--").postln;
 			("--WROTE Sample: " ++ ~fileAudio_writeIn_lastPath++~fileAudio_writeIn_nameNum++".wav").postln;
-			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate) ++ " (dur = " ++ (recFrames/s.sampleRate) ++ " sec)").postln;
+			("--WRAP-AROUND--sampled from sec: " ++ (~recSamp_input_startFrame / s.sampleRate).round(0.01) ++ " - " ++ (~recSamp_input_stopFrame / s.sampleRate).round(0.01) ++ " (dur = " ++ (recFrames/s.sampleRate).round(0.01) ++ " sec)").postln;
 			~audioBuf_inMainWrite.free;
 		}
 	);
@@ -170,6 +182,7 @@
 	~fileHistory_rec = temp; //<---NEW
 
 	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1; //increment file counter
+
 	if (~fileAudio_writeIn_nameNum > (~fileAudio_writeIn_maxNum - 1), { //cap max file count...
 		~fileAudio_writeIn_nameNum = 0;
 		~fileAudio_writeIn_maxNum_exceeded = true;
@@ -178,7 +191,7 @@
 	(">>>RECORDING COMPLETE<<<").postln;
 };
 
-~sample_randAudify = {|buffer, duration, ampBus, outBus|
+~sample_randAudify = {|buffer, duration, ampBus, outBus, post = 0|
 	var rate, pitch, mix;
 	pitch = 1;
 	mix = 0;
@@ -187,25 +200,25 @@
 		{//FASTER rate
 			var rate1, origDuration;
 			rate = rrand(2.0, 24.0).round(0.01);
-			("==FASTER Rate==" + rate).postln;
+			if (post == 1,{("==FASTER Rate==" + rate).postln;});
 			rate1 = rate; //store semitone transp value for reference in case double play triggered
 
 			if (0.65.coin == true, {//65% chance pitch shift
-				"--PITCH TRANSP--".postln;
+				if (post == 1,{"--PITCH TRANSP--".postln;});
 				if (0.65.coin == true,
 					{//65% chance pitch is inversion of rate - STRETCH
 						pitch = (rate * -1) - rrand(0.0, 2.0).round(0.01);
-						("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
+						if (post == 1,{("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;});
 					},
 					{//35% chance pitch transp doesn't correspond to rate
 						if (rate <= 12,
 							{
 								if (0.5.coin == true, {pitch = rrand(-24.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 7.0).round(0.01);});
-								("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
+								if (post == 1,{("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;});
 							},
 							{//else if rate > 12
 								pitch = rrand(-12.0, -1.0).round(0.01);
-								("---Pitch Change (downwards) - rate =" + rate + "pitch =" + pitch).postln;
+								if (post == 1,{("---Pitch Change (downwards) - rate =" + rate + "pitch =" + pitch).postln;});
 							}
 						);
 					}
@@ -221,7 +234,7 @@
 			if (duration <= 3, {//if transposed sample shorter than 3 seconds, maybe play twice
 				if (0.6.coin == true, {//60% chance play short sample twice at one or two transpositions
 					var rate2;
-					"==UPWARDS TRANSP - PLAY TWICE==".postln;
+					if (post == 1,{"==UPWARDS TRANSP - PLAY TWICE==".postln;});
 
 					if (0.9.coin == true, {//~90% chance second play back w/ 2 transpositions
 						if (rate1 >= 13,
@@ -256,24 +269,24 @@
 		},
 		{//slower rate
 			rate = rrand(-24.0, -2.0).round(0.01);
-			("==SLOWER Rate==" + rate).postln;
+			if (post == 1,{("==SLOWER Rate==" + rate).postln;});
 
 			if (0.65.coin == true, {//65% chance pitch shift
-				"--PITCH TRANSP--".postln;
+				if (post == 1,{"--PITCH TRANSP--".postln;});
 				if (0.65.coin == true,
 					{//65% chance pitch is inversion of rate - STRETCH
 						pitch = rate.abs + rrand(0.0, 1.0).round(0.01);
-						("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;
+						if (post == 1,{("---STRETCH - rate =" + rate + "pitch =" + pitch).postln;});
 					},
 					{//35% chance pitch transp doesn't correspond to rate
 						if (rate >= -6,
 							{
 								if (0.5.coin == true, {pitch = rrand(-7.0, -1.0).round(0.01);}, {pitch = rrand(1.0, 12.0).round(0.01);});
-								("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;
+								if (post == 1,{("---Pitch Change (wide) - rate =" + rate + "pitch =" + pitch).postln;});
 							},
 							{//else if rate < -6
 								pitch = rrand(1.0, 12.0).round(0.01);
-								("---Pitch Change (upwards) - rate =" + rate + "pitch =" + pitch).postln;
+								if (post == 1,{("---Pitch Change (upwards) - rate =" + rate + "pitch =" + pitch).postln;});
 							}
 						);
 					}
@@ -287,9 +300,12 @@
 
 			if (duration > 30, //if transposed sample longer than 30 seconds, shorten playback time
 				{
-					("----> SHORTEN DUR: Orig Dur: " ++ duration).postln;
+					if (post == 1,{});
 					duration = rrand(15.0, 25.0);
-					("---->NEW DUR = " ++ duration).postln;
+					if (post == 1, {
+						("----> SHORTEN DUR: Orig Dur: " ++ duration).postln;
+						("---->NEW DUR = " ++ duration).postln;
+					});
 				}
 			);
 		}
@@ -299,23 +315,27 @@
 	duration;
 };
 
-~sample_noiseMangle = {|buffer, duration, ampBus, outBus|
-	if (duration <= 5,
+~sample_noiseMangle = {|buffer, duration, ampBus, outBus, post = 0|
+	if (duration <= 2.5,
 		{
-			//("TRIPLE SHORT: OrigDur =" + duration + ">").post;
 			duration = (duration * 2).round(0.001);
-			//("newDur =" + duration).postln;
+			if (post == 1, {
+				("DOUBLE SHORT DUR: OrigDur =" + duration + "|").post;
+				("newDur =" + duration).postln;
+			});
 		},
 		{
 			if (duration <= 8,
 				{
-					//("1.5X MED: OrigDur =" + duration + ">").post;
 					duration = (duration * 1.5).round(0.001);
-					//("newDur =" + duration).postln;
+					if (post == 1, {
+						("1.5X MED: OrigDur =" + duration + ">").post;
+						("newDur =" + duration).postln;
+					});
 				},
 				{
 					duration = duration.round(0.001);
-					//("No CHANGE: dur = " ++ duration).postln;
+					if (post == 1, {("No CHANGE: dur = " ++ duration).postln;});
 				};
 			);
 		}
@@ -323,20 +343,17 @@
 
 	if (0.25.coin == true,
 		{//straight noise
-			var freq;
-			//"-x-x-STRAIGHT NOISE-x-x-".postln;
-			freq = rrand(0.5, 4.2).round(0.01);
-			//("--freq = " ++ freq).postln;
+			var freq = rrand(0.5, 4.2).round(0.01);
 			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus.asMap, \out, outBus]);
+			if (post == 1, {"-x-x-STRAIGHT NOISE-x-x-".postln; ("--freq = " ++ freq).postln;});
 		},
 		{//else, modulating noise
 			var mod, lo, hi;
-			//"-x-x-MOD NOISE-x-x-".postln;
 			mod = rrand(0.1, 1.0).round(0.1);
 			lo = rrand(0.25, 1.0).round(0.01);
 			hi = rrand(1.25, 4.2).round(0.01);
-			//("mod = " ++ mod + "| lo =" + lo + "| hi =" + hi).postln;
 			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus.asMap, \out, outBus]);
+			if (post == 1, {"-x-x-MOD NOISE-x-x-".postln; ("mod = " ++ mod + "| lo =" + lo + "| hi =" + hi).postln;});
 		}
 	);
 	duration;
