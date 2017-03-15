@@ -2125,17 +2125,18 @@ if (~plotterEnabled == true, {
 ~slider_rate = Slider(~view_procControls1, Rect(0, 0, 300, 20))
 .background_(Color(0.0, 0.5, 0.9))
 .value_(0.5)
-.action_( {
-	arg obj;
-	var pos;
-	pos = obj.value.linlin(0, 1, -48, 48).round(0.01);
+.action_({|obj|
+	var rateTransp = obj.value.linlin(0, 1, -48, 48).round(0.01);
 	if (~button_rev.value == 1,
-		{~rateBus.set(pos.midiratio * -1);}, //negative rate when REV button enabled
-		{~rateBus.set(pos.midiratio);} //positive rate when REV button disabled
+		{~rateBus.set(rateTransp.midiratio * -1);}, //negative rate when REV button enabled
+		{~rateBus.set(rateTransp.midiratio);} //positive rate when REV button disabled
 	);
-	~numBox_rate.value_(pos); //update numBoxPitch value
-	~pitchShiftValPrev_rate = pos; //<---NEW, to support ~randomRoutine_reverse
-} ) ;
+	~numBox_rate.value_(rateTransp); //update numBoxPitch value
+	~pitchShiftValPrev_rate = rateTransp; //<---NEW, to support ~randomRoutine_reverse
+	if (rateTransp != 0, {
+		if (~syncRecPlayOffset == true, {~syncRecPlayOffset = false; ~button_delaySync.value = 0;}); //disable sync
+	});
+});
 
 ~numBox_rate = NumberBox(~view_procControls1, Rect(308, 0, 48, 20))
 .value_(0)
@@ -2156,6 +2157,9 @@ if (~plotterEnabled == true, {
 	pos = obj.value.clip(-48, 48).linlin(-48, 48, 0, 1).round(0.001);
 	~slider_rate.value_(pos);
 	~pitchShiftValPrev_rate = semiToneVal; //<---NEW, to support ~randomRoutine_reverse
+	if (semiToneVal != 0, {
+		if (~syncRecPlayOffset == true, {~syncRecPlayOffset = false; ~button_delaySync.value = 0;}); //disable sync
+	});
 } );
 
 ~label_rate = StaticText(~view_procControls1, Rect(358, 4, 80, 10))
