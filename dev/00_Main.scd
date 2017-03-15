@@ -41,7 +41,7 @@ Buffer.freeAll; //for cleanup
 ~lastRecPhasePos = 0; //for resume functionality - stores last pos (frame) of rec head before recording disabled
 ~playPosLatchTrig = false;
 ~recPosLatchTrig = false;
-~fixPlayRecOffset = false;
+~syncRecPlayOffset = false;
 
 ~pitchShiftValPrev_rate = 0;
 ~pitchShiftValTarget_rate = 0;
@@ -167,34 +167,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .font_(Font("Monaco", 10) )
 .align_(\center);
 
-/*
-~slider_inMainLevel = Slider(~view_MainLevels, Rect(8, 2, 15, 90) )  //ORIG
-.background_(Color(0.9, 0.0, 0.0, 0.2))
-.value_(1.0)
-.action_({
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~inputLevelBus.set(val);
-	~numBox_inMainLevel.value_(val);
-});
-
-~numBox_inMainLevel = NumberBox(~view_MainLevels, Rect(2, 92, 26, 15))  //ORIG
-.value_(1.0)
-.clipLo_(0.0)
-.clipHi_(1.0)
-.decimals_(2)
-.font_(Font("Monaco", 8) )
-.scroll_step_(0.01)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~inputLevelBus.set(val);
-	~slider_inMainLevel.value_(val);
-} ); */
-
-
 //Main Out Level --
 ~slider_outMainLevel = Slider(~view_MainLevels, Rect(40, 2, 15, 90) )
 .background_(Color(0.0, 0.8, 0.2, 0.01))
@@ -221,32 +193,6 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 	~outMainLevelBus.set(mapVal.round(0.001));
 	~slider_outMainLevel.value_(mapVal.round(0.01));
 } );
-
-/*~slider_outMainLevel = Slider(~view_MainLevels, Rect(40, 2, 15, 90) )
-.background_(Color(0.0, 0.8, 0.2, 0.01))
-.value_(1.0)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~outMainLevelBus.set(val);
-	~numBox_outMainLevel.value_(val);
-} );
-
-~numBox_outMainLevel = NumberBox(~view_MainLevels, Rect(34, 92, 26, 15))
-.value_(1.0)
-.clipLo_(0.0)
-.clipHi_(1.0)
-.decimals_(2)
-.font_(Font("Monaco", 8) )
-.scroll_step_(0.01)
-.action_( {
-	arg obj;
-	var val;
-	val = obj.value.round(0.01);
-	~outMainLevelBus.set(val);
-	~slider_outMainLevel.value_(val);
-} ); */
 
 ~label_outMainLevel = StaticText(~view_MainLevels, Rect(37, 103, 20, 20) )
 .string_("OUT")
@@ -1714,7 +1660,7 @@ if (~plotterEnabled == true, {
 			~getBus_updateGUI_recPhase.stop;
 
 			if (~plotterEnabled == true, {~updateBufPlot.stop;});  //PLOTTER
-
+			if (~syncRecPlayOffset == true, {~syncRecPlayOffset = false; ~button_delaySync.value = 0;}); //disable sync
 			/*
 			 ///FOR SCOPE
 			~scopeView.stop; //<----
@@ -1738,42 +1684,7 @@ if (~plotterEnabled == true, {
 	arg obj;
 	if (obj.value == 1,
 		{
-			/* //<----- SYNC PLAYHEAD OFFSET FUNCTIONALITY...buggy, not working 100% ----------
-			//"fixPlayOffset= ".post; ~button_delaySync.value.postln;
-			//"buttonRec= ".post; ~button_recBuf.value.postln;
-			//~phaseBusMonPly.get( {arg val; ~lastPlayPhasePos = val;} );
-			if (~button_delaySync.value == 1 && ~button_recBuf.value == 1,
-				{
-					"--ifSyncDelActive".postln;
-					//var newPlayPos;
-					"lastPlayPhasePos= ".post; ~lastPlayPhasePos.postln;
-					~phaseBusMonRec.get( {
-						arg val;
-						"recPhase= ".post; val.postln;
-						~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-						"play2recOffset= ".post; ~play2recOffset.postln;
-						if (~play2recOffset < 0,
-							{
-								~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset; //if true, wrap around buffer
-								//newPlayPos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
-							} ,
-							{
-								~lastPlayPhasePos = ~play2recOffset; //else normal subtraction
-								//newPlayPos = ~play2recOffset;
-							}
-						);
-					} );
-					//~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, newPlayPos] );
-					"lastPlayPhasePosafterOffsetAdjust".post; ~lastPlayPhasePos.postln;
-				} //,
-				//{
-					//~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~playInPosBus.asMap, \end, ~playOutPosBus.asMap, \trig, 0, \resetPos, ~lastPlayPhasePos] );
-				//}
-			); */ //<------------------------------^^^^^^^^^^^^^^^^^^^
-
-			//"--afterIf".postln;
-			//~lastPlayPhasePos.postln;
-
+			if (~syncRecPlayOffset == true, {~recPlayDelayOffset.(offset: ~delayTime);}); //sync playhead if SYNC enabled
 			if ((~lastPlayPhasePos >= ~playInFrame) && (~lastPlayPhasePos <= ~playOutFrame), {
 				//if play head is still w/in play In/Out range
 				~phasor_play = Synth(\phasor, [\out, ~phaseBusPly, \buf, ~audioBuf0, \rate, ~rateBus.asMap, \start, ~lastPlayPhasePos, \end, ~playOutPosBus.asMap] );
@@ -1837,6 +1748,7 @@ if (~plotterEnabled == true, {
 			} );
 			~revRateBusMon.set(-1);
 			//~reverseFlag = true;
+			if (~syncRecPlayOffset == true, {~syncRecPlayOffset = false; ~button_delaySync.value = 0;}); //disable sync
 		},
 		{  //normal playback when disabled
 			~rateBus.get( {
@@ -1853,7 +1765,7 @@ if (~plotterEnabled == true, {
 .value_(0);
 
 //------ DELAY OFFSET -------
-~button_delaySync = Button(~view_perfButtons, Rect(160, 0, 55, 25)) //Delay Offset Sync button --- WORKS but a little buggy....
+~button_delaySync = Button(~view_perfButtons, Rect(160, 0, 55, 25))
 .states_( [
 	["SYNC", Color.black, Color(0.7, 0.7, 0, 0.3)] ,
 	["SYNC", Color.white, Color(0.8, 0.8, 0)]
@@ -1864,39 +1776,28 @@ if (~plotterEnabled == true, {
 	if (
 		obj.value == 1, // when sync button enabled
 		{
-			~fixPlayRecOffset = true; //IS THIS BETTER THAN POLLING BUTTON.VALUE?????
-			~routine_playHeadOffset.reset;
-			AppClock.play(~routine_playHeadOffset);
+			var currentRate;
+			~syncRecPlayOffset = true;
 
-			/*
-			//snap playhead to position based on delay offset from rechead<------
-			~phaseBusMonRec.get( { //<----this block doesn't function properly when uncommented, needs to be in a routine?????
-				//calculate the offset of the playhead from the rechead
-				arg val;
-				~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-				if (~play2recOffset < 0,
-					{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
-						//lastPlay2RecOffset = ~lastPlayPhasePos;
-					} ,
-					{~lastPlayPhasePos = ~play2recOffset;
-						//lastPlay2RecOffset = ~play2recOffset;
-					}
-				);
-			} );
-
-			if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
-			*/
+			currentRate = ~rateBus.getSynchronous.round(0.01);
+			if (currentRate != 1,
+				{
+					~rateBus.set(1);
+					~slider_rate.value_(0.5);
+					~numBox_rate.value_(0);
+				}
+			);
+			~recPlayDelayOffset.(offset: ~delayTime);
 
 		},
 		{ //when button disabled
-			~fixPlayRecOffset = false;
-			~routine_playHeadOffset.stop;
+			~syncRecPlayOffset= false;
 		}
 	);
 } )
 .value_(0);
 
-~numBox_delay = NumberBox(~view_perfButtons, Rect(217, 0, 55, 25))  //WORKS but a little buggy....
+~numBox_delay = NumberBox(~view_perfButtons, Rect(217, 0, 55, 25))
 .value_(~delayTime)
 .clipLo_(0)
 .clipHi_(~audioBuf0_dur - 0.01)
@@ -1904,34 +1805,9 @@ if (~plotterEnabled == true, {
 .decimals_(2)
 .scroll_step_(0.01)
 .step_(0.01)
-.action_( {
-	arg obj;
-	var lastPlay2RecOffset;
+.action_( {|obj|
 	~delayTime = obj.value.round(0.01);
-	//~delayTime.postln;
-	//~slider_delay.value = obj.value.linlin(0, ~audioBuf0_dur - 0.01, 0, 1); //ideally do this only when the numBox is being manipulated directly, otherwise it's redundantly updating value of slider...OBSOLESCED in 1.82
-
-	~routine_playHeadOffset.reset;
-	AppClock.play(~routine_playHeadOffset);
-
-	/* ~phaseBusMonRec.get( { //<----works but BUGGY small delay values don't seem to be accurate...
-		//calculate the offset of the playhead from the rechead
-		arg val;
-		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1));
-		lastPlay2RecOffset = val - ((~delayTime * s.sampleRate).round(1));
-		//if (~play2recOffset < 0,
-		if (lastPlay2RecOffset < 0,
-			{//~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;
-				~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + lastPlay2RecOffset;
-			} ,
-			{//~lastPlayPhasePos = ~play2recOffset;
-			 ~lastPlayPhasePos = lastPlay2RecOffset;
-			}
-		);
-	} );
-
-	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); */
-
+	if (~syncRecPlayOffset == true, {~recPlayDelayOffset.(offset: ~delayTime);}); //sync playhead if SYNC enabled
 } );
 
 ~label_delayTime = StaticText(~view_perfButtons, Rect(275, 2, 78, 20) )
@@ -1940,32 +1816,6 @@ if (~plotterEnabled == true, {
 (sec)")
 .font_(Font("Monaco", 8) )
 .align_(\left);
-
-/*~slider_delay = Slider(w, Rect(489, 332, 180, 15))
-.background_(Color(0.85, 0.85, 0.0))
-.value_(~delayTime.linlin(0, ~audioBuf0_dur - 0.01, 0, 1))
-.action_( { //<----BUGGY....?????
-	arg obj;
-	var pos, playPosFrame;
-	pos = obj.value.linlin(0, 1, 0, ~audioBuf0_dur - 0.01).round(0.01);
-	//~numBox_delay.value_(pos); //update numBoxPitch value
-	~numBox_delay.valueAction_(pos); //so we don't have to duplicate calc code from numBoxDel here
-} ); */
-
-~routine_playHeadOffset = Routine.new( {
-	~phaseBusMonRec.get( {
-		arg val;
-		~play2recOffset = val - ((~delayTime * s.sampleRate).round(1)); //calculate the offset of the playhead from the rechead
-		if (~play2recOffset < 0,
-			{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
-			{~lastPlayPhasePos = ~play2recOffset;}
-		);
-	} );
-	0.1.yield; //<-------- not ideal, but works
-
-	if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } );
-	nil;
-} );
 
 //--------------------
 
@@ -2080,10 +1930,8 @@ if (~plotterEnabled == true, {
 
 	if (~button_recBuf.value == 1,
 		{//update ~phasor_rec phasor synth position when actively recording to buffer
-			~phasor_rec.set (
-				\resetPos, pos,
-				\trig, 1
-			);
+			~phasor_rec.set (\resetPos, pos, \trig, 1);
+			if (~syncRecPlayOffset == true, {{~recPlayDelayOffset.(offset: ~delayTime)}.defer(0.01);}); //sync playhead if SYNC enabled (defer is perhaps not elegant, but necessary b/c otherwise ~recPlayDelayOffset uses current/old/nonupdated rec phase bus position when ~phaseBusMonRec.getSynch call is made...
 		},
 		{//update phasor pos when not actively recording to buffer
 			~lastRecPhasePos = pos;
@@ -2091,39 +1939,6 @@ if (~plotterEnabled == true, {
 	);
 
 	~numBox_recPos.value = (pos/s.sampleRate).round(0.01); //convert frames to seconds and display
-
-	/*
-	//SYNC functionality---------------- (double check and debug, haven't worked with this in awhile)
-	if (~fixPlayRecOffset == true, //<-----
-		{
-			~play2recOffset = pos - ((~delayTime * s.sampleRate).round(1));
-			if (~play2recOffset < 0,
-				{~lastPlayPhasePos = (~audioBuf0.numFrames - 1) + ~play2recOffset;} ,
-				{~lastPlayPhasePos = ~play2recOffset; }
-			);
-
-			if (~button_playBuf.value == 1, {~phasor_play.set(\resetPos, ~lastPlayPhasePos, \trig, 1); } ); //is this best way to do it or should I create a flag indicating whenever recPhase position is updated w/ click so that playPhase is updated w/ clock instead???
-		} ,
-	    { //else
-			~phaseBusMonPly.get( {
-				arg val;
-				if (pos >= val,
-					{
-					 ~play2recOffset = pos - val;
-					 ~delayTime = ~play2recOffset/s.sampleRate;
-					},
-					{
-					 ~play2recOffset = ~audioBuf0.numFrames - (pos - val);
-					 ~delayTime = ~play2recOffset/s.sampleRate;
-					}
-				);
-			} );
-			~numBox_delay.value = ~delayTime;
-			//~slider_delay.value = ~delayTime.linlin(0, ~audioBuf0_dur - 0.01, 0, 1); //obsolesced in 1.82
-		}
-	 );
-	//SYNC functionality----------------
-	*/
 
 } )
 .value_(0.0);
@@ -2154,10 +1969,8 @@ if (~plotterEnabled == true, {
 	//~phasor_play.set (\resetPos, pos, \trig, 1);
 	if (~button_playBuf.value == 1,
 		{//update ~phasor_play phasor synth position when actively playing from buffer
-			~phasor_play.set(
-				\resetPos, pos,
-				\trig, 1
-			);
+			~phasor_play.set(\resetPos, pos, \trig, 1);
+			if (~syncRecPlayOffset == true, {~syncRecPlayOffset = false; ~button_delaySync.value = 0;}); //disable sync
 		},
 		{//update phasor pos when not actively playing from buffer
 			~lastPlayPhasePos = pos;

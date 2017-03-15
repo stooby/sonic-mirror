@@ -6,6 +6,29 @@
 
 //====== FUNCTIONS ========
 
+~recPlayDelayOffset = {|offset = 0/*, gui = true*/| //offset in seconds  <-----NEW
+	var playPos, recPos;
+	recPos = ~phaseBusMonRec.getSynchronous;
+	playPos = recPos - (offset * s.sampleRate).round(1);
+	if (playPos < 0, {playPos = (~audioBuf0.numFrames - 1) + playPos;});
+
+	if ((~bufPlayer == nil || ~bufPlayer.isRunning == false),
+		{//if not actively playing from buffer
+			~lastPlayPhasePos = playPos; //update env variable
+			/*if (gui == true,
+				{
+					~slider_playPos.value = playPos.linlin(0, (~audioBuf0.numFrames - 1), 0, 1); //update slider pos
+					~numBox_playPos.value = (playPos/s.sampleRate).round(0.01); //convert frames to seconds and display
+				}
+			); */
+		},
+		{//else if actively playing from buffer
+			~phasor_play.set(\resetPos, playPos, \trig, 1);
+			//{~phasor_play.set}.defer(0.15);
+		}
+	);
+};
+
 ~sumFunc_xin = {|busArray, sumSynth|  //bus val concat function for variable size arg array of feat busses
 	var numCh = 0, busCol, outArray, outBus;
 	busArray.do({|item| numCh = numCh + item.numChannels}); //calculate total # bus channels
