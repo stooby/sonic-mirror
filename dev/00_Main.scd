@@ -357,14 +357,12 @@ Q")
 	//sets ~loudnessThresh
 } );  */
 
-~loudnessThresh = 5; //set w/ ~senseNoiseFloor eventually?
-~pitchThresh = 0.55;
-
 //~hearFeedback = false;
 //~fdbackDetect = false;
 ~input_loud = 0; //consider integer scale: 0 = < min thresh | 1 = > lowThresh, < uprThresh, 2 = > uprThres
 ~input_loudSus = false;
 ~listen_input_loudness = false; //flag indicating activity of loudness monitoring function (active / disabled)
+
 
 ~hearSound = false;
 ~listening = false;  //flag indicates audio analysis activity
@@ -376,6 +374,11 @@ Q")
 ~recSamp_output = false;
 ~recSamp_input_startFrame = 0;
 ~recSamp_input_stopFrame = 0;
+
+//------- env variables and functions (routines) for ~autoRec_soundTrigAuto
+
+~loudnessThresh = 5; //set w/ ~senseNoiseFloor eventually?
+~pitchThresh = 0.55;
 
 ~autoRecPlay_state = 0; //0 == only trigger auto rec, 1 == only trigger auto play
 
@@ -400,7 +403,7 @@ Q")
 ~autoRecStartTrig = true; //flag triggered when ~autoRec routines initiated (used for debounce time when triggered via button press to avoid false sound detection)
 
 
-//AUTO REC / AUTO PLAY ROUTINES ----------
+//AUTO REC / AUTO PLAY ROUTINES (soundTrigAuto)----------
 
 ~autoPlay_soundTrigAuto = {|post = 0|
 	Routine({
@@ -1776,7 +1779,7 @@ if (~plotterEnabled == true, {
 	if (
 		obj.value == 1, // when sync button enabled
 		{
-			var currentRate;
+			var currentRate, currentRev;
 			~syncRecPlayOffset = true;
 
 			currentRate = ~rateBus.getSynchronous.round(0.01);
@@ -1787,6 +1790,15 @@ if (~plotterEnabled == true, {
 					~numBox_rate.value_(0);
 				}
 			);
+
+			currentRev = ~revRateBusMon.getSynchronous;
+			if (currentRev == -1,
+				{
+					~revRateBusMon.set(1);
+					~button_rev.value = 0;
+				}
+			);
+
 			~recPlayDelayOffset.(offset: ~delayTime);
 
 		},
@@ -1934,6 +1946,7 @@ if (~plotterEnabled == true, {
 			if (~syncRecPlayOffset == true, {{~recPlayDelayOffset.(offset: ~delayTime)}.defer(0.01);}); //sync playhead if SYNC enabled (defer is perhaps not elegant, but necessary b/c otherwise ~recPlayDelayOffset uses current/old/nonupdated rec phase bus position when ~phaseBusMonRec.getSynch call is made...
 		},
 		{//update phasor pos when not actively recording to buffer
+			~phaseBusMonRec.set(pos); //<--- update control bus too, which other funcs and routines use
 			~lastRecPhasePos = pos;
 		}
 	);
@@ -1973,6 +1986,7 @@ if (~plotterEnabled == true, {
 			if (~syncRecPlayOffset == true, {~syncRecPlayOffset = false; ~button_delaySync.value = 0;}); //disable sync
 		},
 		{//update phasor pos when not actively playing from buffer
+			~phaseBusMonPly.set(pos); //<--- update control bus too, which other funcs and routines use
 			~lastPlayPhasePos = pos;
 		}
 	);

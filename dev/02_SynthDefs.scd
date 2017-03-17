@@ -337,12 +337,24 @@ SynthDef(\impulseWhite1, {
 }).add;
 
 SynthDef(\impulseWhite2, {
-	|attackTime = 0.01, releaseTime = 1.5, curve =  -4, amp = 0.2, out|
+	|attackTime = 0.002, releaseTime = 0.4, curve =  -4, amp = 0.2, out|
 	var env, sig;
 	env = Env.perc(attackTime, releaseTime, curve: curve);
 	sig = WhiteNoise.ar(1);
 	sig = sig * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\impulseWhite3, {
+	|attackTime = 0.01, releaseTime = 0.25, curve =  -4, shelf_freq = 2500, shelf_db = -35, rs = 1,  peak_freq = 160, peakQ = 1, peak_db = -10, lop_freq = 5000, lop_q = 0.4, amp = 0.2, out|
+	var env, sig;
+	env = Env.perc(attackTime, releaseTime, curve: curve);
+	sig = WhiteNoise.ar(1);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	sig = BLowPass4.ar(sig, freq: lop_freq, rq: lop_q );
+	sig = BHiShelf.ar(sig, freq: shelf_freq, rs: rs, db: shelf_db);
+	sig = BPeakEQ.ar(sig, freq: peak_freq, rq: peakQ, db: peak_db, mul: amp);
+	Out.ar(out, sig);
 }).add;
 
 SynthDef(\sinSweep1, {
