@@ -432,8 +432,8 @@
 };
 
 //-------------AUTO ROOM CONVOLVE FUNCS / ROUTINES -------------
-~autoConv_bufBasic.(impulse: 2, postDel: 3, amp: (-10.dbamp));
 
+//~autoConv_bufBasic.(impulse: 2, postDel: 3, amp: (-10.dbamp));
 ~autoConv_bufBasic = {|active = 1, impulse = 0, sweepDur = 0.35, amp = (-14.dbamp), postDel = 3|
 	if (active == 1,
 		{

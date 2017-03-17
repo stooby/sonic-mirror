@@ -1337,10 +1337,10 @@ s.plotTree;
 		} );
 } );
 
-~label_playSamp = StaticText(~view_sampButtons, Rect(113, 23, 135, 20))
+/*~label_playSamp = StaticText(~view_sampButtons, Rect(113, 23, 135, 20))
 .string_("/PATH/../FILENAME")
 .font_(Font("Monaco", 12) )
-.align_(\left);
+.align_(\left); */
 
 
 //++++ADD FILE SELECTOR INTERFACE (OPEN DIALOG?) FOR SAMPLE LOADING...
