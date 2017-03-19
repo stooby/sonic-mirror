@@ -37,6 +37,12 @@
 ~outMainPeakQ = Bus.control(s, 1);
 ~outMainPeakGain = Bus.control(s, 1);
 
+~comp1thresh = Bus.control(s, 1);
+~comp1ratio = Bus.control(s, 1);
+~comp1attack = Bus.control(s, 1);
+~comp1release = Bus.control(s, 1);
+~comp1gain = Bus.control(s, 1);
+
 // Busses for Feature Extractor Synths (from SCML) ---------------
 
 ~bus_loudness = Bus.control(s, 1);

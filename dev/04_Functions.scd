@@ -923,11 +923,27 @@
 
 					if (timeStretch == true,
 						{
-							var pitchOffset;
+							var pitchOffset, durCase, attack, release;
+
+							if (post == 1, {("~~~TIME STRETCH: orig playDur =" + playDur + "| rate =" + timeStretchRate).postln;});
+
 							playDur = (playDur/timeStretchRate).round(0.001);
+
+							if (post == 1, {("~~~TIME STRETCH: stretched playDur =" + playDur + "| rate =" + timeStretchRate).postln;});
+
+							durCase = case
+							{playDur <= 6} {attack = 0.02; release = 0.02;}
+							{playDur > 6 && playDur <= 20} {attack = 1; release = 2.5;}
+							{playDur > 20} {attack = 1.3; release = 3.7;};
+
+							if (playDur >= ~audioBuf0_dur, {
+								playDur = ~audioBuf0_dur - (rrand(6, 15).round(0.01));
+								if (post == 1, {("~~~TIME STRETCH: --BUF LENGTH EXCEEDED | newDur =" + playDur).postln;});
+							}); //avoid creating a playDur longer than the total audio buffer (crude for now, will figure out something better to do later.......)
+
 							pitchOffset = timeStretchRate.reciprocal; //inverse of rate to preserve orig pitch
 							//Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur]); //play time-stretched sample
-							Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur]).onFree({{~button_playSamp.value = 0}.defer;}); //THIS instead <------?
+							Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur, \attack, attack, \release, release]).onFree({{~button_playSamp.value = 0}.defer;}); //THIS instead <------?
 							if (post == 1, {("-->PLAY LAST SAMP | TIME STRETCH =" + timeStretchRate).postln;});
 						},
 						{//else if no timeStretching

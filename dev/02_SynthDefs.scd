@@ -16,11 +16,12 @@ SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
 } ).add;
 
 SynthDef.new(\bufRead_complex1, {
-	arg buf, duration, amp=1, rate = 1, pitch = 1, winSize = 0.1, timeDisp = 0.003, pShiftMix = 0, out = 0;
-	var sig1, sig2, sigOut, frames, dur, env, phasor;
+	|buf, duration, amp=1, attack = 0.02, release = 0.02, rate = 1, pitch = 1, winSize = 0.1, timeDisp = 0.003, pShiftMix = 0, out = 0|
+	var sig1, sig2, sigOut, frames, dur, atRelDur, env, phasor;
 	frames = BufFrames.kr(buf);
 	dur = duration.asFloat; //total playback duration in seconds
-	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	atRelDur = attack.asFloat + release.asFloat;
+	env = Env.linen(attackTime: attack, sustainTime: (dur - atRelDur), releaseTime: release, level: 1);
 	//env = Env.linen(attackTime: 0.003, sustainTime: (dur - 0.006), releaseTime: 0.003, level: 1); //for fast rate playback
 	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames - 1);
 	sig1 = BufRd.ar(1, buf, phasor, interpolation: 4); //<--changed -- interp 4 for faster playback rates
@@ -144,6 +145,13 @@ SynthDef(\LinInterp_num, {
 	Out.kr(out, Line.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
 } ).add;
 
+SynthDef(\asrEnvGen, {|out, attTime = 0.01, susTime = 1, relTime = 2, level = 1, curve = \sine|
+	var env, envGen;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: level, curve: curve);
+	envGen = EnvGen.kr(env, doneAction: 2);
+	Out.kr(out, envGen);
+}).add;
+
 SynthDef.new(\subMix, {
 	|in, amp = 1, out|
 	var sig;
@@ -152,6 +160,14 @@ SynthDef.new(\subMix, {
 	//OffsetOut.ar(out, sig);
 	Out.ar(out, sig);
 } ).add;
+
+SynthDef(\comp1, {|bus, thresh = (-6.dbamp), ratio = 2, attack = 0.01, release = 0.25, amp = 1| //<----NEW
+	var sigIn, sigOut, ratioConv;
+	sigIn = In.ar(bus: bus, numChannels: 1);
+	ratioConv = ratio.reciprocal;
+	sigOut = Compander.ar(sigIn, sigIn, thresh: thresh, slopeAbove: ratioConv, clampTime: attack, relaxTime: release, mul: amp);
+	ReplaceOut.ar(bus, sigOut);
+}).add;
 
 SynthDef.new(\mainOut, { //w/ Lo-cut and Peak EQ
 	|in, loCut = 90, loCutQ = 1, amp = 1, peak = 120, peakQ = 1, peakGain = 0|
@@ -355,6 +371,27 @@ SynthDef(\impulseWhite3, {
 	sig = BHiShelf.ar(sig, freq: shelf_freq, rs: rs, db: shelf_db);
 	sig = BPeakEQ.ar(sig, freq: peak_freq, rq: peakQ, db: peak_db, mul: amp);
 	Out.ar(out, sig);
+}).add;
+
+SynthDef(\impulseWhiteSin, {
+	|attackTime = 0.01, releaseTime = 0.25, curve =  -4, peak_freq = 160, peakBW = 0.01, amp = 0.2, out|
+	var env, sin, sig1, sig2, sig3, sig4, sig5, sigOut;
+	env = Env.perc(attackTime, releaseTime, curve: curve);
+	sin = SinOsc.ar(freq: peak_freq);
+	sig1 = WhiteNoise.ar(1);
+	sig2 = Resonz.ar(sig1, freq: peak_freq, bwr: peakBW);
+	sig3 = Resonz.ar(sig1, freq: (peak_freq * 2), bwr: peakBW);
+	sig4 = Resonz.ar(sig1, freq: (peak_freq * 4), bwr: peakBW, mul: 0.75);
+	sig5 = Resonz.ar(sig1, freq: (peak_freq * 10), bwr: peakBW, mul: 0.85);
+	sigOut = Mix.ar([sin, sig2, sig3, sig4, sig5]);
+	//sigOut = Mix.ar([sig2, sig3, sig4]);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sigOut * amp);
+}).add;
+
+SynthDef(\resPinkNoise, {|out, freq = 500, bw = 0.005, amp = 0.2|
+	var sig = Resonz.ar(PinkNoise.ar(1), freq: freq, bwr: bw);
+	Out.ar(out, sig * amp);
 }).add;
 
 SynthDef(\sinSweep1, {

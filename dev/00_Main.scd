@@ -31,7 +31,8 @@ Buffer.freeAll; //for cleanup
 ~sampBitDepth = "int24"; //alt = "int16"  (specify bit depth for all samples recorded by SM)
 ~plotterEnabled = true; //set to false for RPi (or until I optimize plotter code, it's not efficient now.)
 
-~audioBuf0_dur = 60.0;
+~audioBuf0_dur = 60.0; //<---changing here fine, but changing bufDur w/ GUI causes errors, will fix bug later...
+
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
 
 ~delayTime = 1.23;
@@ -92,14 +93,28 @@ Buffer.freeAll; //for cleanup
 ~fileOutputLevelBus.set(1);
 ~outMainLevelBus.set(1);
 
-~outMainPeakFreq.set(120); //<---NEW
-~outMainPeakQ.set(1); //technically reciprocal of Q... <---NEW
-~outMainPeakGain.set(0); //in db  <---NEW
+~outMainPeakFreq_init = 120;
+~outMainPeakFreq.set(~outMainPeakFreq_init);
+~outMainPeakQ_init = 1;
+~outMainPeakQ.set(~outMainPeakQ_init); //technically reciprocal of Q...
+~outMainPeakGain_init = 0;
+~outMainPeakGain.set(~outMainPeakGain_init); //in db
 
 ~loCutVal_in = 110;
 ~loCutVal_out = 110;
 ~loCutBus_in.set(~loCutVal_in);
 ~loCutBus_out.set(~loCutVal_out);
+
+~comp1thresh_init = -6.dbamp;
+~comp1thresh.set(~comp1thresh_init); //<---NEW
+~comp1ratio_init = 2;
+~comp1ratio.set(~comp1ratio_init); //<---NEW
+~comp1attack_init = 0.01;
+~comp1attack.set(~comp1attack_init); //in seconds <---NEW
+~comp1release_init = 0.3;
+~comp1release.set(~comp1release_init ); //in seconds <---NEW
+~comp1gain_init = 1;
+~comp1gain.set(~comp1gain_init); //<---NEW
 
 ~phaseBusMonPly.set(0);
 ~phaseBusMonRec.set(0);
@@ -113,14 +128,15 @@ Buffer.freeAll; //for cleanup
 ////
 Window.closeAll;
 //w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
-w = Window.new("SonicMirror", Rect.new(335, 330, 792, 380), resizable: false)
+w = Window.new("SonicMirror", Rect.new(335, 330, 822, 380), resizable: false)
 .front
 .alwaysOnTop_(true);
 
 w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;}; // clean up when window is closed
 
-~view_main = CompositeView(w, Rect(3, 3, 788, 380));
+~view_main = CompositeView(w, Rect(3, 3, 819, 380));
 ~view_MainLevels = CompositeView(~view_main, Rect(625, 26, 135, 147));
+~view_comp1 = CompositeView(~view_main, Rect(763, 28, 45, 100));
 ~view_altLevels = CompositeView(~view_main, Rect(693, 26, 68, 105));
 ~view_bufConfig = CompositeView(~view_main, Rect(625, 0, 160, 25));
 ~view_bufPlot = CompositeView(~view_main, Rect(0, 0, 620, 170)).background_(Color.gray).resize_(1);
@@ -202,8 +218,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 //Main In / Out Lo-Cuts --
 ~numBox_inMainLoCut = NumberBox(~view_MainLevels, Rect(2, 120, 30, 14))//<---
 .value_(~loCutVal_in)
-.clipLo_(10) //smallest possible length of buffer (in seconds)
-.clipHi_(20000) //longest possible length of buffer (in seconds)
+.clipLo_(20)
+.clipHi_(20000)
 .font_(Font("Monaco", 8) )
 .decimals_(1)
 .action_( {
@@ -216,8 +232,8 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 
 ~numBox_outMainLoCut= NumberBox(~view_MainLevels, Rect(32, 120, 30, 14))//<---
 .value_(~loCutVal_out)
-.clipLo_(10) //smallest possible length of buffer (in seconds)
-.clipHi_(20000) //longest possible length of buffer (in seconds)
+.clipLo_(20)
+.clipHi_(20000)
 .font_(Font("Monaco", 8) )
 .decimals_(1)
 .action_( {
@@ -233,6 +249,7 @@ w.onClose_{s.freeAll; Buffer.freeAll(s); CmdPeriod.clearClocks; CmdPeriod.run;};
 .font_(Font("Monaco", 10) )
 .align_(\left);
 
+//Master Out Peak EQ	 --
 ~label_peakEQ = StaticText(~view_MainLevels, Rect(101, 106, 25, 38) )//<---
 .string_("db
 Peak
@@ -241,9 +258,9 @@ Q")
 .align_(\left);
 
 ~numBox_outMainPeak= NumberBox(~view_MainLevels, Rect(68, 118, 30, 14))//<--- NEW
-.value_(~outMainPeakFreq.getSynchronous)
-.clipLo_(20) //smallest possible length of buffer (in seconds)
-.clipHi_(20000) //longest possible length of buffer (in seconds)
+.value_(~outMainPeakFreq_init)
+.clipLo_(40)
+.clipHi_(15000)
 .font_(Font("Monaco", 8) )
 .decimals_(0)
 .align_(\center)
@@ -253,21 +270,21 @@ Q")
 });
 
 ~numBox_outMainPeakGain= NumberBox(~view_MainLevels, Rect(65, 104, 35, 14))//<--- NEW
-.value_(~outMainPeakGain.getSynchronous)
-.clipLo_(-inf) //smallest possible length of buffer (in seconds)
-.clipHi_(12) //longest possible length of buffer (in seconds)
+.value_(~outMainPeakGain_init)
+.clipLo_(-inf)
+.clipHi_(12)
 .font_(Font("Monaco", 8) )
 .decimals_(2)
 .align_(\center)
-.action_( {
+.action_({
 	arg obj;
 	~outMainPeakGain.setSynchronous(obj.value.round(0.01));
-} );
+});
 
-~numBox_outMainPeakQ = NumberBox(~view_MainLevels, Rect(68, 132, 30, 14))//<--- NEW
-.value_(~outMainPeakQ.getSynchronous)
-.clipLo_(0.1) //smallest possible length of buffer (in seconds)
-.clipHi_(100) //longest possible length of buffer (in seconds)
+~numBox_outMainPeakQ = NumberBox(~view_MainLevels, Rect(68, 132, 30, 14))
+.value_(~outMainPeakQ_init)
+.clipLo_(0.1)
+.clipHi_(100)
 .font_(Font("Monaco", 8) )
 .decimals_(1)
 .align_(\center)
@@ -275,6 +292,105 @@ Q")
 	arg obj;
 	~outMainPeakQ.setSynchronous(obj.value.round(0.1));
 } );
+
+
+//Master Out Compressor --
+~numBox_comp1thresh = NumberBox(~view_comp1, Rect(1, 1, 30, 14))//<--- NEW
+.value_(~comp1thresh_init.ampdb.round(0.1)) //display db
+.clipLo_(-inf)
+.clipHi_(0)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.1)
+.decimals_(1)
+.align_(\center)
+.action_({|obj|
+	~comp1thresh.setSynchronous(obj.value.round(0.1).dbamp); //convert from db to linear amp before set cont bus
+} );
+
+~numBox_comp1ratio = NumberBox(~view_comp1, Rect(1, 15, 30, 14))//<--- NEW
+.value_(~comp1ratio_init)
+.clipLo_(1)
+.clipHi_(20)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.1)
+.decimals_(1)
+.align_(\center)
+.action_({|obj|
+	~comp1ratio.setSynchronous(obj.value.round(0.1));
+} );
+
+~numBox_comp1attack = NumberBox(~view_comp1, Rect(1, 29, 30, 14))//<--- NEW
+.value_((~comp1attack_init * 1000).round(1)) //displaying ms
+.clipLo_(0)
+.clipHi_(2000)
+.font_(Font("Monaco", 8) )
+.scroll_step_(1)
+.decimals_(0)
+.align_(\center)
+.action_({|obj|
+	var val = (obj.value/1000).round(0.001); //convert from ms to seconds
+	~comp1attack.setSynchronous(val);
+});
+
+~numBox_comp1release = NumberBox(~view_comp1, Rect(1, 43, 30, 14))//<--- NEW
+.value_((~comp1release_init * 1000).round(1)) //displaying ms
+.clipLo_(0)
+.clipHi_(2000)
+.font_(Font("Monaco", 8) )
+.scroll_step_(1)
+.decimals_(0)
+.align_(\center)
+.action_({|obj|
+	var val = (obj.value/1000).round(0.001); //convert from ms to seconds
+	~comp1release.setSynchronous(val);
+});
+
+~numBox_comp1gain = NumberBox(~view_comp1, Rect(1, 57, 30, 14))//<--- NEW
+.value_(~comp1gain_init.ampdb.round(0.1)) //display db
+.clipLo_(-inf)
+.clipHi_(6)
+.font_(Font("Monaco", 8) )
+.scroll_step_(0.5)
+.decimals_(1)
+.align_(\center)
+.action_({|obj|
+	var val = obj.value.round(0.1);
+	if (val <= -80, {
+		val = -inf;
+		~numBox_comp1gain.value = -inf;
+	});
+	~comp1gain.setSynchronous(val.dbamp); //convert from db to linear amp before set cont bus
+});
+
+~label_comp1 = StaticText(~view_comp1, Rect(32, 1, 25, 68) )//<---
+.string_("TH
+:1
+AT
+RL
+dB")
+.font_(Font("Monaco", 10) )
+.align_(\left);
+
+~button_comp1 = Button(~view_comp1, Rect(0, 72, 33, 17)) //randomize rate and pitchShift over time
+.states_( [
+	["COMP", Color.black, Color(0.7, 0.3, 0.7, 0.3)] ,
+	["COMP", Color.white, Color(0.8, 0.3, 0.8)]
+] )
+.font_(Font("Monaco", 12) )
+.action_( {
+	arg obj;
+	if (
+		obj.value == 1,
+		{
+			~comp1 = Synth(\comp1, [\bus, ~outMainBus, \thresh, ~comp1thresh.asMap, \ratio, ~comp1ratio.asMap, \attack, ~comp1attack.asMap, \release, ~comp1release.asMap, \amp, ~comp1gain.asMap]).moveBefore(~mainOut);
+		},
+		{
+			~comp1.free;
+		}
+	);
+} )
+.value_(0);
+
 //------------
 
 //----- AUDIO BUFFER --------
@@ -292,6 +408,10 @@ Q")
 		obj.value == 1,
 		{//allocate(create) buffer w/ duration = bufferSize seconds
 			~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
+			~recOutFrame = ~audioBuf0_dur * s.sampleRate - 1;
+			~recOutPosBus.set(~recOutFrame);
+			~playOutFrame = ~audioBuf0_dur * s.sampleRate - 1;
+			~playOutPosBus.set(~playOutFrame);
 		} , //else
 		{~audioBuf0.close; ~audioBuf0.free;} //free(erase) buffer
 	);
@@ -300,7 +420,7 @@ Q")
 ~numBox_audioBuf0_dur = NumberBox(~view_bufConfig, Rect(67, 0, 65, 25))
 .value_(~audioBuf0_dur)
 .clipLo_(10) //smallest possible length of buffer (in seconds)
-.clipHi_(120) //longest possible length of buffer (in seconds)
+.clipHi_(300) //longest possible length of buffer (in seconds)
 .font_(Font("Monaco", 14) )
 .decimals_(2)
 .action_( {
@@ -1921,10 +2041,12 @@ if (~plotterEnabled == true, {
 	if (
 		obj.value == 1, // when button enabled
 		{
-
+			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
+			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, impulse: 3, sweepDur: 4, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1);
 		},
 		{ //when button disabled
-
+			~listen_sound.value(active: 0, outBus: \busSum_lop, sumSynth: \sumSyn_1);
+			~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2); //this will throw error if envName isn't provided for rout1 arg......
 		}
 	);
 } )
