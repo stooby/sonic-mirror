@@ -128,7 +128,7 @@ Buffer.freeAll; //for cleanup
 ////
 Window.closeAll;
 //w = Window.new("SonicMirror", Rect.new(250, 330, 780, 405))
-w = Window.new("SonicMirror", Rect.new(335, 330, 822, 380), resizable: false)
+w = Window.new("SonicMirror", Rect.new(335, 330, 818, 380), resizable: false)
 .front
 .alwaysOnTop_(true);
 
@@ -2042,11 +2042,13 @@ if (~plotterEnabled == true, {
 		obj.value == 1, // when button enabled
 		{
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
-			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, impulse: 3, sweepDur: 4, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1);
+			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 3, sweepDur: 4, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, sweepDur: 4, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1, sweepDur: 5, freq1: 1000, freq2: 20000, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //for voxel experiments...
 		},
 		{ //when button disabled
 			~listen_sound.value(active: 0, outBus: \busSum_lop, sumSynth: \sumSyn_1);
-			~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2); //this will throw error if envName isn't provided for rout1 arg......
+			~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1); //this will throw error if envName isn't provided for rout1 arg......
 		}
 	);
 } )

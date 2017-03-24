@@ -465,14 +465,15 @@
 	);
 };
 
-~autoConvolve1A = {|active, featureBus, outBus, ampBus, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, initFlag, impulse = 0, sweepDur = 3.5, impPostDel = 0, preRecPad = 0, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0|
+~autoConvolve1A = {|active, featureBus, outBus, ampBus, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, synth1, initFlag, repeatCounter, impulse = 0, sweepDur = 3.5, freq1 = 100, freq2 = 2000, impPostDel = 0, preRecPad = 0.03, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0| //<--- add synth and counter args for env var storage (synth to free synth when killing routine...)
 	if (active == 1,
 		{
 			if (~bufRecorder.isRunning,
 				{
 					var rout;
 
-					initFlag.envirPut(1);
+					initFlag.envirPut(1); //set init state flag
+					repeatCounter.envirPut(0); //reset sample playback iteration counter
 
 					rout = Routine({
 						if (initFlag.envirGet == 1,
@@ -488,7 +489,7 @@
 								impCase = case
 								{impulse == 0} {
 									~recSamp_input_startFrame = ~recPlayDelayOffset.(offset: 0); // <-- log sound start frame
-									Synth(\impulseWhite3, [\shelf_freq, 10000, \rs, 1, \shelf_db, -6, \peak_freq, 160, \peakQ, 12, \peak_db, 12, \attackTime, 0.001, \releaseTime, 0.13, \curve, -4, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder);
+									synth1.envirPut(Synth(\impulseWhite3, [\shelf_freq, 10000, \rs, 1, \shelf_db, -6, \peak_freq, 160, \peakQ, 12, \peak_db, 12, \attackTime, 0.001, \releaseTime, 0.13, \curve, -4, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
 									if (post == 1, {"TRIG: impulseWhite3".postln;});
@@ -496,7 +497,7 @@
 								}
 								{impulse == 1} {
 									~recSamp_input_startFrame = ~recPlayDelayOffset.(offset: 0); //<-- log sound start frame
-									Synth(\sinSweep1, [\freq1, 40, \freq2, 20000, \dur, sweepDur, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder);
+									synth1.envirPut(Synth(\sinSweep1, [\freq1, freq1, \freq2, freq2, \dur, sweepDur, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
 									if (post == 1, {("TRIG: sinSweep1 | sweepDur =" + sweepDur).postln;});
@@ -504,7 +505,7 @@
 								}
 								{impulse == 2} {
 									~recSamp_input_startFrame = ~recPlayDelayOffset.(offset: 0); //<-- log sound start frame
-									Synth(\sawSweep1, [\freq1, 40, \freq2, 20000, \dur, sweepDur, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder);
+									synth1.envirPut(Synth(\sawSweep1, [\freq1, freq1, \freq2, freq2, \dur, sweepDur, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
 									if (post == 1, {("TRIG: sawSweep1 | sweepDur =" + sweepDur).postln;});
@@ -516,7 +517,7 @@
 									rate.yieldAndReset;
 								};
 							},
-							{//else if (initFlag.envirGet == 0) <----------PICK UP HERE
+							{//else if (initFlag.envirGet == 0)
 								var impCase, cond = Condition.new;
 
 								//repeating monitoring, recording, playback
@@ -592,7 +593,7 @@
 											);
 										},
 										{//if ~recSamp_input == false
-											var playDur;
+											var playDur, currentPlayCount;
 											if (post == 1, {("->recSamp_input = FALSE.......").postln;});
 											~playSamp = true; //not used other than to update GUI, maybe more use though?
 
@@ -602,6 +603,8 @@
 											{~button_recIn.value = 1;}.defer; //update GUI
 
 											//PLAY BACK PREVIOUS RECORDED SAMPLE
+											currentPlayCount = (repeatCounter.envirGet) + 1; //update repeat counter variable
+											repeatCounter.envirPut(currentPlayCount);
 											~audioBuf_play0 = Buffer.read(s, ~fileAudio_writeIn_lastFile, action: {|buffer|
 												playDur = buffer.numFrames/buffer.sampleRate;
 
@@ -610,12 +613,12 @@
 														var pitchOffset;
 														playDur = (playDur/timeStretchRate).round(0.001);
 														pitchOffset = timeStretchRate.reciprocal; //inverse of rate to preserve orig pitch
-														Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur]); //play time-stretched sample
+														synth1.envirPut(Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur])); //play time-stretched sample
 														if (post == 1, {("-->PLAY LAST SAMP | TIME STRETCH =" + timeStretchRate).postln;});
 													},
 													{//else if no timeStretching
 														playDur = playDur.round(0.001);
-														Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]); //play unaltered sample
+														synth1.envirPut(Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus])); //play unaltered sample
 														if (post == 1, {("-->PLAY LAST SAMP | no time stretch...").postln;});
 													}
 												);
@@ -631,7 +634,7 @@
 									);
 								}
 								{impulse == 3} { //<------------ LIVE SOUND IMPULSE ---------- !!!!!!
-									rout2.envirPut(~autoRecPlay_conv0.(featureBus: featureBus, outBus: outBus, ampBus: ampBus, loudThresh: loudThresh, pitchThresh: pitchThresh, preRecPad: preRecPad, postRecPad: postRecPad, impPostDel: impPostDel, timeStretch: timeStretch, timeStretchRate: timeStretchRate, debounceDur: 0, post: post));
+									rout2.envirPut(~autoRecPlay_conv0.(featureBus: featureBus, outBus: outBus, ampBus: ampBus, synth1: synth1, repeatCounter: repeatCounter, loudThresh: loudThresh, pitchThresh: pitchThresh, preRecPad: preRecPad, postRecPad: postRecPad, impPostDel: impPostDel, timeStretch: timeStretch, timeStretchRate: timeStretchRate, debounceDur: 0, post: post));
 									SystemClock.play(rout2.envirGet); //launch autoRecPlay routine
 									//rate.yieldAndReset; //<-------------no yield necessary, fall through--------????
 								};
@@ -664,13 +667,14 @@
 			if (~playSamp == true, {
 				~playSamp = false; //<---not being used at the moment, but could be useful?
 				{~button_playSamp.value = 0;}.defer; //update GUI
+				if (synth1.envirGet.isRunning, {synth1.envirGet.free;});
 				~audioBuf_play0.free;
 			});
 		}
 	);
 };
 
-~autoRecPlay_conv0 =  {|featureBus, outBus, ampBus, loudThresh = 5, pitchThresh = 0.55, preRecPad = 0.02, postRecPad = 0.02, impPostDel = 0, rate = 0.1, timeStretch = false, timeStretchRate = 0.9, debounceDur = 0.5, post = 0|
+~autoRecPlay_conv0 =  {|featureBus, outBus, ampBus, synth1, repeatCounter, loudThresh = 5, pitchThresh = 0.55, preRecPad = 0.02, postRecPad = 0.02, impPostDel = 0, rate = 0.1, timeStretch = false, timeStretchRate = 0.9, debounceDur = 0.5, post = 0|
 	~autoRecPlay_state = 0; //<---reset this before restarting...
 	Routine({
 		if (~autoRecPlay_state == 0,
@@ -890,7 +894,7 @@
 				);
 			},
 			{//else if ~autoRecPlay_state = 1 =======PLAYBACK ===========
-				var playDur, bufFrames, currentTime;
+				var playDur, bufFrames, currentTime, currentPlayCount;
 				//--------v-v-v-v-v-v-v-NEW -v-v-v-v-v-v-v-----------
 
 				impPostDel.yield; //<----slight pause if desired between recording and playing back sounds
@@ -917,6 +921,9 @@
 				//=====PLAY PREV RECORDED SAMPLE!!!
 				~playSamp = true;
 
+				currentPlayCount = (repeatCounter.envirGet) + 1; //update repeat counter variable
+				repeatCounter.envirPut(currentPlayCount);
+
 				~audioBuf_play0 = Buffer.read(s, ~fileAudio_writeIn_lastFile, action: {|buffer|
 					bufFrames = buffer.numFrames;
 					playDur = bufFrames/buffer.sampleRate;
@@ -931,10 +938,36 @@
 
 							if (post == 1, {("~~~TIME STRETCH: stretched playDur =" + playDur + "| rate =" + timeStretchRate).postln;});
 
+							if (post == 1, {("---currentPlayCount =" + currentPlayCount + "|").post;});
+
 							durCase = case
-							{playDur <= 6} {attack = 0.02; release = 0.02;}
-							{playDur > 6 && playDur <= 20} {attack = 1; release = 2.5;}
-							{playDur > 20} {attack = 1.3; release = 3.7;};
+							{playDur <= 6} {
+								if (currentPlayCount <= 3, {attack = 0.02; release = 0.02;}, {attack = 0.02; release = 0.1;});
+							}
+							{playDur > 6 && playDur <= 20} {
+								var countCase;
+								countCase = case
+								{currentPlayCount <= 3} {attack = 0.02; release = 0.2;}
+								{currentPlayCount > 3 && currentPlayCount <= 6} {attack = 0.04; release = 0.4;} //massage
+								{currentPlayCount > 6} {attack = 0.3; release = 0.4;}; //massage
+								//if (currentPlayCount <= 3, {attack = 0.02; release = 0.2;}, {attack = 0.5; release = 0.4;});
+							}
+							{playDur > 20} {
+								var countCase;
+								countCase = case
+								{currentPlayCount <= 3} {attack = 0.02; release = 0.2;}
+								{currentPlayCount > 3 && currentPlayCount <= 6} {attack = 0.5; release = 1.1;}
+								{currentPlayCount > 6} {attack = 1.3; release = 3;};
+								//if (currentPlayCount <= 3, {attack = 0.02; release = 0.2;}, {attack = 1.3; release = 3;});
+							};
+							if (post == 1, {("---attack =" + attack + "| release =" + release).postln;});
+							/*{playDur <= 6} {attack = 0.02; release = 0.02;}
+							{playDur > 6 && playDur <= 20} {attack = 0.02; release = 2.5;}
+							{playDur > 20} {attack = 0.02; release = 3.7;}; */
+
+							/*{playDur <= 6} {attack = 0.02; release = 0.02;} //orig
+							{playDur > 6 && playDur <= 20} {attack = 1; release = 2.5;} //orig
+							{playDur > 20} {attack = 1.3; release = 3.7;}; */ //orig
 
 							if (playDur >= ~audioBuf0_dur, {
 								playDur = ~audioBuf0_dur - (rrand(6, 15).round(0.01));
@@ -943,13 +976,17 @@
 
 							pitchOffset = timeStretchRate.reciprocal; //inverse of rate to preserve orig pitch
 							//Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur]); //play time-stretched sample
-							Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur, \attack, attack, \release, release]).onFree({{~button_playSamp.value = 0}.defer;}); //THIS instead <------?
+
+							synth1.envirPut(Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur, \attack, attack, \release, release]).onFree({{~button_playSamp.value = 0}.defer;})); //THIS instead <------?
+
+							//Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur, \attack, attack, \release, release]).onFree({{~button_playSamp.value = 0}.defer;}); //THIS instead <------?
 							if (post == 1, {("-->PLAY LAST SAMP | TIME STRETCH =" + timeStretchRate).postln;});
 						},
 						{//else if no timeStretching
 							playDur = playDur.round(0.001);
 							//Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]); //play unaltered sample
-							Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]).onFree({{~button_playSamp.value = 0}.defer;});
+							synth1.envirPut(Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]).onFree({{~button_playSamp.value = 0}.defer;}));
+							//Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]).onFree({{~button_playSamp.value = 0}.defer;});
 							if (post == 1, {("-->PLAY LAST SAMP | no time stretch...").postln;});
 						}
 					);

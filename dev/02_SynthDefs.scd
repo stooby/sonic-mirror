@@ -145,11 +145,30 @@ SynthDef(\LinInterp_num, {
 	Out.kr(out, Line.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
 } ).add;
 
-SynthDef(\asrEnvGen, {|out, attTime = 0.01, susTime = 1, relTime = 2, level = 1, curve = \sine|
+SynthDef(\ExpInterp_num, {|startVal, stopVal, duration, mult = 1, out|
+	Out.kr(out, XLine.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
+} ).add;
+
+SynthDef(\asrEnvGen_trig, {|out, attTime = 0.01, susTime = 1, relTime = 2, level = 1, curve = \sine|
 	var env, envGen;
 	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: level, curve: curve);
 	envGen = EnvGen.kr(env, doneAction: 2);
 	Out.kr(out, envGen);
+}).add;
+
+SynthDef(\adsrEnvGen, {|out, gate = 1, attTime = 0.01, susTime = 1, relTime = 2, peakLevel = 1, susLevel = 1, curve = \sine|
+	var env, envGen;
+	env = Env.adsr(attackTime: attTime, decayTime: susTime, sustainLevel: susLevel, releaseTime: relTime, peakLevel: peakLevel, curve: curve);
+	envGen = EnvGen.kr(env, gate: gate, doneAction: 2);
+	Out.kr(out, envGen);
+}).add;
+
+SynthDef(\dEnvGen, {|out, gate = 1, startVal = 0, endVal = 0, peakVal = 1, susVal = 1, attTime = 1, decTime = 1, susTime = 1, relTime = 2, shape = 3, curve = 0, repeat = 1| //shape: 3 => S-curve | 5 => linear | curve vals only effective when shape = 5 | <------USE THIS W/ AUTO-LEVEL / ANTI-FEEDBACK ROUTINES.....
+	var levels, durations, env;
+	levels = Dseq([startVal, peakVal, susVal, susVal, endVal], repeats: repeat);
+	durations = Dseq([attTime, decTime, susTime, relTime], repeats: repeat);
+	env = DemandEnvGen.kr(level: levels, dur: durations, shape: shape, curve: curve, gate: gate, doneAction: 2); //if gate <=0, ugen's sampled and held, if gate >=1, it runs...
+	Out.kr(out, env);
 }).add;
 
 SynthDef.new(\subMix, {
@@ -221,12 +240,22 @@ SynthDef.new(\startupTone_1, {
 		Env.new( [0, 1, 0], [6, 4], [1, -1] ),
 		doneAction: 2
 	);
-	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1); //double check what .range is doing to sound...
+	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1);
 	sig = SinOsc.ar( {ExpRand(300, 1200)} ! 3);
 	sig = sig * amp * env; //amp mod
 	sig = Mix.ar(sig) * 0.20;
 	Out.ar(0, sig);
 } ).add;
+
+//  UTILITY --------------
+SynthDef(\avgKR, {
+	|input, output, avgDur = 1|
+	var sigIn, avg, numSamp;
+	sigIn = In.kr(input, 1);
+	numSamp = ControlRate.ir * avgDur;
+	avg = (RunningSum.kr(sigIn, numSamp)) * (numSamp.reciprocal);
+	Out.kr(output, avg);
+}).add;
 
 //  FEATURE EXTRACTORS --------------
 
