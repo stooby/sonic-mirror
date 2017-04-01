@@ -120,9 +120,12 @@ Buffer.freeAll; //for cleanup
 ~phaseBusMonRec.set(0);
 //-----------------
 
-// --------- SET UP SOME INITIAL SYNTHS? ------------
+// --------- SET UP SOME INITIAL SYNTHS ------------
 ~mainOut = Synth.tail(s, \mainOut, [\in, ~outMainBus, \loCut, ~loCutBus_out.asMap, \loCutQ, 2, \amp, ~outMainLevelBus.asMap, \peak, ~outMainPeakFreq.asMap, \peakQ, ~outMainPeakQ.asMap, \peakGain, ~outMainPeakGain.asMap]);
-//Synth(\pitchShift1)???
+
+~stream1 = Synth(\subMix, [\in, ~stream1sub, \out, ~outMainBus]).moveBefore(~mainOut); //<---NEW
+~stream2 = Synth(\subMix, [\in, ~stream2sub, \out, ~outMainBus]).moveBefore(~mainOut); //<---NEW
+
 //-------------------
 
 ////
@@ -675,12 +678,14 @@ dB")
 													});
 												}
 											);
-											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											//~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify); //<---NEW outBus
 										},
 										{ //else if we have maximum # of samples saved...
 											rate = rrand(28.0, 36.0).round(0.01);
 											fileNum = ~fileAudio_writeIn_maxNum;
-											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											//~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify); //<---NEW outBus
 											if (post == 1, {"[AUDIFY] -- filesMax Exceeded: ".post; (" rate =" + rate).postln;});
 										}
 									);
@@ -707,12 +712,14 @@ dB")
 							//{rand <= 10} {
 							{rand <= 6.5} {
 								if (post == 1, {"==randAudify==".postln;});
-								duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
+								//duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
+								duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~stream2sub, post: post); //<---NEW outBus
 							}
 							{rand > 8.7} {
 								//{rand == 11} {
 								if (post == 1, {"==NOIZ MANGLE==".postln;});
-								duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post); //<---THIS
+								//duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
+								duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~stream2sub, post: post); //<---NEW outBus
 							}
 							{rand > 6.5 && rand <= 8.7} {
 								//{rand == 12} {
@@ -726,12 +733,14 @@ dB")
 									{
 										if (post == 1, {("---SineSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;});
 										//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-										~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+										//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+										~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~stream2sub]); //<---NEW outBus
 									},
 									{
 										if (post == 1, {("---NoiseSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;});
 										//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-										~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+										//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+										~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~stream2sub]); //<---NEW outBus
 									}
 								);
 							};
@@ -967,17 +976,20 @@ dB")
 /*
 s.plotTree;
 
-~listen_loudness.(active: 1,
+~listen_loudness.(active: 1, //ADD boolean args to enable/disable ~monitor_loudness and ~updateFeatureMemory routines
 	input: ~inputSendBus,
 	outBus: \bus_inputdb,
 	featSynth: \rms1,
 	loudFlag: \inputSendLoud,
 	loudSusFlag: \inputSendLoudSus,
 	lowThresh: -35, uprThresh: -15, threshDur: 1,
+	//lowThresh: -45, uprThresh: -25, threshDur: 1,
 	lastThreshTime: \inputSendThreshTime,
 	monRoutine: \inputSendMon,
-	rate: 0.5,
-	post: 1
+	rate: 0.1,
+	post: 1//,
+	//mon_loudnessActive: true, //<--args to enable/disable this & ~monitor_loudness routines??
+	//updateFeatMemActive: true
 );
 
 ~listen_loudness.(active: 0,
@@ -985,7 +997,9 @@ s.plotTree;
 	featSynth: \rms1,
 	loudFlag: \inputSendLoud,
 	loudSusFlag: \inputSendLoudSus,
-	monRoutine: \inputSendMon
+	monRoutine: \inputSendMon//,
+	//mon_loudnessActive: true, //<--args to enable/disable this & ~monitor_loudness routines??
+	//updateFeatMemActive: true
 );
 */
 
@@ -993,7 +1007,7 @@ s.plotTree;
 //<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
 //double check ~listen_loudness and ~monitor_loudness routine......
 
-~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, uprThresh = -4, threshDur = 0.4, lastThreshTime, rate = 0.1, post = 0, monRoutine| //<--IN PROGRESS....
+~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, uprThresh = -4, threshDur = 0.4, lastThreshTime, rate = 0.1, post = 0, monRoutine| //<----IN PROGRESS....add "monLoudness = true" and "updateFeatMem = true"
 	if (active == 1, {//start detecting feedback
 		if (~bufRecorder.isRunning, {
 			var thisOutBus;
@@ -1019,6 +1033,9 @@ s.plotTree;
 			//START LOUDNESS/FEEDBACK MONITOR ROUTINE
 			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, uprThresh: uprThresh, threshDur: threshDur, lastThreshTime: lastThreshTime, rate: rate, post: post));
 			SystemClock.play(monRoutine.envirGet);
+
+			//if (updateFeatMemActive == true, {~updateFeatureMemory.(active: 1, featureBus: ~bus_inputdb, array: \mem_inputdb, arraySize: 10, routine: \updateMem_inputdb, rate: 6, post: 1, postLabel: "=MEM_inputdb:");}); //<--ARG ENABLED? <-------------
+			~updateFeatureMemory.(active: 1, featureBus: ~bus_inputdb, array: \mem_inputdb, arraySize: 10, routine: \updateMem_inputdb, rate: 6, post: 1, postLabel: "=MEM_inputdb:"); //<---- ADDED / TEST
 			"====FEEDBACK DETECTION ACTIVE====".postln;
 		}, {
 			"===CAN'T DETECT FEEDBACK UNLESS BUF RECORDER ACTIVE===".postln;
@@ -1027,11 +1044,14 @@ s.plotTree;
 		if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
 		//STOP LOUDNESS/FEEDBACK MONITOR ROUTINE
 		monRoutine.envirGet.stop;
-		monRoutine.envirGet.free;
+		monRoutine.envirGet.free; //<--this doesn't free routine....set to nil?
 		outBus.envirGet.free; //free RMS feature extractor output bus
 		featSynth.envirGet.free; //free RMS feature extractor synth
 		loudFlag.envirPut(0);
-		loudSusFlag.envirPut(false);
+		loudSusFlag.envirPut(false); //<--this doesn't free routine....set to nil?
+
+		//if (updateFeatMemActive == true, {~updateFeatureMemory.(active: 0, routine: \updateMem_inputdb);}); //<---
+		~updateFeatureMemory.(active: 0, routine: \updateMem_inputdb);  //<---- ADDED / TEST
 		"====FEEDBACK DETECTION DISABLED====".postln;
 	} );
 };
@@ -1074,6 +1094,8 @@ s.plotTree;
 												loudSusFlag.envirPut(true);
 												if (post == 1, {("-->LOUD SOUND SUS CONFIRMED! (low thresh): input db =" + val.round(0.01)).postln;});
 												//<----TRIGGER ANTI-FEEDBACK ROUTINES - ADJUST LEVELS ??? <--------
+
+												//trigger long-term loudness monitoring timer and corrseponding autoActions here instead OR w/in ~updateFeatureMemory routine?
 											},
 											{
 												if (post == 1, {("-->LOUD SOUND SUS TEST...... (low thresh): input db =" + val.round(0.01)).postln;});
@@ -1441,7 +1463,8 @@ s.plotTree;
 					fileDir = (~fileAudio_writeIn_lastPath++randFilePick++".wav").standardizePath;
 					fileDir.postln;
 					~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
-						~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+						//~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
+						~samp0 = Synth(\bufRead_noLoop, [\buf, buffer, \amp, ~fileOutputLevelBus.asMap, \out, ~stream2sub]); //<---NEW outBus
 						NodeWatcher.register(~samp0);
 
 						//---put routine here that will turn off button when sample playback complete? ----
@@ -1827,11 +1850,12 @@ if (~plotterEnabled == true, {
 				[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]).moveAfter(~bufPlayer);
 
 			~pShiftMix = Synth(\XFade, [
-			\in1, ~playOut1Bus,
-			\in2, ~pitchShiftOut,
-			\out, ~outMainBus,
-			\amountControlBus, ~pitchShiftMixValBus.asMap,
-			\amp, ~inputStreamLevelBus.asMap //<--NEW
+				\in1, ~playOut1Bus,
+				\in2, ~pitchShiftOut,
+				//\out, ~outMainBus,
+				\out, ~stream1sub, //<---NEW
+				\amountControlBus, ~pitchShiftMixValBus.asMap,
+				\amp, ~inputStreamLevelBus.asMap
 			] ).moveAfter(~pShift);
 
 			~getBus_updateGUI_playPhase.reset;
@@ -2042,9 +2066,10 @@ if (~plotterEnabled == true, {
 		obj.value == 1, // when button enabled
 		{
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
-			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 3, sweepDur: 4, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, sweepDur: 4, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1, sweepDur: 5, freq1: 1000, freq2: 20000, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //for voxel experiments...
+			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 3, sweepDur: 4, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, sweepDur: 4, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 2, sweepDur: 5, freq1: 1000, freq2: 10000, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //for voxel experiments...
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 0.2, impulse: 3, sweepDur: 4, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---piezo live sound settings
 		},
 		{ //when button disabled
 			~listen_sound.value(active: 0, outBus: \busSum_lop, sumSynth: \sumSyn_1);

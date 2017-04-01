@@ -173,11 +173,10 @@ SynthDef(\dEnvGen, {|out, gate = 1, startVal = 0, endVal = 0, peakVal = 1, susVa
 
 SynthDef.new(\subMix, {
 	|in, amp = 1, out|
-	var sig;
-	sig = In.ar(in) * amp;
+	var sig = In.ar(in) * amp;
 	//sig = InFeedback.ar(in) * amp;
-	//OffsetOut.ar(out, sig);
-	Out.ar(out, sig);
+	OffsetOut.ar(out, sig);
+	//Out.ar(out, sig);
 } ).add;
 
 SynthDef(\comp1, {|bus, thresh = (-6.dbamp), ratio = 2, attack = 0.01, release = 0.25, amp = 1| //<----NEW
@@ -463,4 +462,14 @@ SynthDef(\pulseSweep1, {
 	Out.ar(out, sig * amp);
 }).add;
 
+SynthDef.new(\randSinSwell_1, {|out = 0, amp = 1, loFreq = 300, hiFreq = 1200, attTime = 6, susTime = 2, relTime = 5|
+	var sig, ampMod, env, envGen;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: 1, curve: \sine);
+	envGen = EnvGen.kr(env, doneAction: 2);
+	ampMod = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1);
+	sig = SinOsc.ar( {ExpRand(loFreq, hiFreq)} ! 3);
+	sig = sig * ampMod * envGen; //amp mod
+	sig = Mix.ar(sig) * amp;
+	Out.ar(out, sig);
+}).add;
 );

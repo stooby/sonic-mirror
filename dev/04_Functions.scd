@@ -1017,6 +1017,68 @@
 	});
 };
 
+//---- Loudness / Feature Level Monitoring ----
+
+/*~updateFeatureMemory = {|active = 1, featureBus, array, arraySize = 6, routine, rate = 10, post = 0, postLabel = "-->memArray1:"| //<--NEW (orig)
+	if (active == 1,
+		{
+			var rout;
+			array.envirPut(Array.newClear(arraySize));
+			rout = Routine({ //construct routine to update memory array at selected rate
+				var temp, val = featureBus.getSynchronous.round(0.001); //<----rounding or no? conditional as arg??
+				temp = array.envirGet.shift(1, val);
+				array.envirPut(temp);
+				if (post == 1, {(postLabel.asString + array.envirGet + "| total time-span =" + (arraySize * rate)).postln;});
+				rate.yieldAndReset;
+			});
+			routine.envirPut(rout);
+			SystemClock.play(routine.envirGet); //start memory update routine
+		},
+		{//else if active == 0
+			//clean up / delete mem array or no?
+			routine.envirGet.stop; //stop memory update routine
+		}
+	);
+}; */
+
+~updateFeatureMemory = {|active = 1, featureBus, array, arraySize = 6, routine, autoAction = false, rate = 10, post = 0, postLabel = "-->memArray1:"| //<--NEW (in progress)
+	if (active == 1,
+		{
+			var rout;
+			array.envirPut(Array.newClear(arraySize));
+			rout = Routine({ //update feature memory array at selected rate
+				var temp, val = featureBus.getSynchronous.round(0.001); //<----rounding or no? conditional as arg??
+				temp = array.envirGet.shift(1, val); //add latest featBus value to beginning of array & shift prev vals
+				array.envirPut(temp);
+				if (post == 1, {(postLabel.asString + array.envirGet + "| total time-span =" + (arraySize * rate)).postln;});
+
+				if (autoAction == true, {//manage/trig other "behavior" routs based on average feature level over time
+					// (e.g. loud RMS levels >= 30 secs {turn off normal behaviors and switch to "loud crowd" mode})
+
+					//xxxxxxxxxx//
+				});
+
+				rate.yieldAndReset;
+			});
+			routine.envirPut(rout);
+			SystemClock.play(routine.envirGet); //start memory update routine
+		},
+		{//else if active == 0
+			//clean up / delete mem array or no?
+			routine.envirGet.stop; //stop memory update routine
+		}
+	);
+};
+
+~avgArray = {|array, post = 0, postLabel = "array1-avg:"| //<--NEW
+	var size, runningSum, arrayAvg;
+	size = array.size;
+	runningSum = 0;
+	for(0, (size - 1), {|i| runningSum = array[i] + runningSum;});
+	arrayAvg = runningSum * size.reciprocal;
+	if (post == 1, {(postLabel.asString + arrayAvg).postln;});
+	arrayAvg;
+};
 //====== ROUTINES ==========================
 
 ~initSMpreset_1 = Routine({ //auto-startup routine for RPI
