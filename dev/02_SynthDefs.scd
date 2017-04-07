@@ -366,6 +366,14 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 
 //  IMPULSE SOURCES -------
 
+SynthDef(\susWhite1, {|attTime = 3, susTime = 3, relTime = 3, amp = 1, out|
+	var sig, env;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime);
+	sig = WhiteNoise.ar(1);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
 SynthDef(\impulsePink1, {
 	|decayTime = 2, amp = 0.2, out|
 	var sig = Decay.ar(Impulse.ar(0), decayTime, PinkNoise.ar(amp));

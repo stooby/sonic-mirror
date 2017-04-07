@@ -5,14 +5,27 @@
 (
 
 //====== FUNCTIONS ========
+~getRecPlayOffset = {|inSeconds = true, buffer|
+	var recPos, playPos, offset;
+	recPos = ~phaseBusMonRec.getSynchronous.round(1);
+	playPos = ~phaseBusMonPly.getSynchronous.round(1);
+	if (recPos >= playPos,
+		{offset = recPos - playPos;},
+		{offset = (buffer.numFrames - playPos) + recPos;} //if playPos > recPos, calc offset by wrapping around buffer...
+	);
+	if (inSeconds == true,
+		{(offset/s.sampleRate).round(0.001)}, //return offset in seconds
+		{offset;} //if inSeconds == false, return offset in frames
+	);
+};
 
 ~recPlayDelayOffset = {|offset = 0/*, gui = true*/| //offset in seconds  <-----NEW
-	var playPos, recPos;
+	var recPos, playPos;
 	recPos = ~phaseBusMonRec.getSynchronous;
 	playPos = recPos - (offset * s.sampleRate).round(1);
 	if (playPos < 0, {playPos = (~audioBuf0.numFrames - 1) + playPos;});
 
-	if ((~bufPlayer == nil || ~bufPlayer.isRunning == false), //if not actively playing from buffer
+	if (~bufPlayer == nil, //if ~bufPlayer ("PLAY") has never been triggered (avoids thrown error)
 		{
 			~lastPlayPhasePos = playPos; //update env variable
 			/*if (gui == true,
@@ -22,9 +35,11 @@
 				}
 			); */
 		},
-		{//else if actively playing from buffer
-			~phasor_play.set(\resetPos, playPos, \trig, 1);
-			//{~phasor_play.set}.defer(0.15);
+		{//else if ~bufPlayer ("PLAY") has been triggered actively playing from buffer
+			if (~bufPlayer.isRunning == false,
+				{~lastPlayPhasePos = playPos;}, //update env variable if ~bufPlayer ("PLAY") not active
+				{~phasor_play.set(\resetPos, playPos, \trig, 1);} //else update play phasor position
+			);
 		}
 	);
 
@@ -434,7 +449,7 @@
 //-------------AUTO ROOM CONVOLVE FUNCS / ROUTINES -------------
 
 //~autoConv_bufBasic.(impulse: 2, postDel: 3, amp: (-10.dbamp));
-~autoConv_bufBasic = {|active = 1, impulse = 0, sweepDur = 0.35, amp = (-14.dbamp), postDel = 3|
+~autoConv_bufBasic = {|active = 1, impulse = 0, sweepDur = 0.35, amp = (-14.dbamp), postDel = 3| //not being used, first prototype
 	if (active == 1,
 		{
 			if (~bufRecorder.isRunning,
@@ -465,7 +480,7 @@
 	);
 };
 
-~autoConvolve1A = {|active, featureBus, outBus, ampBus, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, synth1, initFlag, repeatCounter, impulse = 0, sweepDur = 3.5, freq1 = 100, freq2 = 2000, impPostDel = 0, preRecPad = 0.03, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0| //<--- add synth and counter args for env var storage (synth to free synth when killing routine...)
+~autoConvolve1A = {|active, featureBus, outBus, ampBus, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, synth1, initFlag, repeatCounter, impulse = 0, freq1 = 100, freq2 = 2000, attTime = 5, susTime = 3, relTime = 6, impPostDel = 0, preRecPad = 0.03, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0|
 	if (active == 1,
 		{
 			if (~bufRecorder.isRunning,
@@ -487,29 +502,50 @@
 								0.4.yield;  //slight pause for button debounce...?
 
 								impCase = case
-								{impulse == 0} {
-									~recSamp_input_startFrame = ~recPlayDelayOffset.(offset: 0); // <-- log sound start frame
+								{impulse == 0} {//SUSTAINED WHITE NOISE IMPULSE
+									~recSamp_input_startFrame = ~phaseBusMonRec.getSynchronous;// <-- log sound start frame
+									synth1.envirPut(Synth(\susWhite1, [\attTime, attTime, \susTime, susTime, \relTime, relTime, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									NodeWatcher.register(synth1.envirGet); //<---NEW
+									~recSamp_input = true;
+									{~button_recIn.value = 1;}.defer; //update GUI
+									if (post == 1, {"TRIG: susWhite1".postln;});
+									(attTime + susTime + relTime + impPostDel).yieldAndReset;
+								}
+								{impulse == 0.1} {//TRANSIENT WHITE NOISE PING IMPULSE
+									~recSamp_input_startFrame = ~phaseBusMonRec.getSynchronous;// <-- log sound start frame
 									synth1.envirPut(Synth(\impulseWhite3, [\shelf_freq, 10000, \rs, 1, \shelf_db, -6, \peak_freq, 160, \peakQ, 12, \peak_db, 12, \attackTime, 0.001, \releaseTime, 0.13, \curve, -4, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									NodeWatcher.register(synth1.envirGet); //<---NEW
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
 									if (post == 1, {"TRIG: impulseWhite3".postln;});
-									impPostDel.yieldAndReset;
+									(0.14 + impPostDel).yieldAndReset;
 								}
-								{impulse == 1} {
-									~recSamp_input_startFrame = ~recPlayDelayOffset.(offset: 0); //<-- log sound start frame
-									synth1.envirPut(Synth(\sinSweep1, [\freq1, freq1, \freq2, freq2, \dur, sweepDur, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+								{impulse == 1} { //SINEWAVE CHIRP / SWEEP IMPULSE
+									~recSamp_input_startFrame = ~phaseBusMonRec.getSynchronous;// <-- log sound start frame
+									synth1.envirPut(Synth(\sinSweep1, [\freq1, freq1, \freq2, freq2, \dur, susTime, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									NodeWatcher.register(synth1.envirGet); //<---NEW
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
-									if (post == 1, {("TRIG: sinSweep1 | sweepDur =" + sweepDur).postln;});
-									(sweepDur + impPostDel).yieldAndReset;
+									if (post == 1, {("TRIG: sinSweep1 | sweepDur =" + susTime).postln;});
+									(susTime + impPostDel).yieldAndReset;
+								}
+								{impulse == 1.1} { //RANDOM SINEWAVE SWELL IMPULSE
+									~recSamp_input_startFrame = ~phaseBusMonRec.getSynchronous;// <-- log sound start frame
+									synth1.envirPut(Synth(\randSinSwell_1, [\attTime, attTime, \susTime, susTime, \relTime, relTime, \loFreq, freq1, \hiFreq, freq2, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									NodeWatcher.register(synth1.envirGet); //<---NEW
+									~recSamp_input = true;
+									{~button_recIn.value = 1;}.defer; //update GUI
+									if (post == 1, {"TRIG: randSines".postln;});
+									(attTime + susTime + relTime + impPostDel).yieldAndReset;
 								}
 								{impulse == 2} {
-									~recSamp_input_startFrame = ~recPlayDelayOffset.(offset: 0); //<-- log sound start frame
-									synth1.envirPut(Synth(\sawSweep1, [\freq1, freq1, \freq2, freq2, \dur, sweepDur, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									~recSamp_input_startFrame = ~phaseBusMonRec.getSynchronous;// <-- log sound start frame
+									synth1.envirPut(Synth(\sawSweep1, [\freq1, freq1, \freq2, freq2, \dur, susTime, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									NodeWatcher.register(synth1.envirGet); //<---NEW
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
-									if (post == 1, {("TRIG: sawSweep1 | sweepDur =" + sweepDur).postln;});
-									(sweepDur + impPostDel).yieldAndReset;
+									if (post == 1, {("TRIG: sawSweep1 | sweepDur =" + susTime).postln;});
+									(susTime + impPostDel).yieldAndReset;
 								}
 								{impulse == 3} {//CREATE IMPULSE FROM DETECTED LIVE SOUND INPUT
 									if (post == 1, {("TRIG: liveSound.....").postln;});
@@ -536,7 +572,7 @@
 											});
 
 											//listen_for_sound routine tests for silence in room from ~inputSendBus
-											// or should I just test for rms?
+											// or should I just test for rms? <-------MAYBE JUST TEST RMS <-----------
 											featureBus.get({|val| //get featBus - 4 features: [Loudness, Onset, Freq, Pitch Measure]
 												if (( (val[0] >= loudThresh) || (val[1] == 1) || (val[3] >= pitchThresh) ),
 													{ //if thresh exceeded, ~hearSound = true
@@ -614,11 +650,13 @@
 														playDur = (playDur/timeStretchRate).round(0.001);
 														pitchOffset = timeStretchRate.reciprocal; //inverse of rate to preserve orig pitch
 														synth1.envirPut(Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur])); //play time-stretched sample
+														NodeWatcher.register(synth1.envirGet); //<---NEW
 														if (post == 1, {("-->PLAY LAST SAMP | TIME STRETCH =" + timeStretchRate).postln;});
 													},
 													{//else if no timeStretching
 														playDur = playDur.round(0.001);
 														synth1.envirPut(Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus])); //play unaltered sample
+														NodeWatcher.register(synth1.envirGet); //<---NEW
 														if (post == 1, {("-->PLAY LAST SAMP | no time stretch...").postln;});
 													}
 												);
@@ -635,8 +673,7 @@
 								}
 								{impulse == 3} { //<------------ LIVE SOUND IMPULSE ---------- !!!!!!
 									rout2.envirPut(~autoRecPlay_conv0.(featureBus: featureBus, outBus: outBus, ampBus: ampBus, synth1: synth1, repeatCounter: repeatCounter, loudThresh: loudThresh, pitchThresh: pitchThresh, preRecPad: preRecPad, postRecPad: postRecPad, impPostDel: impPostDel, timeStretch: timeStretch, timeStretchRate: timeStretchRate, debounceDur: 0, post: post));
-									SystemClock.play(rout2.envirGet); //launch autoRecPlay routine
-									//rate.yieldAndReset; //<-------------no yield necessary, fall through--------????
+									SystemClock.play(rout2.envirGet); //launch autoRecPlay_conv0 routine
 								};
 							}
 						);
@@ -651,23 +688,16 @@
 			);
 		},
 		{//else if active == 0 (disable)
-
-			//~listen_sound.(0, outBus: featureBus, sumSynth: \sumSyn_1); //stop listening (I think I'll keep this independent for now to avoid length argument lists....)
-
 			rout1.envirGet.stop;
-			if (rout2 != nil, {rout2.envirGet.stop;}); //<---will this throw error if haven't prev set: impulse = 3???????????
-			//if (impulse == 3, {rout2.envirGet.stop;}); //not ideal, but simplest way to possible error??
-			//clear initFlag, set to nil??
-
+			if (rout2 != nil, {rout2.envirGet.stop;});
+			if (synth1.envirGet.isRunning == true, {synth1.envirGet.free;}); //<---NEW
 			if (~recSamp_input == true, {
 				~recSamp_input = false;
 				{~button_recIn.value = 0;}.defer; //update GUI
 			});
-
 			if (~playSamp == true, {
 				~playSamp = false; //<---not being used at the moment, but could be useful?
 				{~button_playSamp.value = 0;}.defer; //update GUI
-				if (synth1.envirGet.isRunning, {synth1.envirGet.free;});
 				~audioBuf_play0.free;
 			});
 		}
@@ -978,15 +1008,14 @@
 							//Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur]); //play time-stretched sample
 
 							synth1.envirPut(Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur, \attack, attack, \release, release]).onFree({{~button_playSamp.value = 0}.defer;})); //THIS instead <------?
-
-							//Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, timeStretchRate, \pitch, pitchOffset, \winSize, 0.1, \timeDisp, 0.003, \pShiftMix, 1, \duration, playDur, \attack, attack, \release, release]).onFree({{~button_playSamp.value = 0}.defer;}); //THIS instead <------?
+							NodeWatcher.register(synth1.envirGet); //<---NEW
 							if (post == 1, {("-->PLAY LAST SAMP | TIME STRETCH =" + timeStretchRate).postln;});
 						},
 						{//else if no timeStretching
 							playDur = playDur.round(0.001);
 							//Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]); //play unaltered sample
 							synth1.envirPut(Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]).onFree({{~button_playSamp.value = 0}.defer;}));
-							//Synth(\bufRead_noLoop, [\buf, buffer, \amp, ampBus, \out, outBus]).onFree({{~button_playSamp.value = 0}.defer;});
+							NodeWatcher.register(synth1.envirGet); //<---NEW
 							if (post == 1, {("-->PLAY LAST SAMP | no time stretch...").postln;});
 						}
 					);
@@ -1019,29 +1048,7 @@
 
 //---- Loudness / Feature Level Monitoring ----
 
-/*~updateFeatureMemory = {|active = 1, featureBus, array, arraySize = 6, routine, rate = 10, post = 0, postLabel = "-->memArray1:"| //<--NEW (orig)
-	if (active == 1,
-		{
-			var rout;
-			array.envirPut(Array.newClear(arraySize));
-			rout = Routine({ //construct routine to update memory array at selected rate
-				var temp, val = featureBus.getSynchronous.round(0.001); //<----rounding or no? conditional as arg??
-				temp = array.envirGet.shift(1, val);
-				array.envirPut(temp);
-				if (post == 1, {(postLabel.asString + array.envirGet + "| total time-span =" + (arraySize * rate)).postln;});
-				rate.yieldAndReset;
-			});
-			routine.envirPut(rout);
-			SystemClock.play(routine.envirGet); //start memory update routine
-		},
-		{//else if active == 0
-			//clean up / delete mem array or no?
-			routine.envirGet.stop; //stop memory update routine
-		}
-	);
-}; */
-
-~updateFeatureMemory = {|active = 1, featureBus, array, arraySize = 6, routine, autoAction = false, rate = 10, post = 0, postLabel = "-->memArray1:"| //<--NEW (in progress)
+~updateFeatureMemory = {|active = 1, featureBus, array, arraySize = 6, routine, rate = 10, post = 0, postLabel = "-->memArray1:"| //<--NEW
 	if (active == 1,
 		{
 			var rout;
@@ -1050,14 +1057,11 @@
 				var temp, val = featureBus.getSynchronous.round(0.001); //<----rounding or no? conditional as arg??
 				temp = array.envirGet.shift(1, val); //add latest featBus value to beginning of array & shift prev vals
 				array.envirPut(temp);
-				if (post == 1, {(postLabel.asString + array.envirGet + "| total time-span =" + (arraySize * rate)).postln;});
-
-				if (autoAction == true, {//manage/trig other "behavior" routs based on average feature level over time
-					// (e.g. loud RMS levels >= 30 secs {turn off normal behaviors and switch to "loud crowd" mode})
-
-					//xxxxxxxxxx//
+				if (post == 1, {
+					("-----").postln;
+					(postLabel.asString + array.envirGet + "| total time-span =" + (arraySize * rate)).postln;
+					("-----").postln;
 				});
-
 				rate.yieldAndReset;
 			});
 			routine.envirPut(rout);
@@ -1079,9 +1083,24 @@
 	if (post == 1, {(postLabel.asString + arrayAvg).postln;});
 	arrayAvg;
 };
+
+~smoothBusOutputKR = {|active = 1, inBus, outBus, synth, synthMoveAfter, avgDur = 1| //<---NEW
+	if (active == 1,
+		{
+			var thisOutBus;
+			outBus.envirPut(Bus.control(s, 1)); //only one channel control bus for now, consider arg to modify this in future
+			thisOutBus = outBus.envirGet;
+			synth.envirPut(Synth(\avgKR, [\input, inBus, \output, thisOutBus, \avgDur, avgDur]).moveAfter(synthMoveAfter)); //create smoothing synth
+		},
+		{//else if active == 0
+			synth.envirGet.free; //free synth
+			outBus.envirGet.free; //free output bus
+		}
+	);
+};
 //====== ROUTINES ==========================
 
-~initSMpreset_1 = Routine({ //auto-startup routine for RPI
+~initSMpreset_1 = Routine({ //auto-startup routine for RPI <===UPDATE BEFORE NEXT PUSH TO RPI
 	"...starting...".postln;
 	2.yield;
 	"...test tone...".postln;
@@ -1089,13 +1108,13 @@
 	10.yield;
 	//SET LEVELS
 	"...set levels...".postln;
-	~inputStreamLevelBus.set(0.3);
-	~slider_inFlow1_level.value = (0.3);
-	~numBox_inFlow1_level.value= (0.3);
+	~inputStreamLevelBus.set(0.3); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~slider_inFlow1_level.value = (0.3); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~numBox_inFlow1_level.value= (0.3); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
 
-	~fileOutputLevelBus.set(0.9);
-	~slider_sampOut_level.value = (0.9);
-	~numBox_sampOut_level.value =  (0.9);
+	~fileOutputLevelBus.set(0.9); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~slider_sampOut_level.value = (0.9); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~numBox_sampOut_level.value =  (0.9); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
 	0.5.yield;
 	~button_recBuf.valueAction = 1;
 	"START STREAMING TO BUF0...".postln;
@@ -1211,7 +1230,8 @@
 	var level;
 	level = ~inputStreamLevelBus.getSynchronous;
 	~slider_inFlow1_level.value_(level);
-	~numBox_inFlow1_level.value_(level);
+	//~numBox_inFlow1_level.value_(level);
+	~numBox_inFlow1_level.value_(level.ampdb.round(0.1));
 	0.1.yieldAndReset;
 });
 
@@ -1219,19 +1239,16 @@
 	var level;
 	level = ~fileOutputLevelBus.getSynchronous;
 	~slider_sampOut_level.value_(level);
-	~numBox_sampOut_level.value_(level);
+	//~numBox_sampOut_level.value_(level);
+	~numBox_sampOut_level.value_(level.ampdb.round(0.1));
 	0.1.yieldAndReset;
 });
 
 ~updateGUI_outMainLevel = Routine.new ( { //<--- will eventually optimize this & turn into a function w/ env variables and assigned GUI objects as args...
-	~outMainLevelBus.get( {
-		arg val;
-		AppClock.sched(0.0, { //this is necessary for some reason...??????
-			~slider_outMainLevel.value_(val);
-			~numBox_outMainLevel.value_(val.round(0.01));
-			nil;
-		} );
-	} );
+	var level;
+	level = ~outMainLevelBus.getSynchronous;
+	~slider_outMainLevel.value_(level);
+	~numBox_outMainLevel.value_(level.ampdb.round(0.1));
 	0.1.yieldAndReset;
 } );
 

@@ -38,6 +38,9 @@ Buffer.freeAll; //for cleanup
 ~delayTime = 1.23;
 ~play2recOffset; //displacement of playhead pos from rec pos (in frames/samples)
 
+~mode_randProcLiveBuf = false; //<---NEW mode flag
+~mode_autoRecPlay = false; //<---NEW mode flag
+
 ~lastPlayPhasePos = 0; //for resume functionality - stores last pos (frame) of play head before playback disabled
 ~lastRecPhasePos = 0; //for resume functionality - stores last pos (frame) of rec head before recording disabled
 ~playPosLatchTrig = false;
@@ -442,7 +445,7 @@ dB")
 
 //--------- Soundfile Rec / Playback ---------------
 
-//--put these variables back w/ the rest of env variables at some point??--
+//--put these variables back w/ the rest of env variables above at some point--
 
 ~playBehavior = 0; //stores state of playback behavior, not currently being used....
 
@@ -500,8 +503,8 @@ dB")
 
 //------- env variables and functions (routines) for ~autoRec_soundTrigAuto
 
-~loudnessThresh = 5; //set w/ ~senseNoiseFloor eventually?
-~pitchThresh = 0.55;
+~loudnessThresh = 5; //in sones - used by ~autoRec_soundTrigAuto routine
+~pitchThresh = 0.55; //pitch ratio measure - used by ~autoRec_soundTrigAuto routine
 
 ~autoRecPlay_state = 0; //0 == only trigger auto rec, 1 == only trigger auto play
 
@@ -976,7 +979,10 @@ dB")
 /*
 s.plotTree;
 
-~listen_loudness.(active: 1, //ADD boolean args to enable/disable ~monitor_loudness and ~updateFeatureMemory routines
+//RMSdb >= -10 to -6 == strong clipping and apparent feedback <-----
+//RMSdb >= -15 to -12 == light clipping...
+
+~listen_loudness.(active: 1,
 	input: ~inputSendBus,
 	outBus: \bus_inputdb,
 	featSynth: \rms1,
@@ -986,28 +992,64 @@ s.plotTree;
 	//lowThresh: -45, uprThresh: -25, threshDur: 1,
 	lastThreshTime: \inputSendThreshTime,
 	monRoutine: \inputSendMon,
-	rate: 0.1,
-	post: 1//,
-	//mon_loudnessActive: true, //<--args to enable/disable this & ~monitor_loudness routines??
-	//updateFeatMemActive: true
+	rate: 0.5,
+	post: 1
 );
 
+~smoothBusOutputKR.(active: 1, inBus: ~bus_inputdb, outBus: \smoothBus_inputdb, synth: \smooth_inputdb, synthMoveAfter: ~rms1, avgDur: 6);
+
+~smoothBus_inputdb.getSynchronous;
+
+~updateFeatureMemory.(active: 1, featureBus: ~smoothBus_inputdb, array: \mem_inputdb, arraySize: 10, routine: \updateMem_inputdb, rate: 6, post: 1, postLabel: "==> MEM_inputdb:");
+
+~updateFeatureMemory.(active: 0, routine: \updateMem_inputdb);
+~smoothBusOutputKR.(active: 0, outBus: \smoothBus_inputdb, synth: \smooth_inputdb);
+(
 ~listen_loudness.(active: 0,
 	outBus: \bus_inputdb,
 	featSynth: \rms1,
 	loudFlag: \inputSendLoud,
 	loudSusFlag: \inputSendLoudSus,
-	monRoutine: \inputSendMon//,
-	//mon_loudnessActive: true, //<--args to enable/disable this & ~monitor_loudness routines??
-	//updateFeatMemActive: true
+	monRoutine: \inputSendMon
 );
+)
+~inputSendLoudSus
+~inputSendLoud
+
+~listen_loudness_post.(active: 1, input: ~inputSendBus, outBus: \busSum_loud, sumSynth: \sumSyn_loud, post: 1);
+~listen_loudness_post.(active: 0, outBus: \busSum_loud, sumSynth: \sumSyn_loud);
 */
 
+~listen_loudness_post = { |active = 1, input, outBus, sumSynth, rate = 0.1, post = 1| //for testing
+	if (active == 1, {//start feature extraction...
+		if (~bufRecorder.isRunning, {
+			//LOUDNESS monitor
+			l = Synth(\Loudness, [\input, input, \outBus, ~bus_loudness]).moveAfter(~bufRecorder);
+			//RMS
+			r = Synth(\RMSdb, [\input, input, \outBus, ~bus_rms]).moveAfter(l);
 
-//<-----------PICK UP HERE----------------><--------!!!!!!!!!!!!!!!!!---------<<<<<<<<<<<<<<<
-//double check ~listen_loudness and ~monitor_loudness routine......
+			outBus.envirPut(~sumFunc_xin.([~bus_loudness, ~bus_rms], sumSynth)); //assign bus and resulting summing synth to new env vars
 
-~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -6, uprThresh = -4, threshDur = 0.4, lastThreshTime, rate = 0.1, post = 0, monRoutine| //<----IN PROGRESS....add "monLoudness = true" and "updateFeatMem = true"
+			if (post == 1, { //only run this routine to monitor features w/ post window...
+				//===THIS IS WHERE ~transmit feature via OSC routine from SCML could live if needed
+				~listenPost = ~streamFeatures.value(bus: outBus.envirGet, rate: rate, post: post);
+				SystemClock.play(~listenPost);
+			});
+			"====LISTENING NOW====".postln;
+		}, {
+			"===CAN'T LISTEN UNLESS BUF RECORDER ENABLED===".postln;
+		} );
+	}, {//if active == 0, stop feature extraction and clean up...
+		~listenPost.stop; ~listenPost.free; //this cleanup only needed if post==1
+		sumSynth.envirGet.free;
+		outBus.envirGet.free;
+		l.free;
+		r.free;
+		"====STOPPED LISTENING====".postln;
+	} );
+};
+
+~listen_loudness = {|active = 1, input, outBus, featSynth, loudFlag, loudSusFlag, lowThresh = -12, uprThresh = -6, threshDur = 0.4, lastThreshTime, rate = 0.1, post = 0, monRoutine|
 	if (active == 1, {//start detecting feedback
 		if (~bufRecorder.isRunning, {
 			var thisOutBus;
@@ -1020,7 +1062,8 @@ s.plotTree;
 
 			featSynth.envirPut(Synth(\RMSdb, [\input, input, \outBus, thisOutBus]).moveAfter(~bufRecorder));
 			NodeWatcher.register(featSynth.envirGet);
-			//RMS > ~.47 || db > -6 == verging on clipping and feedback <-----
+			//RMSdb >= -10 to -6 == strong clipping and apparent feedback <-----
+			//RMSdb >= -15 to -12 == light clipping...
 
 			/*if (post == 1, { //only run this routine to monitor features w/ post window... CAUTION: can't .get from single bus using two different routines....will eventually cause one routine's get requests to fail, that's why this is commented out for now, since below monRoutine also has debug post feature...
 				~listenPost = ~streamFeatures.value(bus: thisOutBus, rate: rate, post: post);
@@ -1030,34 +1073,30 @@ s.plotTree;
 			loudFlag.envirPut(0); //loudFlag indicates instantaneous loudness level: 0 = no loudness, 1 = lower loudness threshold exceeded, 2 = upper loudness threshold exceeded
 			loudSusFlag.envirPut(false); //loudSusFlag indicates presence of ongoing loud sound / feedback (e.g. if loudFlag = 1, but loudSusFlag = false, no on-going loudness has been confirmed by monitor_loudness routine)
 
-			//START LOUDNESS/FEEDBACK MONITOR ROUTINE
+			//START LOUDNESS MONITOR ROUTINE
 			monRoutine.envirPut(~monitor_loudness.(input: thisOutBus, loudFlag: loudFlag, loudSusFlag: loudSusFlag, lowThresh: lowThresh, uprThresh: uprThresh, threshDur: threshDur, lastThreshTime: lastThreshTime, rate: rate, post: post));
 			SystemClock.play(monRoutine.envirGet);
 
-			//if (updateFeatMemActive == true, {~updateFeatureMemory.(active: 1, featureBus: ~bus_inputdb, array: \mem_inputdb, arraySize: 10, routine: \updateMem_inputdb, rate: 6, post: 1, postLabel: "=MEM_inputdb:");}); //<--ARG ENABLED? <-------------
-			~updateFeatureMemory.(active: 1, featureBus: ~bus_inputdb, array: \mem_inputdb, arraySize: 10, routine: \updateMem_inputdb, rate: 6, post: 1, postLabel: "=MEM_inputdb:"); //<---- ADDED / TEST
-			"====FEEDBACK DETECTION ACTIVE====".postln;
+			"====LOUDNESS/FEEDBACK DETECTION ACTIVE====".postln;
 		}, {
-			"===CAN'T DETECT FEEDBACK UNLESS BUF RECORDER ACTIVE===".postln;
+			"===CAN'T DETECT LOUDNESS/FEEDBACK UNLESS BUF RECORDER ACTIVE===".postln;
 		} );
 	}, {//if active == 0, stop feature extraction and clean up...
-		if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
+		//if (~listenPost != nil, {~listenPost.stop; ~listenPost.free;}); //this cleanup only needed if post==1
+
 		//STOP LOUDNESS/FEEDBACK MONITOR ROUTINE
 		monRoutine.envirGet.stop;
 		monRoutine.envirGet.free; //<--this doesn't free routine....set to nil?
 		outBus.envirGet.free; //free RMS feature extractor output bus
 		featSynth.envirGet.free; //free RMS feature extractor synth
 		loudFlag.envirPut(0);
-		loudSusFlag.envirPut(false); //<--this doesn't free routine....set to nil?
+		loudSusFlag.envirPut(false);
 
-		//if (updateFeatMemActive == true, {~updateFeatureMemory.(active: 0, routine: \updateMem_inputdb);}); //<---
-		~updateFeatureMemory.(active: 0, routine: \updateMem_inputdb);  //<---- ADDED / TEST
-		"====FEEDBACK DETECTION DISABLED====".postln;
+		"====LOUDNESS/FEEDBACK DETECTION DISABLED====".postln;
 	} );
 };
 
-//IN PROGRESS <-------------
-~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -6, uprThresh = -4, threshDur = 0.4,  lastThreshTime, rate = 0.1, post = 0|
+~monitor_loudness = {|input, loudFlag, loudSusFlag, lowThresh = -12, uprThresh = -6, threshDur = 0.4,  lastThreshTime, rate = 0.1, post = 0|  //<---REVISE THIS: change threshDur and lastThreshTime to onsetDur and lastOnsetTime | add releaseDur or loudTrigHysteresis | maybe add boolean args to trigger autolevel / anti-feedback routines as a quick and easy method, but would rather avoid in long term and have autolevel / anti-feedback routines stand-alone and continuously check ~monitor_loudness flags continuously...
 	Routine({
 		var x, cond = Condition.new; //<---NEW
 		if (post == 1, {"[MON LOUDNESS]--------".postln;});
@@ -1135,7 +1174,7 @@ s.plotTree;
 					}
 				);
 			}
-			{val >= uprThresh} { //else if current db >= upper loudness threshold -----------------
+			{val >= uprThresh} { //else if current db >= upper loudness threshold -----------------<<<<<
 				if (loudFlag.envirGet < 2,
 					{
 						if (post == 1, {("-->VERY LOUD SIG: input db =" + val.round(0.01)).postln;});
@@ -1156,7 +1195,7 @@ s.plotTree;
 											},
 											{
 												if (post == 1, {("--->LOUD SOUND SUS TEST.... (UPR thresh): input db =" + val.round(0.01)).postln;});
-												//<------DO NOTHING....? .... WAIT AND SEE.....?
+												//<------DO NOTHING.. WAIT AND SEE..?... NO ADJUST LEVELS IMMEDIATELY  <---
 											}
 										);
 									},
@@ -1315,6 +1354,7 @@ s.plotTree;
 	if (
 		obj.value == 1,
 		{
+			~mode_autoRecPlay = true; //<---NEW mode flag
 			//~listen_sound.value(active: 1, input: ~inputSendBus, post: 0); //start listening
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //start listening
 			~autoRecStartTrig = true; //enables debounce when ~autoRecStart initialized
@@ -1328,6 +1368,7 @@ s.plotTree;
 			SystemClock.play(~autoPlayRout);
 		},
 		{
+			~mode_autoRecPlay = false; //<---NEW mode flag
 			~autoRecStart.stop;
 			~autoRecStart.free;  //doesn't do anything...
 
@@ -1844,7 +1885,7 @@ if (~plotterEnabled == true, {
 			~a2k_play = Synth(\a2k_patch, [\in, ~phaseBusPly, \out, ~phaseBusMonPly]).moveAfter(~phasor_play); //converting phaseBus values at ar to kr and sending to phaseBusMon so sliderPlayPos can receive current value of phasor
 			~bufPlayer = Synth(\bufRead, [\amp, ~play1LevelBus.asMap, \out, ~playOut1Bus, \phaseBus, ~phaseBusPly, \buf, ~audioBuf0] ).moveAfter(~a2k_play);
 
-			NodeWatcher.register(~bufPlayer);  //<---not currently being monitored anymore....
+			NodeWatcher.register(~bufPlayer);
 
 			~pShift = Synth(\pitchShifter,
 				[\inBus, ~playOut1Bus, \outBus, ~pitchShiftOut, \pitchRatio, ~pitchBus.asMap]).moveAfter(~bufPlayer);
@@ -2003,6 +2044,8 @@ if (~plotterEnabled == true, {
 	if (
 		obj.value == 1, // when randomize button enabled
 		{
+			~mode_randProcLiveBuf = true; //<---NEW mode flag
+
 			~randomRoutine_rate.reset;
 			~randomRoutine_freq.reset;
 			~randomRoutine_pitchShiftMix.reset;
@@ -2014,9 +2057,10 @@ if (~plotterEnabled == true, {
 			AppClock.play(~randomRoutine_pitchShiftMix);
 			AppClock.play(~randomRoutine_reverse);
 			AppClock.play(~randomRoutine_playHeadBehavior); //<---spruce this routine up to be consistent w/ above
-
 		},
 		{ //when randomize button disabled
+			~mode_randProcLiveBuf = false; //<---NEW mode flag
+
 			~randomRoutine_rate.stop;
 			~updateGUI_rate.stop;
 
@@ -2066,10 +2110,10 @@ if (~plotterEnabled == true, {
 		obj.value == 1, // when button enabled
 		{
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
-			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 3, sweepDur: 4, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, sweepDur: 4, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 2, sweepDur: 5, freq1: 1000, freq2: 10000, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //for voxel experiments...
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 0.2, impulse: 3, sweepDur: 4, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---piezo live sound settings
+			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 1, freq1: 400, freq2: 3000, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 3600, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.65, post: 1); //<---FOR VOXELS
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 0.2, impulse: 3, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---piezo live sound settings
 		},
 		{ //when button disabled
 			~listen_sound.value(active: 0, outBus: \busSum_lop, sumSynth: \sumSyn_1);
