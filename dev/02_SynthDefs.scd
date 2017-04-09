@@ -481,3 +481,39 @@ SynthDef.new(\randSinSwell_1, {|out = 0, amp = 1, loFreq = 300, hiFreq = 1200, a
 	Out.ar(out, sig);
 }).add;
 );
+
+// OTHER EFFECTS PROCESSING ---
+
+SynthDef(\partConv_sample, {|targetBuf, irSpectrum, fftSize = 2048, playRate = 1, loop = 1, ampBus, ampLimit = 0.4, out|
+	var input, sig, currentAmp;
+	input = PlayBuf.ar(1, targetBuf, rate: playRate, loop: loop);
+	sig = PartConv.ar(input, fftsize: fftSize, irbufnum: irSpectrum);
+	sig = Limiter.ar(sig, level: -1.dbamp, dur: 0.01);
+	currentAmp = ampBus * ampLimit;
+	Out.ar(out, sig * currentAmp);
+	DetectSilence.ar(sig, amp: 0.0001, time: 0.2, doneAction: 2);
+}).add;
+
+SynthDef(\partConv_sampleLoop, {|targetBuf, irSpectrum, attTime = 4, susTime = 5, relTime = 6, fftSize = 2048, playRate = 1, ampBus, ampLimit = 0.4, out = 0|
+	var input, env, sig, currentAmp;
+	input = PlayBuf.ar(1, targetBuf, rate: playRate, loop: 1);
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, curve: \sine);
+	sig = PartConv.ar(input, fftsize: fftSize, irbufnum: irSpectrum);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	sig = Limiter.ar(sig, level: -0.3.dbamp, dur: 0.01);
+	currentAmp = ampBus * ampLimit;
+	Out.ar(out, sig * currentAmp);
+}).add;
+
+SynthDef(\partConv_sampleLoop_pShift, {|targetBuf, irSpectrum, attTime = 4, susTime = 5, relTime = 6, fftSize = 2048, playRate = 1, pitch = 1, winSize = 0.1, pitchDisp = 0, timeDisp = 0.003, pShiftMix = 1, ampBus, ampLimit = 0.4, out = 0|
+	var sig1, sig2, env, sigOut, currentAmp;
+	sig1 = PlayBuf.ar(1, targetBuf, rate: playRate, loop: 1);
+	sig2 = PitchShift.ar(sig1, windowSize: winSize, pitchRatio: pitch, pitchDispersion: pitchDisp, timeDispersion: timeDisp);
+	sigOut = SelectX.ar(pShiftMix, [sig1, sig2]);
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, curve: \sine);
+	sigOut = PartConv.ar(sigOut, fftsize: fftSize, irbufnum: irSpectrum);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	sigOut = Limiter.ar(sigOut, level: -0.3.dbamp, dur: 0.01);
+	currentAmp = ampBus * ampLimit;
+	Out.ar(out, sigOut * currentAmp);
+}).add;

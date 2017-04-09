@@ -407,7 +407,7 @@
 	});
 };
 
-~audifyScene1 = {|filePath, ampBus, outBus, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1, overlap = 0.02, status|
+~audifyScene1 = {|filePath, ampBus, outBus, fileStart = 0, fileNum = 10, rate = 36, pitch = -36, cycle = 1, overlap = 0.02, status| //<---NOT USING filePath arg?
 	var audifyRoutine, thisRate, thisPitch;
 	thisRate = rate.asFloat.round(0.01).midiratio;
 	thisPitch = pitch.asFloat.round(0.01).midiratio;
@@ -1046,6 +1046,54 @@
 	});
 };
 
+//-------------PARTITIONED CONVOLUTION EFFECT FUNC / ROUTINES -------------
+
+~partConv_samples_autoLoop = {|active = 1, targetFile, irFile, targetBuf = \pcs_tBuf1, irBuf = \pcs_irBuf1, fftSize = 2048, routine = \pcs_rout1, synth = \pcs_syn1, ampBus, ampLimit = 0.4, outBus = 0, attTime = 5, susTime = 3, relTime = 6, playRate = 1, pitch = 1, pShiftMix = 0, winSize = 0.1, pitchDisp = 0, timeDisp = 0.003, post = 0|
+	if (active == 1, {//ACTIVATE
+		var rout = Routine({
+			var irbuffer, bufsize, routineDur;
+			irbuffer = Buffer.read(s, irFile); //load IR audio file into buffer
+			s.sync;
+			bufsize = PartConv.calcBufSize(fftsize: fftSize, irbuffer: irbuffer);
+			irBuf.envirPut(Buffer.alloc(s, bufsize, 1));
+			irBuf.envirGet.preparePartConv(buf: irbuffer, fftsize: fftSize); //create IR spectrum and load to separate buffer
+			s.sync;
+			irbuffer.free; // don't need time domain data buffer anymore, just need spectral version ("irBuf")
+
+			targetBuf.envirPut(Buffer.read(s, targetFile)); //load target file to buffer
+
+			synth.envirPut(Synth(\partConv_sampleLoop_pShift, [\targetBuf, targetBuf.envirGet, \irSpectrum, irBuf.envirGet, \attTime, attTime, \susTime, susTime, \relTime, relTime, \fftSize, fftSize, \playRate, playRate, \pitch, pitch, \pShiftMix, pShiftMix, \winSize, winSize, \pitchDisp, pitchDisp, \timeDisp, timeDisp, \ampBus, ampBus, \ampLimit, ampLimit, \out, outBus])); //launch partConv synth
+			NodeWatcher.register(synth.envirGet);
+
+			routineDur = attTime + susTime + relTime;
+
+			if (post == 1, {
+				var targetFileName, irFileName;
+				targetFileName = ~returnFileNameFromPath.(path: targetFile);
+				irFileName = ~returnFileNameFromPath.(path: irFile);
+				("[pConv_samps_autoLoop] Convolving TARGET:" + targetFileName + "w/ IR:" + irFileName + "for" + routineDur + "sec...").postln;
+				("[pConv_samps_autoLoop] -- RATE =" + playRate.ratiomidi.round(0.01) + "| PITCH =" + pitch.ratiomidi.round(0.01) + "| pShiftMix =" + pShiftMix.round(0.01)).postln;
+			});
+
+			(attTime + susTime + relTime + 0.01).yield; //wait for synth to finish playing
+
+			targetBuf.envirGet.free; //cleanup buffers when synth finished playing
+			irBuf.envirGet.free;
+			if (post == 1, {"[pConv_samps_autoLoop] COMPLETE".postln;});
+		});
+		routine.envirPut(rout);
+		SystemClock.play(routine.envirGet);
+	}, {//else DEACTIVATE if active == 0
+		if (synth.envirGet.isRunning == true, {
+			synth.envirGet.free;
+			targetBuf.envirGet.free; //putting in here to avoid needlessly freeing if routine's already ended and freed this
+			irBuf.envirGet.free;
+		}); //avoids potential thrown error, but...
+		routine.envirGet.stop;
+		if (post == 1, {"[pConv_samps_autoLoop] STOPPED"});
+	});
+};
+
 //---- Loudness / Feature Level Monitoring ----
 
 ~updateFeatureMemory = {|active = 1, featureBus, array, arraySize = 6, routine, rate = 10, post = 0, postLabel = "-->memArray1:"| //<--NEW
@@ -1098,6 +1146,15 @@
 		}
 	);
 };
+
+//---- Misc / Utility ----
+~returnFileNameFromPath = {|path|
+	var thisPath, pathArray, fileName;
+	thisPath = path.asString;
+	pathArray = thisPath.split; //returns array separating each word in path
+	fileName = pathArray[pathArray.size - 1]; //return value from last index of array (a.k.a. target file name)
+};
+
 //====== ROUTINES ==========================
 
 ~initSMpreset_1 = Routine({ //auto-startup routine for RPI <===UPDATE BEFORE NEXT PUSH TO RPI

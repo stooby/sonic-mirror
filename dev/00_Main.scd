@@ -5,12 +5,10 @@
 ~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
 ~writeSampFromBuf.(~audioBuf0, 10, 14, filecap: true);
 
-~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, fileNum: 5, cycle: 1, rate: 6, pitch: -6);
+~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: 3, cycle: 3, rate: 36, pitch: -36, status: \audifyState);
 SystemClock.play(~audifyRout);
 ~audifyRout.stop;
 ~audifyRout.reset;
-s.plotTree;
-
 
 //---- refactor in progress ----
 
