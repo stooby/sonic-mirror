@@ -2,7 +2,16 @@
 
 //== Main Performance Doc ==
 
-~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate));
+(
+~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name <--(rename eventually to fileNum)
+~fileAudio_writeIn_directory = "/Users/Scott/Music/SCrecs/SncMir/PiezPreampTests/b4Output/";  //<--- NEW
+~fileAudio_writeIn_fileName = "Piezo_P2-220k_backtoNormal_560_betweenBatteryAndSource_"; //<--- NEW
+~fileAudio_writeIn_lastFile2 = (~fileAudio_writeIn_directory ++ ~fileAudio_writeIn_fileName ++ ~fileAudio_writeIn_nameNum ++ ".wav").standardizePath;  //<--- NEW
+)
+~writeSampFromBuf_name.(buffer: ~audioBuf0, in: (~playInFrame/s.sampleRate), out: (~playOutFrame/s.sampleRate), filePath: ~fileAudio_writeIn_lastFile2); //<--- NEW <----SAVE FILE W/ CUSTOM NAME
+
+~writeSampFromBuf.(~audioBuf0, (~playInFrame/s.sampleRate), (~playOutFrame/s.sampleRate)); //<--ORIG
+
 ~writeSampFromBuf.(~audioBuf0, 10, 14, filecap: true);
 
 ~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: 3, cycle: 3, rate: 36, pitch: -36, status: \audifyState);
@@ -90,15 +99,15 @@ Buffer.freeAll; //for cleanup
 
 ~inputLevelBus.set(1);
 ~play1LevelBus.set(1); //<--NO SLIDER CREATED YET!!!!!....
-~inputStreamLevelBus.set(1);
+~inputStreamLevelBus.set(1); //<---SET TO -6db on INIT? <-----
 ~fileOutputLevelBus.set(1);
 ~outMainLevelBus.set(1);
 
-~outMainPeakFreq_init = 120;
+~outMainPeakFreq_init = 1200;
 ~outMainPeakFreq.set(~outMainPeakFreq_init);
-~outMainPeakQ_init = 1;
+~outMainPeakQ_init = 4;
 ~outMainPeakQ.set(~outMainPeakQ_init); //technically reciprocal of Q...
-~outMainPeakGain_init = 0;
+~outMainPeakGain_init = -3;
 ~outMainPeakGain.set(~outMainPeakGain_init); //in db
 
 ~loCutVal_in = 110;
@@ -445,6 +454,11 @@ dB")
 
 //--put these variables back w/ the rest of env variables above at some point--
 
+~minNumFilesB4Playback = 1; // file # threshold before file playback routine commences
+~fileAudio_writeIn_maxNum = 30; //max # of audio samples written per session (wrap-around & overwrite limit - inclusive of 0)
+~fileAudio_writeOut_maxNum = 30;  //max # of audio out samples written per session (wrap-around & overwrite limit)
+~fileAudio_writeIn_maxNum_exceeded = false; //<--- NEW
+
 ~playBehavior = 0; //stores state of playback behavior, not currently being used....
 
 ~currentSound = "silence"; //state of current heard sound (0 = silence, 1 = unpitched sound, 2 = pitched sound...?)
@@ -456,24 +470,20 @@ dB")
 
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_lastPath = "~/Music/SCrecs/SncMir/SncMir-Out_"; //stores string of file path for last written audio file from disk
-~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name
-~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir/SncMir-In_"; //stores string of file path for last written audio file
-~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++ ".wav").standardizePath;
+
+~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file name ORIG <--- (moved to top)
+~fileAudio_writeIn_lastPath = "~/Music/SCrecs/SncMir/SncMir-In_"; //ORIG<-- stores string of file path for last written audio file
+~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++ ".wav").standardizePath; //<--ORIG
 
 ~fileAudio_writeIn_lastFileDur; //<--------NEW (not currently being used)
 
 ~fileAudio_lastPlay; //<---NEW (not needed if using below array though)
 
-~fileHistory_rec = Array.newClear(5); //history of last 5 samples recorded <--NEW
-~fileHistory_play = Array.newClear(5); //history of last 5 samples played back <--NEW
+~fileHistory_rec = Array.newClear(~fileAudio_writeIn_maxNum); //history of last 5 samples recorded <--NEW
+~fileHistory_play = Array.newClear(~fileAudio_writeIn_maxNum); //history of last 5 samples played back <--NEW
 
 ~soundMemory = []; //<-------NEW (init)
 //~soundMemory = [["sound1Name", sound1timeIn, sound1timeOut, sound1dur, sus / transient, mean loudness, pitchiness, mean pitch], ["sound2Name", sound2timeIn, sound2timeOut, ....], ["sound3Name", ...], ["soundMaxNumName", ...]];
-
-~minNumFilesB4Playback = 1; // file # threshold before file playback routine commences
-~fileAudio_writeIn_maxNum = 30; //max # of audio samples written per session (wrap-around & overwrite limit - inclusive of 0)
-~fileAudio_writeOut_maxNum = 30;  //max # of audio out samples written per session (wrap-around & overwrite limit)
-~fileAudio_writeIn_maxNum_exceeded = false; //<--- NEW
 
 //---
 ~listenDur_noiseFloor = 5.0; //<---not currently being used....
@@ -529,7 +539,7 @@ dB")
 
 //AUTO REC / AUTO PLAY ROUTINES (soundTrigAuto)----------
 
-~autoPlay_soundTrigAuto = {|post = 0|
+/*~autoPlay_soundTrigAuto = {|post = 0| //<------ORIG
 	Routine({
 		if (~playSamp == true,
 			{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
@@ -538,6 +548,9 @@ dB")
 					0.2.yieldAndReset;
 				}, { //else if ~playAudify == false
 					if (post == 1, {">>>>NO AUDIFICATION IN PROGRESS...<<<<".postln;});
+
+					// if ~auto_partConvSamplesAutoLoop_StatusFlag == true {~partConv_samples_autoLoop.(0...)};
+
 					~playSamp = false;
 					~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
 					if (~trigAudify == true, {~trigAudify = false;}, {~audioBuf_play0.free;}); //<---NEW (to avoid error caused by freeing nonexistant ~audioBuf_play0 after ~audifyRout plays...
@@ -574,69 +587,76 @@ dB")
 								if (post == 1, {"---LAST SOUND RECORDED > 5 SECONDS AGO....".postln;});
 
 								playCase = case
+								//{randNum == 0} {
 								{randNum <= 7} { //70% of time, play last recorded file
-									//("---->PLAYING LAST REC FILE (70%):" + ~fileAudio_writeIn_lastFile).postln;
 									fileDir = ~fileAudio_writeIn_lastFile;
+									if (post == 1, {("---->PLAYING LAST REC FILE (70%):" + ~fileAudio_writeIn_lastFile).postln;});
 								}
+								//{randNum == 0} {
+								//{randNum <= 10} {
 								{randNum > 7 && randNum <= 9} {//20% of time play recent rec file
-									//"---->PLAYING RECENT REC FILE (20%)".post;
+									if (post == 1, {"---->PLAYING RECENT REC FILE (20%)".post;});
 									if (0.75.coin == true,
-										{fileDir = ~fileHistory_rec[1];
-											//" | second-to-last | ".post;
-										}, //play second to last rec file
+										{//play second to last rec file
+											fileDir = ~fileHistory_rec[1];
+											if (post == 1, {" | second-to-last | ".post;});
+										},
 										{fileDir = ~fileHistory_rec[2];
 											//" | third-to-last | ".post;
 										} //or play third to last rec file
 									);
-									//("FILE:" + fileDir).postln;
 									if (fileDir == nil, {//safe driving
 										fileDir = ~fileAudio_writeIn_lastFile;
-										//".....safe-driving...playing last rec file".postln;
+										if (post == 1, {".....safe-driving...playing last rec file".postln;});
 									});
+									if (post == 1, {("FILE:" + ~returnFileNameFromPath.(fileDir)).postln;});
 								}
-								//{randNum > 9} { //10% of time play older or random file....
+								//{randNum == 0} {
 								{randNum > 9 && randNum <= 9.5} { //5% of time play older or random file....
-									//("---->PLAYING OLDER / RAND FILE (5%):").postln;
+									if (post == 1, {("---->PLAYING OLDER / RAND FILE (5%):").postln;});
 									if (~fileAudio_writeIn_maxNum_exceeded == false,
 										{
 											var fileNum;
-											//("-----maxNumFiles NOT EXCEEDED-----").postln;
+											if (post == 1, {("-----maxNumFiles NOT EXCEEDED-----").postln;});
 											if (~fileAudio_writeIn_nameNum >= ~fileHistory_rec.size, //if rec mem is full
 												{
 													if (0.5.coin == true,
 														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]}, //select oldest file in rec mem
 														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]} //or select second-oldest file in rec mem
 													);
-													//("---->REC MEM FULL - Playing:" + fileDir).postln;
+													if (post == 1, {("---->REC MEM FULL - Playing:" + ~returnFileNameFromPath.(fileDir)).postln;});
 												},
 												{//else if rec mem is not full
 													fileDir = ~fileHistory_rec[~fileAudio_writeIn_nameNum - 1]; //select older file...
-													//("---->REC MEM NOT FULL - Playing:" + fileDir).postln;
+													if (post == 1, {("---->REC MEM NOT FULL - Playing:" + ~returnFileNameFromPath.(fileDir)).postln;});
 												}
 											);
 											if (fileDir == nil, {//safe driving
 												fileDir = ~fileAudio_writeIn_lastFile;
-												//".....safe-driving...playing last rec file".postln;
+												if (post == 1, {".....safe-driving...playing last rec file".postln;});
 											});
 										},
 										{ //else if max files written > maxNum limit
-											//("-----maxNumFiles EXCEEDED-----").postln;
+											if (post == 1, {("-----maxNumFiles EXCEEDED-----").postln;});
 											if (0.5.coin == true,
 												{//play oldest or second-oldest file in rec mem
 													if (0.5.coin == true,
-														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1];
-															//("----> Playing OLDEST file in recMem:" + fileDir).postln;
-														}, //oldest file in rec mem
-														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2];
-															//("----> Playing SECOND-OLDEST file in recMem:" + fileDir).postln;
-														} //second-oldest file in rMem
+														{
+															fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]; //oldest file in rec mem
+															if (post == 1, {("----> Playing OLDEST file in recMem:" + ~returnFileNameFromPath.(fileDir)).postln;});
+														},
+														{
+															fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]; //second-oldest file in rMem
+															if (post == 1, {("----> Playing SECOND OLDEST file in recMem:" + ~returnFileNameFromPath.(fileDir)).postln;});
+														}
 													);
 												},
 												{
 													var randFile, selectFile;
-													//"---->RANDOM FILE SELECTION ----->".postln;
+													if (post == 1, {"---->RANDOM FILE SELECTION ----->".postln;});
 													randFile = rrand(0, (~fileAudio_writeIn_maxNum - 1)).round(1);
 													fileDir = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+													if (post == 1, {("-----> PLAYING:" + ~returnFileNameFromPath.(fileDir)).postln;});
 													/*selectFile = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
 													if (selectFile == ~fileHistory_rec[0], {
 													"-----Selected File == last REC file...picking oldest file----".postln;
@@ -648,12 +668,13 @@ dB")
 											);
 											if (fileDir == nil, {//safe driving
 												fileDir = ~fileAudio_writeIn_lastFile;
-												//".....safe-driving...playing last rec file".postln;
+												if (post == 1, {".....safe-driving...playing last rec file".postln;});
 											});
 										}
 									);
 								} //;
-								//{randNum > 0} {
+								//{randNum == 0} {
+								//{randNum <= 10} {
 								{randNum > 9.5} { //5% of time audify sound scene... <---NEW
 									var fileNum, rate, cycle = 1;
 									~trigAudify = true;
@@ -694,6 +715,8 @@ dB")
 									SystemClock.play(~audifyRout);
 									2.yieldAndReset;
 								};
+
+								//<--------ADD PCONV ROUTINE HERE? or just below? 10 - 15 - 25%??
 							}
 						);
 						///-----^^^^^^^---------NEW--------^^^^^^^---------///////
@@ -710,41 +733,79 @@ dB")
 							rand = rrand(1.0, 10.0);
 
 							procSelect = case
-							//{rand <= 10} {
-							{rand <= 6.5} {
+							//{rand == 0} {
+							{rand <= 6.5} {//65% chance //<---RESET TO THIS
 								if (post == 1, {"==randAudify==".postln;});
 								//duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
-								duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~stream2sub, post: post); //<---NEW outBus
+								duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, post: post); //<---NEW outBus
 							}
-							{rand > 8.7} {
-								//{rand == 11} {
-								if (post == 1, {"==NOIZ MANGLE==".postln;});
-								//duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
-								duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~stream2sub, post: post); //<---NEW outBus
-							}
-							{rand > 6.5 && rand <= 8.7} {
-								//{rand == 12} {
+							//{rand <= 10} {
+							{rand > 6.5} {
+							//{rand > 6.5 && rand <= 8.7} {//22% chance of modulated playback //<---RESET TO THIS
+
+								//vvv--------NEW - TEST--------vvvvv
+								if (duration <= 2, {//if short dur sound detected
+
+									//duration = ~sample_randAudify.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, post: post); //<---PLACE HOLDER FOR NOW, I didn't like mod synthDefs for these short durs after all, only really works w/ claps and snaps....
+									duration = ~trigRand_bufPlay_rateLFOsine.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, loopDurMin: 3.0, loopDurMax: 6.0, post: post);
+
+									/*
+									if (1.coin == true, {//sineSineMod
+									//if (0.75.coin == true, {//sineSineMod
+										duration = ~trigRand_sineSineMod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, loopDurMin: 3.0, loopDurMax: 6.0, post: post); //triggers synth based on sound duration and random probs, also return mod duration when looping short sounds
+									}, {//noiseSineMod
+										duration = ~trigRand_noiseSineMod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 1.5, loopDurMin: 6.0, loopDurMax: 9.0, post: post);
+									}); */
+								}, {//else if med - long dur sound > 2 seconds
+									var randSel, randCase;
+									randSel = rrand(1.0, 10.0).round(0.01);
+
+									randCase = case
+									{randSel <= 5} {//50% chance
+										~trigRand_sineSineMod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, post: post); //triggers synth based on sound duration and random probs, also return mod duration when looping short sounds
+									}
+									{randSel > 5 && randSel <= 7} {//20% chance
+										~trigRand_noiseSineMod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, post: post);
+									}
+									{randSel > 7} {//30% chance
+										//noiseNoiseMod
+										~trigRand_noise3Mod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, post: post);
+									};
+								});
+								//^^^^--------NEW - TEST--------^^^^
+
+								/* //<----ORIG
 								var lfoFreq, loFreq, hiFreq;
 								if (post == 1, {"==SINE MODs==".postln;});
-								lfoFreq = rrand(0.1, 1.0).round(0.01);
-								loFreq = rrand(0.05, 0.3).round(0.01);
-								hiFreq = rrand(0.1, 0.7).round(0.01);
+								lfoFreq = rrand(0.1, 1.0).round(0.01); //consider increasing max range to 3 or 4
+								loFreq = rrand(0.05, 0.3).round(0.01); //loFreq min could be lowered to 0.01
+								hiFreq = rrand(0.1, 0.7).round(0.01); //lower max high range to 0.3 or 0.4
 
 								if (0.5.coin == true,
 									{
 										if (post == 1, {("---SineSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;});
 										//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-										//~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
 										~samp0 = Synth(\bufRead_sineSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~stream2sub]); //<---NEW outBus
 									},
 									{
 										if (post == 1, {("---NoiseSine: lfoFreq =" + lfoFreq + "| loFreq =" + loFreq + "| hiFreq =" + hiFreq).postln;});
 										//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, 0.5, \loFreq, 0.1, \hiFreq, 0.5, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
-										//~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~outMainBus]);
 										~samp0 = Synth(\bufRead_noiseSineMod, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \amp, ~fileOutputLevelBus.asMap, \out, ~stream2sub]); //<---NEW outBus
 									}
-								);
+								); //<----ORIG
+								*/
+							}
+							{rand < 0} {//13% chance //for testing
+							//{rand > 8.7} {//13% chance //<---RESET TO THIS
+								//<----COMMENT OUT AND PUT PCONV HERE???
+
+								if (post == 1, {"==NOIZ MANGLE==".postln;});
+								//duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
+								duration = ~sample_noiseMangle.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, post: post); //<---NEW outBus
+								//<-----------------
+
 							};
+
 
 							//NodeWatcher.register(~samp0);
 							~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
@@ -760,12 +821,363 @@ dB")
 						if (post == 1, {("Pre-yield samp Dur = " ++ duration).postln;});
 
 						s.sync; //<------USING THIS INSTEAD OF YIELD, FIXES RPI ISSUE AND NO MORE NEED FOR YIELD!!
-						//0.2.yield;  //<---UNFORTUNATE YIELD needed to update duration variable (probs doesn't need to be that long, thought short yield times was causing a "Buffer UGen: buffer data" error - INCREASE FOR RPI<-----<<<
+
 						if (post == 1, {("Post-yield samp Dur = " ++ duration).postln;});
 
-						//duration.yieldAndReset; //<---might not be necessary to add 0.02 sec, experiment
 						(duration + 0.02).round(0.01).yieldAndReset; //<--maybe not necessary to add more time
 						//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
+					},
+					{0.25.yieldAndReset;} //else if (~recSoundInput == true)
+				);
+			}
+		);
+	});
+}; */
+
+~autoPlay_soundTrigAuto = {|post = 0| //<----NEW W/ PCONV
+	Routine({
+		if (~playSamp == true,
+			{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
+				if (~playAudify == true, { //check flag to see if audification in progress <----NEW
+					if (post == 1, {">>>>AUDIFY IN PROGRESS...<<<<".postln;});
+					0.2.yieldAndReset;
+				}, { //else if ~playAudify == false
+					if (post == 1, {">>>>NO AUDIFICATION IN PROGRESS...<<<<".postln;});
+
+					// if ~auto_partConvSamplesAutoLoop_StatusFlag == true {~partConv_samples_autoLoop.(0...)};
+
+					~playSamp = false;
+					~time_lastPlay_stop = Main.elapsedTime.round(0.001); //log sample playback stop time
+					if (~trigAudify == true, //<---NEW (avoids error caused by freeing nonexistant ~audioBuf_play0 after ~audifyRout plays...
+						{~trigAudify = false;},
+						{if (~audioBuf_play0.bufnum != nil, {~audioBuf_play0.free;});} //only free buf if it exists <---NEW, similarly, this avoids error caused by freeing nonexistant buffer when other routines like autoPConv, etc. have operated instead of regular buffer processing effects....
+					);
+
+
+					{~button_playSamp.value = 0;}.defer; //update GUI button
+					~autoRecPlay_state = 0; // (cycle state to trigger ~autoRec before next ~autoPlay)
+					0.2.yieldAndReset;
+				});
+			},
+			{//if not playing a soundFile or autoRecording...
+				if (((~recSamp_input == false) && (~autoRecPlay_state == 1)), //only play back sounds if not recording...
+					{
+						//PLAYBACK AUDIO FILE FROM DISK
+						var interpSynth, fileDir, file, duration, temp, /*rate, pitch, mix,*/ currentTime;
+
+						//<---***CONDITION CHECKING TRIGGERING SAMPLE PLAYBACK GOES HERE****----
+						//---e.g. routines checking machine listening ugen output control busses...
+
+						~playSamp = true; //set flag
+
+						//vvvvvv ---- make this into a reusable function for audio file playback ---- vvvvvv
+
+						//>-----FILE SELECTION CONDITIONS --- (basics implemented, could be refined)
+						///-----vvvvvvv---------NEW--------vvvvvv---------///////
+						currentTime = Main.elapsedTime.round(0.001);
+						if (currentTime <= (~time_lastRec_stop + 5),
+							{//if just recorded new sound, play last recorded sound
+								if (post == 1, {"---SOUND JUST RECORDED - PLAYING LAST SOUND".postln;});
+								fileDir = ~fileAudio_writeIn_lastFile;
+							},
+							{//else if it's been awhile since last recorded sound
+								var playCase, randNum = rrand(1.0, 10.0).round(0.01);
+								if (post == 1, {"---LAST SOUND RECORDED > 5 SECONDS AGO....".postln;});
+
+								playCase = case
+								//{randNum == 0} {
+								{randNum <= 7} { //70% of time, play last recorded file
+									fileDir = ~fileAudio_writeIn_lastFile;
+									if (post == 1, {("---->PLAYING LAST REC FILE (70%):" + ~fileAudio_writeIn_lastFile).postln;});
+								}
+								//{randNum == 0} {
+								//{randNum <= 10} {
+								{randNum > 7 && randNum <= 8.5} {//15% of time play recent rec file
+									if (post == 1, {"---->PLAYING RECENT REC FILE (20%)".post;});
+									if (0.75.coin == true,
+										{//play second to last rec file
+											fileDir = ~fileHistory_rec[1];
+											if (post == 1, {" | second-to-last | ".post;});
+										},
+										{fileDir = ~fileHistory_rec[2];
+											//" | third-to-last | ".post;
+										} //or play third to last rec file
+									);
+									if (fileDir == nil, {//safe driving
+										fileDir = ~fileAudio_writeIn_lastFile;
+										if (post == 1, {".....safe-driving...playing last rec file".postln;});
+									});
+									if (post == 1, {("FILE:" + ~returnFileNameFromPath.(fileDir)).postln;});
+								}
+								//{randNum == 0} {
+								{randNum > 8.5 && randNum <= 9} { //5% of time play older or random file....
+									if (post == 1, {("---->PLAYING OLDER / RAND FILE (5%):").postln;});
+									if (~fileAudio_writeIn_maxNum_exceeded == false,
+										{
+											var fileNum;
+											if (post == 1, {("-----maxNumFiles NOT EXCEEDED-----").postln;});
+											if (~fileAudio_writeIn_nameNum >= ~fileHistory_rec.size, //if rec mem is full
+												{
+													if (0.5.coin == true,
+														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]}, //select oldest file in rec mem
+														{fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]} //or select second-oldest file in rec mem
+													);
+													if (post == 1, {("---->REC MEM FULL - Playing:" + ~returnFileNameFromPath.(fileDir)).postln;});
+												},
+												{//else if rec mem is not full
+													fileDir = ~fileHistory_rec[~fileAudio_writeIn_nameNum - 1]; //select older file...
+													if (post == 1, {("---->REC MEM NOT FULL - Playing:" + ~returnFileNameFromPath.(fileDir)).postln;});
+												}
+											);
+											if (fileDir == nil, {//safe driving
+												fileDir = ~fileAudio_writeIn_lastFile;
+												if (post == 1, {".....safe-driving...playing last rec file".postln;});
+											});
+										},
+										{ //else if max files written > maxNum limit
+											if (post == 1, {("-----maxNumFiles EXCEEDED-----").postln;});
+											if (0.5.coin == true,
+												{//play oldest or second-oldest file in rec mem
+													if (0.5.coin == true,
+														{
+															fileDir = ~fileHistory_rec[~fileHistory_rec.size - 1]; //oldest file in rec mem
+															if (post == 1, {("----> Playing OLDEST file in recMem:" + ~returnFileNameFromPath.(fileDir)).postln;});
+														},
+														{
+															fileDir = ~fileHistory_rec[~fileHistory_rec.size - 2]; //second-oldest file in rMem
+															if (post == 1, {("----> Playing SECOND OLDEST file in recMem:" + ~returnFileNameFromPath.(fileDir)).postln;});
+														}
+													);
+												},
+												{
+													var randFile, selectFile;
+													if (post == 1, {"---->RANDOM FILE SELECTION ----->".postln;});
+													randFile = rrand(0, (~fileAudio_writeIn_maxNum - 1)).round(1);
+													fileDir = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+													if (post == 1, {("-----> PLAYING:" + ~returnFileNameFromPath.(fileDir)).postln;});
+													/*selectFile = (~fileAudio_writeIn_lastPath++randFile++".wav").standardizePath;
+													if (selectFile == ~fileHistory_rec[0], {
+													"-----Selected File == last REC file...picking oldest file----".postln;
+
+													}, {
+
+													}); */
+												}
+											);
+											if (fileDir == nil, {//safe driving
+												fileDir = ~fileAudio_writeIn_lastFile;
+												if (post == 1, {".....safe-driving...playing last rec file".postln;});
+											});
+										}
+									);
+								} //;
+								//{randNum == 0} {
+								//{randNum <= 10} {
+								{randNum > 9} { //10% of time audify sound scene... <---NEW
+									var fileNum, rate, cycle = 1;
+									~trigAudify = true;
+									if (~fileAudio_writeIn_maxNum_exceeded == false,
+										{
+											if (post == 1, {"[AUDIFY] -- files < maxNum: ".post;});
+											fileNum = ~fileAudio_writeIn_nameNum;
+											if (fileNum <= 15,
+												{
+													rate = rrand(12.0, 24.0).round(0.01);
+													if (fileNum <= 6, {cycle = 2;});
+													if (post == 1, {
+														"fileNum <= 15 | ".post;
+														("rate =" + rate).post;
+														(" | cycle =" + cycle).postln;
+													});
+												},
+												{
+													rate = rrand(24.0, 36.0).round(0.01);
+													if (post == 1, {
+														"fileNum > 15 | ".post;
+														("rate =" + rate).postln;
+													});
+												}
+											);
+											//~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify); //<---NEW outBus
+										},
+										{ //else if we have maximum # of samples saved...
+											rate = rrand(28.0, 36.0).round(0.01);
+											fileNum = ~fileAudio_writeIn_maxNum;
+											//~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~outMainBus, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify);
+											~audifyRout = ~audifyScene1.(~fileAudio_writeIn_lastPath, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, fileNum: fileNum, cycle: cycle, rate: rate, pitch: rate.neg, status: \playAudify); //<---NEW outBus
+											if (post == 1, {"[AUDIFY] -- filesMax Exceeded: ".post; (" rate =" + rate).postln;});
+										}
+									);
+									if (post == 1, {"[AUDIFY] -- STARTING... ".post;});
+									SystemClock.play(~audifyRout);
+									2.yieldAndReset;
+								};
+
+								//<--------ADD PCONV ROUTINE HERE? or just below? 10 - 15 - 25%??
+							}
+						);
+						///-----^^^^^^^---------NEW--------^^^^^^^---------///////
+
+						//fileDir = ~fileAudio_writeIn_lastFile; //<-------orig
+
+						//OR ADD PCONV HERE AS PART OF LARGER CONDITIONAL W/ BELOW...... <---------
+						if ((0.25.coin == true) && (~fileHistory_rec[1] != nil), //25% chance, and if recorded >= 2 samples
+							{//PERFORM PCONV
+								var target, ir, temp, attTime = 0.5, susTime = 3, relTime = 2.3, dur, rate = 1, pitch = 1, pitchMix = 0, transp, transpCase;
+
+								if (post == 1, {"=== PCONV SELECTED ===".postln;});
+
+								target = fileDir; //assign target and ir file paths
+								if (target != ~fileHistory_rec[1],
+									{ir = ~fileHistory_rec[1];}, //if target isn't 2nd-to-last rec, use 2nd-to-last rec as ir
+									{//if target == ~fileHistory_rec[1] ...a.k.a. 2nd-to-last rec, use last rec or a random one for ir
+										if (0.5.coin == true, {ir = ~fileHistory_rec[0];}, //50% chance use last rec as ir
+											{//else pick random file to use for ir
+												if (~fileAudio_writeIn_maxNum_exceeded == true,
+													{ir = ~fileHistory_rec[rrand(2, (~fileAudio_writeIn_maxNum - 1))];},
+													{//if we haven't written more than maxNum of permitted audio files, we gotta be careful to not select an invalid file path....
+														ir = ~fileHistory_rec[rrand(2, (~fileAudio_writeIn_maxNum - 1))];
+														if (ir == nil, {ir = ~fileHistory_rec[0];}); //use last rec as ir, in case no file picked (lazy method for now....)
+													}
+												);
+											}
+										);
+									}
+								);
+
+								transp = rrand(1.0, 10.0).round(0.01);
+								transpCase = case
+								{transp <= 5} {//50% no transposition
+									if (post == 1, {"[autoPconv] NO TRANSP".postln;});
+								}
+								{transp > 5 && transp <= 7.5} {//25% slight transposition
+									if (post == 1, {"[autoPconv] slight TRANSP".postln;});
+
+									if (0.5.coin == true, //increase rate
+										{rate = rrand(2.0, 7.0).round(0.01);},
+										{rate = rrand(-2.0, -7.0).round(0.01);} //else decrease rate
+									);
+
+									if (0.5.coin == true, { //50% of time also engage pitch shifting
+										if (0.33.coin == true, //adjust pitch
+											{pitch = (rate * (-1)).midiratio;}, //33% pitch exact inverse to rate
+											{//66% else pitch transp inverse + offset to rate
+												if (rate > 0,
+													{pitch = rrand(-12.0, -2.0).round(0.01).midiratio;},
+													{pitch = rrand(2.0, 12.0).round(0.01).midiratio;}
+												);
+											}
+										);
+										if (0.7.coin == true, //adjust pitch mix
+											{pitchMix = 1;}, //70% chance, set pitchMix to 100%
+											{pitchMix = rrand(0.5, 0.75).round(0.01);} //30% chance, set pitchMix 50 - 75%
+										);
+									});
+								}
+								{transp > 7.5} {//25% extreme transposition
+									if (post == 1, {"[autoPconv] EXTREME TRANSP".postln;});
+									if (0.5.coin == true, //50% increase rate
+										{rate = rrand(5.0, 24.0).round(0.01);},
+										{rate = rrand(-24.0, -5.0).round(0.01);} //50% else decrease rate
+									);
+
+									if (0.5.coin == true, { //50% of time also engage pitch shifting
+										if (0.33.coin == true, //adjust pitch
+											{pitch = (rate * (-1)).midiratio;}, //33% pitch exact inverse to rate
+											{//66% else pitch transp inverse + offset to rate
+												if (rate > 0,
+													{pitch = rrand(-12.0, -2.0).round(0.01).midiratio;},
+													{pitch = rrand(2.0, 12.0).round(0.01).midiratio;}
+												);
+											}
+										);
+										if (0.7.coin == true, //adjust pitch mix
+											{pitchMix = 1;}, //70% chance, set pitchMix to 100%
+											{pitchMix = rrand(0.5, 0.75).round(0.01);} //30% chance, set pitchMix 50 - 75%
+										);
+									});
+								};
+								rate = rate.midiratio;
+								susTime = rrand(3.5, 7.75).round(0.01); //pick susTime
+								dur = attTime + susTime + relTime; //calc total duration
+
+								~partConv_samples_autoLoop.(1, post: post, targetFile: target, irFile: ir, targetBuf: \pcs_tBuf1, irBuf: \pcs_irBuf1, fftSize: 2048, routine: \pcs_rout1, synth: \pcs_syn1, ampBus: ~fileOutputLevelBus.asMap, ampLimit: 0.3, outBus: ~stream2sub, attTime: attTime, susTime: susTime, relTime: relTime, playRate: rate, pitch: pitch, pShiftMix: pitchMix, winSize: 0.1, pitchDisp: 0, timeDisp: 0.003);
+
+								~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
+								~fileAudio_lastPlay = fileDir;
+								temp = ~fileHistory_play.shift(1, fileDir);
+								~fileHistory_play = temp;
+								{~button_playSamp.value = 1;}.defer; //update GUI
+
+								if (post == 1, {("[autoPconv] PLAYING BACK PCONV SAMPLES: target=" + ~returnFileNameFromPath.(target) + "| IR=" + ~returnFileNameFromPath.(ir)).postln;});
+								if (post == 1, {("[autoPconv] rate =" + rate + "| pitch =" + pitch + "| pitchMix =" + pitchMix + "|dur =" + dur).postln;});
+
+								(dur + 0.1).yieldAndReset;
+							},
+							{//PLAY SOUND FILE FROM DISK....
+								~audioBuf_play0 = Buffer.read(s, fileDir, action: {arg buffer;
+									var rand, procSelect;
+									//duration = buffer.numFrames/s.sampleRate;
+									duration = buffer.numFrames/buffer.sampleRate; //<--orig
+
+									//EVENTUALLY consider selecting proc behaviors based on features of analyzed audio <<<<
+									rand = rrand(1.0, 10.0);
+
+									procSelect = case
+									//{rand == 0} {
+									{rand <= 6.5} {//65% chance //<---RESET TO THIS
+										if (post == 1, {"==randAudify==".postln;});
+										//duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus, outBus: ~outMainBus, post: post);
+										duration = ~sample_randAudify.value(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, post: post); //<---NEW outBus
+									}
+									//{rand <= 10} {
+									{rand > 6.5} {
+										//{rand > 6.5 && rand <= 8.7} {//22% chance of modulated playback //<---RESET TO THIS
+										//vvv--------NEW ----vvvvv
+										if (duration <= 2, {//if short dur sound detected
+											duration = ~trigRand_bufPlay_rateLFOsine.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, loopDurMin: 3.0, loopDurMax: 6.0, post: post);
+											//duration = duration + 0.1; //some padding to see if missing buffer errors stop....
+										}, {//else if med - long dur sound > 2 seconds
+											var randSel, randCase;
+											randSel = rrand(1.0, 10.0).round(0.01);
+
+											randCase = case
+											{randSel <= 5} {//50% chance
+												~trigRand_sineSineMod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, post: post); //triggers synth based on sound duration and random probs, also return mod duration when looping short sounds
+											}
+											{randSel > 5 && randSel <= 7} {//20% chance
+												~trigRand_noiseSineMod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, shortDurThresh: 2, post: post);
+											}
+											{randSel > 7} {//30% chance
+												//noiseNoiseMod
+												~trigRand_noise3Mod_bufPlay.(buffer: buffer, duration: duration, ampBus: ~fileOutputLevelBus.asMap, outBus: ~stream2sub, post: post);
+											};
+										});
+										//^^^^--------NEW --------^^^^
+									};
+
+									//NodeWatcher.register(~samp0);
+									~time_lastPlay_start = Main.elapsedTime.round(0.001); //log sample play start time
+									if (post == 1, {("PLAYING BACK FILE:" + fileDir).postln;});
+
+									~fileAudio_lastPlay = fileDir; //<---NEW - to keep track of last played sample (not needed if using below array for playback memory)
+
+									temp = ~fileHistory_play.shift(1, fileDir); //<---NEW - longer-term playback memory
+									~fileHistory_play = temp; //<---NEW - longer-term playback memory
+								});
+
+								{~button_playSamp.value = 1;}.defer; //update GUI
+								if (post == 1, {("Pre-yield samp Dur = " ++ duration).postln;});
+
+								s.sync; //<------USING THIS INSTEAD OF YIELD, FIXES RPI ISSUE AND NO MORE NEED FOR YIELD!!
+
+								if (post == 1, {("Post-yield samp Dur = " ++ duration).postln;});
+
+								(duration + 0.02).round(0.01).yieldAndReset; //<--maybe not necessary to add more time
+								//---------- ^^^^^^^^^^^^^^^^^^^ ---------------------------
+							}
+						);
 					},
 					{0.25.yieldAndReset;} //else if (~recSoundInput == true)
 				);
@@ -1362,7 +1774,7 @@ s.plotTree;
 
 			//~autoPlay_soundTrigAuto.reset;
 			//SystemClock.play(~autoPlay_soundTrigAuto);
-			~autoPlayRout = ~autoPlay_soundTrigAuto.(post: 0);
+			~autoPlayRout = ~autoPlay_soundTrigAuto.(post: 1);
 			SystemClock.play(~autoPlayRout);
 		},
 		{
@@ -1397,6 +1809,13 @@ s.plotTree;
 				~playSamp = false;
 				~button_playSamp.value = 0;
 				~autoRecPlay_state = 0; //<----- NEW
+
+				if (~pcs_syn1 != nil, { //end pConv routine if active (checking for its synth)....<----NEW
+					if (~pcs_syn1.isRunning, {
+						~partConv_samples_autoLoop.(0, post: 1, targetBuf: \pcs_tBuf1, irBuf: \pcs_irBuf1, routine: \pcs_rout1, synth: \pcs_syn1);
+					});
+				});
+
 			} );
 		}
 	);
@@ -2108,9 +2527,9 @@ if (~plotterEnabled == true, {
 		obj.value == 1, // when button enabled
 		{
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
-			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 1, freq1: 400, freq2: 3000, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 1, freq1: 400, freq2: 3000, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
 			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 3600, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.65, post: 1); //<---FOR VOXELS
+			~autoConvolve1A.(1, filePath: ~fileAudio_writeIn_lastFile2, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 606, attTime: 0.5, susTime: 2.5, relTime: 2, impPostDel: 0.4, timeStretch: false, timeStretchRate: 0.75, post: 1); //<---FOR VOXELS
 			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 0.2, impulse: 3, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---piezo live sound settings
 		},
 		{ //when button disabled

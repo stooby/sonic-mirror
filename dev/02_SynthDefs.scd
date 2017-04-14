@@ -47,6 +47,20 @@ SynthDef.new(\bufRead_noise1, {
 	Out.ar(out, sig * amp);
 } ).add;
 
+SynthDef.new(\bufRead_noise3, {
+	//arg buf, duration, amp=1, freq = 1, out = 0;
+	arg buf, duration, amp=1, modFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
+	var dur, frames, ptr, env, lfo, sig;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	lfo = SinOsc.ar(modFreq, 3pi/2).range(loFreq, hiFreq);
+	ptr = LFDNoise3.ar(lfo).range(0, frames - 1);
+	//ptr = LFDNoise1.ar(freq).range(0, frames - 1);
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
 SynthDef.new(\bufRead_sineSineMod, {
 	arg buf, duration, amp=1, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
 	var dur, frames, lfo, ptr, env, sig;
@@ -71,6 +85,60 @@ SynthDef.new(\bufRead_noiseSineMod, {
 	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sig * amp);
 } ).add;
+
+SynthDef.new(\bufRead_sineSineMod_randPhase, { //<--NEW
+	arg buf, duration, amp=1, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, attTime = 0.02, relTime = 0.02, out = 0;
+	var dur, frames, lfo, ptr, env, sig, randPhase;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 3pi/2);
+	lfo = SinOsc.ar(lfoFreq, phase: randPhase).range(loFreq, hiFreq);
+	ptr = SinOsc.ar(lfo, phase: randPhase).range(0, frames - 1);
+	//lfo = SinOsc.ar(lfoFreq, Rand(0, 3pi/2)).range(loFreq, hiFreq);
+	//ptr = SinOsc.ar(lfo, Rand(0, 3pi/2)).range(0, frames - 1);
+	//env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1, curve: \sine);
+	env = Env.linen(attackTime: attTime, sustainTime: (dur - (attTime + relTime)), releaseTime: relTime, level: 1, curve: \sine);
+	sig = BufRd.ar(1, buf, ptr, interpolation: 2) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef.new(\bufRead_noiseSineMod_randPhase, { //<--NEW
+	arg buf, duration, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, attTime = 0.02, relTime = 0.02, amp=1, out = 0;
+	var dur, frames, lfo, ptr, env, sig, randPhase;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 2pi);
+	//randPhase = Rand(0, 3pi/2);
+	lfo = LFDNoise1.ar(lfoFreq).range(loFreq, hiFreq);
+	ptr = SinOsc.ar(lfo, randPhase).range(0, frames - 1);
+	env = Env.linen(attackTime: attTime, sustainTime: (dur - (attTime + relTime)), releaseTime: relTime, level: 1, curve: \sine);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef.new(\bufRead_noise3_randPhase, {|buf, duration, modFreq = 0.25, loFreq = 1, hiFreq = 3, attTime = 0.02, relTime = 0.02, amp=1, out = 0| //<--NEW
+	var dur, frames, ptr, env, lfo, sig, randPhase;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 2pi);
+	lfo = SinOsc.ar(modFreq, randPhase).range(loFreq, hiFreq);
+	ptr = LFDNoise3.ar(lfo).range(0, frames - 1);
+	env = Env.linen(attackTime: attTime, sustainTime: (dur - (attTime + relTime)), releaseTime: relTime, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
+SynthDef.new(\bufRead_rateLFOsine, { //<-----NEW
+	arg buf, duration = 2, amp=1, lfoRate = 0.25, minRate = 0.5, maxRate = 2, attTime = 0.02, relTime = 0.02, out = 0;
+	var frames, ptr, env, sig, phasor, randPhase;
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 3pi/2);
+	ptr = SinOsc.ar(lfoRate, randPhase).range(minRate, maxRate);
+	phasor = Phasor.ar(0, BufRateScale.kr(buf) * ptr, 0, frames - 1);
+	env = Env.linen(attackTime: attTime, sustainTime: duration - (attTime + relTime), releaseTime: relTime, level: 1, curve: \sine);
+	sig = BufRd.ar(1, buf, phase: phasor) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
 
 SynthDef.new(\bufRead_noLoop, {
 	arg buf, rate = 1, amp=1, out=0;
@@ -191,7 +259,8 @@ SynthDef.new(\mainOut, { //w/ Lo-cut and Peak EQ
 	|in, loCut = 90, loCutQ = 1, amp = 1, peak = 120, peakQ = 1, peakGain = 0|
 	var sig;
 	sig = BHiPass4.ar(In.ar(in), freq: loCut, rq: loCutQ);
-	sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain); //<----NEW
+	sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain);
+	sig = Limiter.ar(sig, level: (-0.3.dbamp), dur: 0.01); //<---NEW
 	//sig = In.ar(in) * amp;
 	//sig = InFeedback.ar(in) * amp;
 	//OffsetOut.ar(0, sig);
@@ -480,7 +549,18 @@ SynthDef.new(\randSinSwell_1, {|out = 0, amp = 1, loFreq = 300, hiFreq = 1200, a
 	sig = Mix.ar(sig) * amp;
 	Out.ar(out, sig);
 }).add;
-);
+
+SynthDef(\sineBeats, {
+	|freq1 = 100, freq2 = 108, attTime = 3, susTime = 3, relTime = 3, amp = 0.2, limitThresh = 0.9, out = 0|
+	var freq, env, sig1, sig2, sigOut;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, curve: \sine);
+	sig1 = SinOsc.ar(freq1);
+	sig2 = SinOsc.ar(freq2);
+	sigOut = Mix.ar([sig1, sig2]);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	sigOut = Limiter.ar(in: sigOut, level: (limitThresh), dur: 0.01);
+	Out.ar(out, sigOut * amp);
+}).add;
 
 // OTHER EFFECTS PROCESSING ---
 
@@ -517,3 +597,5 @@ SynthDef(\partConv_sampleLoop_pShift, {|targetBuf, irSpectrum, attTime = 4, susT
 	currentAmp = ampBus * ampLimit;
 	Out.ar(out, sigOut * currentAmp);
 }).add;
+
+);

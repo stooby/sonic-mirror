@@ -132,6 +132,51 @@
 
 
 //AUTO REC / PLAY HELPER FUNCTIONS -----
+~writeSampFromBuf_name = {|buffer, in, out, inputSec = 1, filecap = false, filePath| //expecting in and out time in seconds
+	var inFrame, outFrame;
+	if (inputSec == 1, {//in/out times are assumed to be in seconds
+		inFrame = (in.asFloat.round(0.001) * buffer.sampleRate);
+		outFrame = (out.asFloat.round(0.001) * buffer.sampleRate);
+	}, {//if inputSec == 0, in/out times are assumed to be in frames
+		inFrame = in.asFloat.round(1);
+		outFrame = out.asFloat.round(1);
+	});
+
+	if (inFrame < outFrame, { //if sample does not wrap around to beginning of buffer
+		var numFrames = (outFrame - inFrame) + 1;
+		buffer.write(filePath, "wav", ~sampBitDepth, numFrames: numFrames, startFrame: inFrame);
+		("WROTE SAMPLE: " ++ filePath + "| dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
+		//~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+	}, {//if sample wraps around to beginning of buffer
+		var numFrames, chunk1frames, chunk2frames, copyBuf;
+		chunk1frames = buffer.numFrames - inFrame; //inclusive frame count from inFrame to last frame in buffer
+		chunk2frames = outFrame + 1; //inclusive frame count (b/c buffers start at frame 0)
+		numFrames = chunk1frames + chunk2frames;
+		copyBuf = Buffer.alloc(s, numFrames, 1);
+		buffer.copyData(copyBuf, dstStartAt: 0, srcStartAt: inFrame, numSamples: chunk1frames);
+		buffer.copyData(copyBuf, dstStartAt: (chunk1frames - 1), srcStartAt: 0, numSamples: chunk2frames);
+		copyBuf.write(filePath, "wav", ~sampBitDepth);
+		copyBuf.free;
+		("WROTE SAMPLE: " ++ filePath + "| dur = " ++ (numFrames/buffer.sampleRate).round(0.01) + "| In = " ++ in.round(0.01) + "| Out = " ++ out.round(0.01)).postln;
+		//~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+	});
+
+	~fileAudio_writeIn_nameNum = ~fileAudio_writeIn_nameNum + 1;
+	~fileAudio_writeIn_lastFile2 = (~fileAudio_writeIn_directory ++ ~fileAudio_writeIn_fileName ++ ~fileAudio_writeIn_nameNum ++ ".wav").standardizePath;  //<--- NEW
+
+	~recSamp_input = false; //from orig   (from orig, for use in routines)
+	{~button_recIn.value = 0}.defer; //update GUI (from orig, for use in routines)
+
+	if (filecap == true,
+		{
+			if (~fileAudio_writeIn_nameNum > (~fileAudio_writeIn_maxNum - 1), { //cap max file count...
+				~fileAudio_writeIn_nameNum = 0;
+				~fileAudio_writeIn_maxNum_exceeded = true;
+			});
+		}
+	);
+};
+
 ~writeSampFromBuf = {|buffer, in, out, filecap = false| //expecting in and out time in seconds
 	var inFrame, outFrame;
 	inFrame = (in.asFloat.round(0.001) * buffer.sampleRate);
@@ -350,7 +395,7 @@
 			);
 		}
 	);
-	~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus.asMap, \out, outBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]);
+	~samp0 = Synth(\bufRead_complex1, [\buf, buffer, \amp, ampBus, \out, outBus, \rate, rate, \pitch, pitch, \pShiftMix, mix, \duration, duration]);
 
 	duration;
 };
@@ -367,9 +412,9 @@
 		{
 			if (duration <= 8,
 				{
-					duration = (duration * 1.5).round(0.001);
+					duration = (duration * 1.25).round(0.001);
 					if (post == 1, {
-						("1.5X MED: OrigDur =" + duration + ">").post;
+						("1.25X MED: OrigDur =" + duration + ">").post;
 						("newDur =" + duration).postln;
 					});
 				},
@@ -384,7 +429,7 @@
 	if (0.25.coin == true,
 		{//straight noise
 			var freq = rrand(0.5, 4.2).round(0.01);
-			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus.asMap, \out, outBus]);
+			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, 1, \loFreq, freq, \hiFreq, freq, \amp, ampBus, \out, outBus]);
 			if (post == 1, {"-x-x-STRAIGHT NOISE-x-x-".postln; ("--freq = " ++ freq).postln;});
 		},
 		{//else, modulating noise
@@ -392,11 +437,225 @@
 			mod = rrand(0.1, 1.0).round(0.1);
 			lo = rrand(0.25, 1.0).round(0.01);
 			hi = rrand(1.25, 4.2).round(0.01);
-			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus.asMap, \out, outBus]);
+			~samp0 = Synth(\bufRead_noise1, [\buf, buffer, \duration, duration, \modFreq, mod, \loFreq, lo, \hiFreq, hi, \amp, ampBus, \out, outBus]);
 			if (post == 1, {"-x-x-MOD NOISE-x-x-".postln; ("mod = " ++ mod + "| lo =" + lo + "| hi =" + hi).postln;});
 		}
 	);
 	duration;
+};
+
+~trigRand_sineSineMod_bufPlay = {|buffer, duration, ampBus, outBus, shortDurThresh = 3, loopDurMin = 6.0, loopDurMax = 9.0, post = 0| //<----NEW
+	var randNum, randCase, rand1, rand2, rand3, lfoFreq, loFreq, hiFreq;
+	if (post == 1, {"--RAND sineSineMod TRIGGERED--".postln;});
+	if (duration <= shortDurThresh,
+		{//for short dur sounds
+			if (post == 1, {("[sineSineMod] SHORT DUR DETECTED --").postln;});
+			randNum = rrand(1, 3);
+			randCase = case
+			{randNum == 1} {
+				if (post == 1, {("-[sineSineMod] SLOW tempo").postln;});
+				rand1 = rrand(0.8, 1.2).round(0.001);
+				rand2 = rrand(0.8, 1.2).round(0.001);
+				rand3 = rrand(4.0, 6.0).round(0.001);
+				lfoFreq = rand1; loFreq = rand2; hiFreq = rand3;
+			}
+			{randNum == 2} {
+				if (post == 1, {("-[sineSineMod] MED tempo").postln;});
+				rand1 = rrand(9.5, 12.0).round(0.001);
+				rand2 = rrand(0.8, 1).round(0.001);
+				rand3 = rrand(8.0, 10.0).round(0.001);
+
+				if (0.8.coin == true, {
+					if (post == 1, {("--[sineSineMod] LESS PHASING (lfoFreq = hiFreq == rand1)").postln;});
+					lfoFreq = rand1; loFreq = rand2; hiFreq = rand1; //more loopable, cohesive, rhythmic figures
+				}, {
+					if (post == 1, {("--[sineSineMod] MORE PHASING (lfoFreq != hiFreq)").postln;});
+					lfoFreq = rand1; loFreq = rand2; hiFreq = rand3; //neat phasing often
+				});
+			}
+			{randNum == 3} {
+				if (post == 1, {("-[sineSineMod] FAST tempo").postln;});
+				rand1 = rrand(8.0, 11.0).round(0.001);
+				rand2 = rrand(0.25, 1).round(0.001);
+				rand3 = rrand(10.0, 15.0).round(0.001);
+				lfoFreq = rand1; loFreq = rand2; hiFreq = rand3;
+			};
+
+			if (post == 1, {("--[sineSineMod] lfoFreq =" + lfoFreq.round(0.001) + "loFreq =" + loFreq.round(0.001) + "hiFreq =" + hiFreq.round(0.001)).postln;});
+
+			duration = rrand(loopDurMin, loopDurMax).round(0.01);
+			if (post == 1, {("---[sineSineMod] LOOP dur =" + duration).postln;});
+
+			//consider introducing slight chance to trigger 2 synths w/ variable offset <-----
+
+			Synth(\bufRead_sineSineMod_randPhase, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \attTime, 0.02, \relTime, 0.02, \amp, ampBus, \out, outBus]);
+			if (post == 1, {("----[sineSineMod] TRIGGERED").postln;});
+
+			duration; //return adjusted dur for enclosing routine
+		},
+		{//for med-long dur sounds
+			if (post == 1, {("[sineSineMod] MED-LONG DUR DETECTED --").postln;});
+			randNum = rrand(1.0, 10.0).round(0.01);
+			randCase = case
+			{randNum <= 7} {//70% of time
+				if (post == 1, {("-[sineSineMod] RAND lfoFreq, loFreq, hiFreq vals").postln;});
+				lfoFreq = rrand(0.1, 0.5);
+				loFreq = rrand(0.02, 0.04);
+				hiFreq = rrand(0.11, 0.35);
+			}
+			{randNum > 7 && randNum <= 8.5} {//15% of time
+				if (post == 1, {("-[sineSineMod] PRESET1 lfoFreq, loFreq, hiFreq vals").postln;});
+				lfoFreq = 0.1; loFreq = 0.02; hiFreq = 0.2;
+			}
+			{randNum > 8.5} {//15% of time
+				if (post == 1, {("-[sineSineMod] PRESET2 lfoFreq, loFreq, hiFreq vals").postln;});
+				lfoFreq = 0.22; loFreq = 0.02; hiFreq = 0.3;
+			};
+
+			if (post == 1, {("--[sineSineMod] lfoFreq =" + lfoFreq.round(0.001) + "loFreq =" + loFreq.round(0.001) + "hiFreq =" + hiFreq.round(0.001)).postln;});
+
+			Synth(\bufRead_sineSineMod_randPhase, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \attTime, 0.5, \relTime, 1, \amp, ampBus, \out, outBus]);
+			if (post == 1, {("----[sineSineMod] TRIGGERED").postln;});
+
+			duration;
+		}
+	);
+};
+
+~trigRand_noiseSineMod_bufPlay = {|buffer, duration, ampBus, outBus, shortDurThresh = 3, loopDurMin = 6.0, loopDurMax = 9.0, post = 0| //<----NEW
+	var randNum, randCase, rand1, rand2, rand3, lfoFreq, loFreq, hiFreq;
+	if (post == 1, {"--RAND noiseSineMod TRIGGERED--".postln;});
+	if (duration <= shortDurThresh,
+		{//for short dur sounds
+			if (post == 1, {("[noiseSineMod] SHORT DUR DETECTED --").postln;});
+			randNum = rrand(1, 3);
+			randCase = case
+			{randNum == 1} {
+				if (post == 1, {("-[noiseSineMod] SLOW tempo").postln;});
+				rand1 = rrand(0.8, 1.2).round(0.001);
+				rand2 = rrand(1, 1.2).round(0.001);
+				rand3 = rrand(4.5, 8.0).round(0.001);
+				lfoFreq = rand1; loFreq = rand2; hiFreq = rand3;
+			}
+			{randNum == 2} {
+				if (post == 1, {("-[noiseSineMod] MED tempo").postln;});
+				rand1 = rrand(9.5, 12.0).round(0.001);
+				rand2 = rrand(0.8, 1).round(0.001);
+				lfoFreq = rand1; loFreq = rand2; hiFreq = rand1; //more loopable, cohesive, rhythmic figures //<---USE for bit of randomness, but similar to above
+			}
+			{randNum == 3} {
+				if (post == 1, {("-[noiseSineMod] FAST tempo").postln;});
+				rand1 = rrand(8.0, 10.0).round(0.001); //<---USE
+				rand2 = rrand(0.25, 0.5).round(0.001); //<---USE
+				rand3 = rrand(10.0, 13.0).round(0.001); //<---USE
+				lfoFreq = rand1; loFreq = rand2; hiFreq = rand3;
+			};
+
+			if (post == 1, {("--[noiseSineMod] lfoFreq =" + lfoFreq.round(0.001) + "loFreq =" + loFreq.round(0.001) + "hiFreq =" + hiFreq.round(0.001)).postln;});
+
+			duration = rrand(loopDurMin, loopDurMax).round(0.01);
+			if (post == 1, {("---[noiseSineMod] LOOP dur =" + duration).postln;});
+
+			//consider introducing slight chance to trigger 2 synths w/ variable offset <-----
+
+			Synth(\bufRead_noiseSineMod_randPhase, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \attTime, 0.2, \relTime, 0.4, \amp, ampBus, \out, outBus]);
+			if (post == 1, {("----[noiseSineMod] TRIGGERED").postln;});
+
+			duration; //return adjusted dur for enclosing routine
+		},
+		{//for med-long dur sounds
+			if (post == 1, {("[noiseSineMod] MED-LONG DUR DETECTED --").postln;});
+
+			lfoFreq = rrand(0.1, 1).round(0.001);
+			loFreq = rrand(0.03, 0.05).round(0.001);
+			hiFreq = rrand(0.1, 0.25).round(0.001);
+
+			if (post == 1, {("--[noiseSineMod] lfoFreq =" + lfoFreq.round(0.001) + "loFreq =" + loFreq.round(0.001) + "hiFreq =" + hiFreq.round(0.001)).postln;});
+
+			Synth(\bufRead_noiseSineMod_randPhase, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \attTime, 0.2, \relTime, 0.4, \amp, ampBus, \out, outBus]);
+			if (post == 1, {("----[noiseSineMod] TRIGGERED").postln;});
+
+			duration;
+		}
+	);
+};
+
+~trigRand_noise3Mod_bufPlay = {|buffer, duration, ampBus, outBus, post = 0| //works best w/ med-long dur sounds only... //<----NEW
+    var lfoFreq, loFreq, hiFreq;
+    if (post == 1, {"--RAND noise3Mod--".postln;});
+    lfoFreq = rrand(0.01, 0.5).round(0.001);
+    loFreq = rrand(0.29, 0.56).round(0.001);
+    hiFreq = rrand(0.67, 1.1).round(0.001);
+    if (post == 1, {("--[noise3Mod] lfoFreq =" + lfoFreq.round(0.001) + "loFreq =" + loFreq.round(0.001) + "hiFreq =" + hiFreq.round(0.001)).postln;});
+
+    Synth(\bufRead_noise3_randPhase, [\buf, buffer, \duration, duration, \lfoFreq, lfoFreq, \loFreq, loFreq, \hiFreq, hiFreq, \attTime, 0.2, \relTime, 0.4, \amp, ampBus, \out, outBus]);
+    if (post == 1, {("----[noise3Mod] TRIGGERED").postln;});
+};
+
+~trigRand_bufPlay_rateLFOsine = {|buffer, duration, ampBus, outBus, shortDurThresh = 2.5, loopDurMin = 2.5, loopDurMax = 8.0, post = 0| //<-----NEW
+	var randNum, randCase, lfoRate, minRate, maxRate;
+	if (post == 1, {"--RAND rateLFOsine TRIGGERED--".postln;});
+	if (duration <= shortDurThresh,
+		{//for short dur sounds
+			if (post == 1, {("[rateLFOsine] SHORT DUR DETECTED --").postln;});
+			randNum = rrand(1.0, 10.0).round(0.01);
+			randCase = case
+			{randNum <= 4} {//40%
+				if (post == 1, {("-[rateLFOsine] WOBBLE - NARROW").postln;});
+				lfoRate = rrand(4.0, 15.0).round(0.01);
+				minRate = rrand(-14.0, -8.0).round(0.01);
+				maxRate = rrand(0.0, 7.0).round(0.01);
+			}
+			{randNum >4 && randNum <= 8} {//40%
+				if (post == 1, {("-[rateLFOsine] WOBBLE - WIDE").postln;});
+				lfoRate = rrand(0.6, 1.2).round(0.01);
+				minRate = rrand(-28.0, -20.0).round(0.01);
+				maxRate = rrand(20.0, 26.0).round(0.01);
+			}
+			{randNum > 8} {
+				if (post == 1, {("-[rateLFOsine] WOBBLE - space invaders").postln;});
+				lfoRate = rrand(8.0, 16).round(0.01);
+				minRate = rrand(-38.0, -31.0).round(0.01);
+				maxRate = rrand(-26.0, -20.0).round(0.01);
+			};
+
+			if (post == 1, {("--[rateLFOsine] lfoRate =" + lfoRate + "minRate =" + minRate + "maxRate =" + maxRate).postln;});
+
+			duration = rrand(loopDurMin, loopDurMax).round(0.01);
+			if (post == 1, {("---[rateLFOsine] LOOP dur =" + duration).postln;});
+
+			//consider introducing slight chance to trigger 2 synths w/ variable offset <-----
+
+			minRate = minRate.midiratio;  maxRate = maxRate.midiratio; //convert rates to ratio floats from half steps
+
+			if (0.3.coin == true, { //30% chance play two synths
+				var offset = rrand(0.2, 1.8).round(0.01);
+				Synth(\bufRead_rateLFOsine, [\buf, buffer, \amp, ampBus, \out, outBus, \lfoRate, lfoRate, \minRate, minRate, \maxRate, maxRate, \duration, duration, \attTime, 0.02, \relTime, 0.6]);
+				{Synth(\bufRead_rateLFOsine, [\buf, buffer, \amp, ampBus, \out, outBus, \lfoRate, lfoRate, \minRate, minRate, \maxRate, maxRate, \duration, duration, \attTime, 0.02, \relTime, 0.6])}.defer(offset);
+				duration = duration + offset + 0.01; //update duration to compensate for offset
+				if (post == 1, {("--[rateLFOsine] 2 SYNTHS TRIG! | offset =" + offset + "| newDur =" + duration).postln;});
+			}, {//80% chance just play one synth
+				if (post == 1, {("--[rateLFOsine] TRIGGERED").postln;});
+				Synth(\bufRead_rateLFOsine, [\buf, buffer, \amp, ampBus, \out, outBus, \lfoRate, lfoRate, \minRate, minRate, \maxRate, maxRate, \duration, duration, \attTime, 0.02, \relTime, 0.6]);
+			});
+
+			duration; //return adjusted dur for enclosing routine
+		},
+		{//for med-long dur sounds
+			if (post == 1, {("[rateLFOsine] MED-LONG DUR DETECTED --").postln;});
+
+			lfoRate = rrand(0.5, 1.2).round(0.01);
+			minRate = rrand(-16.0, -8.0).round(0.01);
+			maxRate = rrand(5.0, 12.0).round(0.01);
+
+			if (post == 1, {("--[rateLFOsine] lfoRate =" + lfoRate + "minRate =" + minRate + "maxRate =" + maxRate).postln;});
+
+			Synth(\bufRead_rateLFOsine, [\buf, buffer, \amp, ampBus, \out, outBus, \lfoRate, lfoRate, \minRate, minRate, \maxRate, maxRate, \duration, duration, \attTime, 0.02, \relTime, 0.6]);
+			if (post == 1, {("--[rateLFOsine] TRIGGERED for:" + duration + "seconds...").postln;});
+
+			duration;
+		}
+	);
 };
 
 //SOUND SCENE AUDIFICATION FUNCTIONS -----
@@ -480,7 +739,7 @@
 	);
 };
 
-~autoConvolve1A = {|active, featureBus, outBus, ampBus, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, synth1, initFlag, repeatCounter, impulse = 0, freq1 = 100, freq2 = 2000, attTime = 5, susTime = 3, relTime = 6, impPostDel = 0, preRecPad = 0.03, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0|
+~autoConvolve1A = {|active, featureBus, outBus, ampBus, filePath, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, synth1, initFlag, repeatCounter, impulse = 0, freq1 = 100, freq2 = 2000, attTime = 5, susTime = 3, relTime = 6, impPostDel = 0, preRecPad = 0.03, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0|
 	if (active == 1,
 		{
 			if (~bufRecorder.isRunning,
@@ -536,6 +795,15 @@
 									~recSamp_input = true;
 									{~button_recIn.value = 1;}.defer; //update GUI
 									if (post == 1, {"TRIG: randSines".postln;});
+									(attTime + susTime + relTime + impPostDel).yieldAndReset;
+								}
+								{impulse == 1.2} {//DUAL SINES - BINAURAL BEATS
+									~recSamp_input_startFrame = ~phaseBusMonRec.getSynchronous;// <-- log sound start frame
+									synth1.envirPut(Synth(\sineBeats, [\freq1, freq1, \freq2, freq2, \attTime, attTime, \susTime, susTime, \relTime, relTime, \limitThresh, 0.9, \amp, ampBus, \out, outBus]).moveBefore(~bufRecorder));
+									NodeWatcher.register(synth1.envirGet);
+									~recSamp_input = true;
+									{~button_recIn.value = 1;}.defer; //update GUI
+									if (post == 1, {"TRIG: sineBeats".postln;});
 									(attTime + susTime + relTime + impPostDel).yieldAndReset;
 								}
 								{impulse == 2} {
@@ -618,8 +886,8 @@
 														}
 													);  */
 
-													~writeSampFromBufCopy_input.(); //sets GUI and ~recSamp_input = false
-													//~recSamp_input = false;
+													~writeSampFromBufCopy_input.(); //sets GUI and ~recSamp_input = false (ORIG)
+													//~writeSampFromBuf_name.(buffer: ~audioBuf0, in: ~recSamp_input_startFrame, out: ~recSamp_input_stopFrame, inputSec: 0, filePath: filePath); //<----NEW (custom file naming) NOT WORKING 100%, MESSES UP CYCLING OF ROUTINE <----------------
 
 													if (post == 1, {("-->slight yield after sampleWrite...").postln;});
 													0.2.yield; //<---- slight yield between sampleWrite and playback??
@@ -1153,6 +1421,14 @@
 	thisPath = path.asString;
 	pathArray = thisPath.split; //returns array separating each word in path
 	fileName = pathArray[pathArray.size - 1]; //return value from last index of array (a.k.a. target file name)
+};
+
+~loadaudioBuf = {|active = 1, filePath, bufferName, returnDur| //utility function to load audio file to buffer and cleanup
+	if (active == 1, {//create audio buffer, read in audio file, assign to env var, also calc duration in sec & return to env var
+		bufferName.envirPut(Buffer.read(s, filePath, action: {|buffer| returnDur.envirPut(buffer.numFrames/buffer.sampleRate;);}));
+	}, {//else if active == 0, cleanup
+		bufferName.envirGet.free;
+	});
 };
 
 //====== ROUTINES ==========================
@@ -2001,7 +2277,7 @@
 	);
 } );
 
-~autoPlay_random = Routine.new( {  //<----- LIL BUGGY, almost there.... sample playback buffer getting lost somehow????
+~autoPlay_random = Routine.new( {  //<-----OLD | LIL BUGGY, almost there.... sample playback buffer getting lost somehow????
 	if (~playSamp == true,
 		{ //if already playing sound file, we can assume it's completed by the time this routine has stopped yielding based on commands when ~playSamp == false (see below code in 'else' of this conditional)...
 			var time2yield, interpSynth;
