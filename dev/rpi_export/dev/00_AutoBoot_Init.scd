@@ -12,10 +12,9 @@ s.waitForBoot({
 		0.25.yield;
 		(~dir ++ "01_AutoBoot_Launch.scd").load;
 		0.25.yield;
-		AppClock.play(~initSMpreset_1);
+		AppClock.play(~initSMpreset_2);
 	});
 
 	AppClock.play(~startup);
-	//maybe use Task instead??
 });
 )

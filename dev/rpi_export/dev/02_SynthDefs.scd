@@ -6,20 +6,22 @@
 (
 //Record audio input to buffer using audio-rate input Phasor to control position in buffer
 SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
-	arg phaseBus, buf, sendBus, loCutoff = 90, rQ = 1, mul = 1;
+	|phaseBus, buf, sendBus, loCut = 90, loCutQ = 1, /*peak = 120, peakQ = 1, peakGain = 0,*/ mul = 1|
 	//var sig = SoundIn.ar(bus: 0, mul: mul);
-	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCutoff, rq: rQ, mul: mul); //pass SoundIn through HiPass
+	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCut, rq: loCutQ, mul: mul); //pass SoundIn through HiPass
+	//sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain); //<----consider
 	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
 	//OffsetOut.ar(sendBus, sig);  //would this provide better sample accurate scope plotting and recording?
 	Out.ar(sendBus, sig);
 } ).add;
 
 SynthDef.new(\bufRead_complex1, {
-	arg buf, duration, amp=1, rate = 1, pitch = 1, winSize = 0.1, timeDisp = 0.003, pShiftMix = 0, out = 0;
-	var sig1, sig2, sigOut, frames, dur, env, phasor;
+	|buf, duration, amp=1, attack = 0.02, release = 0.02, rate = 1, pitch = 1, winSize = 0.1, timeDisp = 0.003, pShiftMix = 0, out = 0|
+	var sig1, sig2, sigOut, frames, dur, atRelDur, env, phasor;
 	frames = BufFrames.kr(buf);
 	dur = duration.asFloat; //total playback duration in seconds
-	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	atRelDur = attack.asFloat + release.asFloat;
+	env = Env.linen(attackTime: attack, sustainTime: (dur - atRelDur), releaseTime: release, level: 1);
 	//env = Env.linen(attackTime: 0.003, sustainTime: (dur - 0.006), releaseTime: 0.003, level: 1); //for fast rate playback
 	phasor = Phasor.ar(0, BufRateScale.kr(buf) * rate, 0, frames - 1);
 	sig1 = BufRd.ar(1, buf, phasor, interpolation: 4); //<--changed -- interp 4 for faster playback rates
@@ -39,6 +41,20 @@ SynthDef.new(\bufRead_noise1, {
 	frames = BufFrames.kr(buf);
 	lfo = SinOsc.ar(modFreq, 3pi/2).range(loFreq, hiFreq);
 	ptr = LFDNoise1.ar(lfo).range(0, frames - 1);
+	//ptr = LFDNoise1.ar(freq).range(0, frames - 1);
+	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
+SynthDef.new(\bufRead_noise3, {
+	//arg buf, duration, amp=1, freq = 1, out = 0;
+	arg buf, duration, amp=1, modFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
+	var dur, frames, ptr, env, lfo, sig;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	lfo = SinOsc.ar(modFreq, 3pi/2).range(loFreq, hiFreq);
+	ptr = LFDNoise3.ar(lfo).range(0, frames - 1);
 	//ptr = LFDNoise1.ar(freq).range(0, frames - 1);
 	env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1);
 	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
@@ -69,6 +85,60 @@ SynthDef.new(\bufRead_noiseSineMod, {
 	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
 	Out.ar(out, sig * amp);
 } ).add;
+
+SynthDef.new(\bufRead_sineSineMod_randPhase, { //<--NEW
+	arg buf, duration, amp=1, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, attTime = 0.02, relTime = 0.02, out = 0;
+	var dur, frames, lfo, ptr, env, sig, randPhase;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 3pi/2);
+	lfo = SinOsc.ar(lfoFreq, phase: randPhase).range(loFreq, hiFreq);
+	ptr = SinOsc.ar(lfo, phase: randPhase).range(0, frames - 1);
+	//lfo = SinOsc.ar(lfoFreq, Rand(0, 3pi/2)).range(loFreq, hiFreq);
+	//ptr = SinOsc.ar(lfo, Rand(0, 3pi/2)).range(0, frames - 1);
+	//env = Env.linen(attackTime: 0.02, sustainTime: (dur - 0.04), releaseTime: 0.02, level: 1, curve: \sine);
+	env = Env.linen(attackTime: attTime, sustainTime: (dur - (attTime + relTime)), releaseTime: relTime, level: 1, curve: \sine);
+	sig = BufRd.ar(1, buf, ptr, interpolation: 2) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef.new(\bufRead_noiseSineMod_randPhase, { //<--NEW
+	arg buf, duration, lfoFreq = 0.25, loFreq = 1, hiFreq = 3, attTime = 0.02, relTime = 0.02, amp=1, out = 0;
+	var dur, frames, lfo, ptr, env, sig, randPhase;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 2pi);
+	//randPhase = Rand(0, 3pi/2);
+	lfo = LFDNoise1.ar(lfoFreq).range(loFreq, hiFreq);
+	ptr = SinOsc.ar(lfo, randPhase).range(0, frames - 1);
+	env = Env.linen(attackTime: attTime, sustainTime: (dur - (attTime + relTime)), releaseTime: relTime, level: 1, curve: \sine);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef.new(\bufRead_noise3_randPhase, {|buf, duration, modFreq = 0.25, loFreq = 1, hiFreq = 3, attTime = 0.02, relTime = 0.02, amp=1, out = 0| //<--NEW
+	var dur, frames, ptr, env, lfo, sig, randPhase;
+	dur = duration.asFloat; //total playback duration in seconds
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 2pi);
+	lfo = SinOsc.ar(modFreq, randPhase).range(loFreq, hiFreq);
+	ptr = LFDNoise3.ar(lfo).range(0, frames - 1);
+	env = Env.linen(attackTime: attTime, sustainTime: (dur - (attTime + relTime)), releaseTime: relTime, level: 1);
+	sig = BufRd.ar(1, buf, ptr) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+} ).add;
+
+SynthDef.new(\bufRead_rateLFOsine, { //<-----NEW
+	arg buf, duration = 2, amp=1, lfoRate = 0.25, minRate = 0.5, maxRate = 2, attTime = 0.02, relTime = 0.02, out = 0;
+	var frames, ptr, env, sig, phasor, randPhase;
+	frames = BufFrames.kr(buf);
+	randPhase = Rand(0, 3pi/2);
+	ptr = SinOsc.ar(lfoRate, randPhase).range(minRate, maxRate);
+	phasor = Phasor.ar(0, BufRateScale.kr(buf) * ptr, 0, frames - 1);
+	env = Env.linen(attackTime: attTime, sustainTime: duration - (attTime + relTime), releaseTime: relTime, level: 1, curve: \sine);
+	sig = BufRd.ar(1, buf, phase: phasor) * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
 
 SynthDef.new(\bufRead_noLoop, {
 	arg buf, rate = 1, amp=1, out=0;
@@ -143,23 +213,58 @@ SynthDef(\LinInterp_num, {
 	Out.kr(out, Line.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
 } ).add;
 
-SynthDef.new(\subMix, {
-	|in, amp = 1, out|
-	var sig;
-	sig = In.ar(in) * amp;
-	//sig = InFeedback.ar(in) * amp;
-	//OffsetOut.ar(out, sig);
-	Out.ar(out, sig);
+SynthDef(\ExpInterp_num, {|startVal, stopVal, duration, mult = 1, out|
+	Out.kr(out, XLine.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
 } ).add;
 
-SynthDef.new(\mainOut, { //w/ Lo-cut
-	|in, loCutoff = 90, rQ = 1, amp = 1|
+SynthDef(\asrEnvGen_trig, {|out, attTime = 0.01, susTime = 1, relTime = 2, level = 1, curve = \sine|
+	var env, envGen;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: level, curve: curve);
+	envGen = EnvGen.kr(env, doneAction: 2);
+	Out.kr(out, envGen);
+}).add;
+
+SynthDef(\adsrEnvGen, {|out, gate = 1, attTime = 0.01, susTime = 1, relTime = 2, peakLevel = 1, susLevel = 1, curve = \sine|
+	var env, envGen;
+	env = Env.adsr(attackTime: attTime, decayTime: susTime, sustainLevel: susLevel, releaseTime: relTime, peakLevel: peakLevel, curve: curve);
+	envGen = EnvGen.kr(env, gate: gate, doneAction: 2);
+	Out.kr(out, envGen);
+}).add;
+
+SynthDef(\dEnvGen, {|out, gate = 1, startVal = 0, endVal = 0, peakVal = 1, susVal = 1, attTime = 1, decTime = 1, susTime = 1, relTime = 2, shape = 3, curve = 0, repeat = 1| //shape: 3 => S-curve | 5 => linear | curve vals only effective when shape = 5 | <------USE THIS W/ AUTO-LEVEL / ANTI-FEEDBACK ROUTINES.....
+	var levels, durations, env;
+	levels = Dseq([startVal, peakVal, susVal, susVal, endVal], repeats: repeat);
+	durations = Dseq([attTime, decTime, susTime, relTime], repeats: repeat);
+	env = DemandEnvGen.kr(level: levels, dur: durations, shape: shape, curve: curve, gate: gate, doneAction: 2); //if gate <=0, ugen's sampled and held, if gate >=1, it runs...
+	Out.kr(out, env);
+}).add;
+
+SynthDef.new(\subMix, {
+	|in, amp = 1, out|
+	var sig = In.ar(in) * amp;
+	//sig = InFeedback.ar(in) * amp;
+	OffsetOut.ar(out, sig);
+	//Out.ar(out, sig);
+} ).add;
+
+SynthDef(\comp1, {|bus, thresh = (-6.dbamp), ratio = 2, attack = 0.01, release = 0.25, amp = 1| //<----NEW
+	var sigIn, sigOut, ratioConv;
+	sigIn = In.ar(bus: bus, numChannels: 1);
+	ratioConv = ratio.reciprocal;
+	sigOut = Compander.ar(sigIn, sigIn, thresh: thresh, slopeAbove: ratioConv, clampTime: attack, relaxTime: release, mul: amp);
+	ReplaceOut.ar(bus, sigOut);
+}).add;
+
+SynthDef.new(\mainOut, { //w/ Lo-cut and Peak EQ
+	|in, loCut = 90, loCutQ = 1, amp = 1, peak = 120, peakQ = 1, peakGain = 0|
 	var sig;
-	sig = BHiPass4.ar(In.ar(in), loCutoff, rq: rQ, mul: amp);
+	sig = BHiPass4.ar(In.ar(in), freq: loCut, rq: loCutQ);
+	sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain);
+	sig = Limiter.ar(sig, level: (-0.3.dbamp), dur: 0.01); //<---NEW
 	//sig = In.ar(in) * amp;
 	//sig = InFeedback.ar(in) * amp;
 	//OffsetOut.ar(0, sig);
-	Out.ar([0, 1], sig);
+	Out.ar([0, 1], sig * amp);
 } ).add;
 
 /*  //<------ADDING ---- Main Out w/ soft Limiter
@@ -203,12 +308,22 @@ SynthDef.new(\startupTone_1, {
 		Env.new( [0, 1, 0], [6, 4], [1, -1] ),
 		doneAction: 2
 	);
-	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1); //double check what .range is doing to sound...
+	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1);
 	sig = SinOsc.ar( {ExpRand(300, 1200)} ! 3);
 	sig = sig * amp * env; //amp mod
 	sig = Mix.ar(sig) * 0.20;
 	Out.ar(0, sig);
 } ).add;
+
+//  UTILITY --------------
+SynthDef(\avgKR, {
+	|input, output, avgDur = 1|
+	var sigIn, avg, numSamp;
+	sigIn = In.kr(input, 1);
+	numSamp = ControlRate.ir * avgDur;
+	avg = (RunningSum.kr(sigIn, numSamp)) * (numSamp.reciprocal);
+	Out.kr(output, avg);
+}).add;
 
 //  FEATURE EXTRACTORS --------------
 
@@ -315,6 +430,187 @@ SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
 	arg inChannel = 0, amp = 1, outBus;
 	var sig = SoundIn.ar(bus: inChannel, mul: amp); //defaults to first channel of system audio input
 	OffsetOut.ar(outBus, sig);
+}).add;
+
+
+//  IMPULSE SOURCES -------
+
+SynthDef(\susWhite1, {|attTime = 3, susTime = 3, relTime = 3, amp = 1, out|
+	var sig, env;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime);
+	sig = WhiteNoise.ar(1);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\impulsePink1, {
+	|decayTime = 2, amp = 0.2, out|
+	var sig = Decay.ar(Impulse.ar(0), decayTime, PinkNoise.ar(amp));
+	DetectSilence.ar(sig, amp: 0.0001, time: 0.5, doneAction: 2);
+	Out.ar(out, sig);
+}).add;
+
+SynthDef(\impulseWhite1, {
+	|decayTime = 2, amp = 0.2, out|
+	var sig = Decay.ar(Impulse.ar(0), decayTime, WhiteNoise.ar(amp));
+	DetectSilence.ar(sig, amp: 0.0001, time: 0.5, doneAction: 2);
+	Out.ar(out, sig);
+}).add;
+
+SynthDef(\impulseWhite2, {
+	|attackTime = 0.002, releaseTime = 0.4, curve =  -4, amp = 0.2, out|
+	var env, sig;
+	env = Env.perc(attackTime, releaseTime, curve: curve);
+	sig = WhiteNoise.ar(1);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\impulseWhite3, {
+	|attackTime = 0.01, releaseTime = 0.25, curve =  -4, shelf_freq = 2500, shelf_db = -35, rs = 1,  peak_freq = 160, peakQ = 1, peak_db = -10, lop_freq = 5000, lop_q = 0.4, amp = 0.2, out|
+	var env, sig;
+	env = Env.perc(attackTime, releaseTime, curve: curve);
+	sig = WhiteNoise.ar(1);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	sig = BLowPass4.ar(sig, freq: lop_freq, rq: lop_q );
+	sig = BHiShelf.ar(sig, freq: shelf_freq, rs: rs, db: shelf_db);
+	sig = BPeakEQ.ar(sig, freq: peak_freq, rq: peakQ, db: peak_db, mul: amp);
+	Out.ar(out, sig);
+}).add;
+
+SynthDef(\impulseWhiteSin, {
+	|attackTime = 0.01, releaseTime = 0.25, curve =  -4, peak_freq = 160, peakBW = 0.01, amp = 0.2, out|
+	var env, sin, sig1, sig2, sig3, sig4, sig5, sigOut;
+	env = Env.perc(attackTime, releaseTime, curve: curve);
+	sin = SinOsc.ar(freq: peak_freq);
+	sig1 = WhiteNoise.ar(1);
+	sig2 = Resonz.ar(sig1, freq: peak_freq, bwr: peakBW);
+	sig3 = Resonz.ar(sig1, freq: (peak_freq * 2), bwr: peakBW);
+	sig4 = Resonz.ar(sig1, freq: (peak_freq * 4), bwr: peakBW, mul: 0.75);
+	sig5 = Resonz.ar(sig1, freq: (peak_freq * 10), bwr: peakBW, mul: 0.85);
+	sigOut = Mix.ar([sin, sig2, sig3, sig4, sig5]);
+	//sigOut = Mix.ar([sig2, sig3, sig4]);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sigOut * amp);
+}).add;
+
+SynthDef(\resPinkNoise, {|out, freq = 500, bw = 0.005, amp = 0.2|
+	var sig = Resonz.ar(PinkNoise.ar(1), freq: freq, bwr: bw);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\sinSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = SinOsc.ar(freq);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\sawSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = Saw.ar(freq);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\triSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = LFTri.ar(freq);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef(\pulseSweep1, {
+	|freq1 = 100, freq2 = 2000, dur = 0.5, width = 0.5, amp = 0.2, out|
+	var freq, env, sig;
+	freq = XLine.kr(start: freq1, end: freq2, dur: dur);
+	env = Env.linen(attackTime: 0.02, sustainTime: dur - 0.04, releaseTime: 0.02);
+	sig = Pulse.ar(freq, width);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	Out.ar(out, sig * amp);
+}).add;
+
+SynthDef.new(\randSinSwell_1, {|out = 0, amp = 1, loFreq = 300, hiFreq = 1200, attTime = 6, susTime = 2, relTime = 5|
+	var sig, ampMod, env, envGen;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: 1, curve: \sine);
+	envGen = EnvGen.kr(env, doneAction: 2);
+	ampMod = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1);
+	sig = SinOsc.ar( {ExpRand(loFreq, hiFreq)} ! 3);
+	sig = sig * ampMod * envGen; //amp mod
+	sig = Mix.ar(sig) * amp;
+	Out.ar(out, sig);
+}).add;
+
+SynthDef(\sineBeats, {
+	|freq1 = 100, freq2 = 108, attTime = 3, susTime = 3, relTime = 3, amp = 0.2, limitThresh = 0.9, out = 0|
+	var freq, env, sig1, sig2, sigOut;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, curve: \sine);
+	sig1 = SinOsc.ar(freq1);
+	sig2 = SinOsc.ar(freq2);
+	sigOut = Mix.ar([sig1, sig2]);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	sigOut = Limiter.ar(in: sigOut, level: (limitThresh), dur: 0.01);
+	Out.ar(out, sigOut * amp);
+}).add;
+
+SynthDef(\sineBeats_rand, {
+	|freqMin = 100, freqMax = 500, beatHzMin = 8, beatHzMax = 20, attTimeMin = 3, attTimeMax = 7, susTimeMin = 3, susTimeMax = 5, relTimeMin = 2.1, relTimeMax = 4, amp = 0.5, limitThresh = 0.9, out = 0|
+	var beatHz, freq1, freq2, env, sig1, sig2, sigOut;
+	env = Env.linen(attackTime: rrand(attTimeMin, attTimeMax).round(0.01), sustainTime: rrand(susTimeMin, susTimeMax).round(0.01), releaseTime: rrand(relTimeMin, relTimeMax).round(0.01), curve: \sine);
+	beatHz = IRand(beatHzMin, beatHzMax);
+	freq1 = Rand(freqMin, freqMax);
+	freq2 = freq1 + beatHz;
+	sig1 = SinOsc.ar(freq1);
+	sig2 = SinOsc.ar(freq2);
+	sigOut = Mix.ar([sig1, sig2]);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	sigOut = Limiter.ar(in: sigOut, level: (limitThresh), dur: 0.01);
+	Out.ar(out, sigOut * amp);
+}).add;
+
+// OTHER EFFECTS PROCESSING ---
+
+SynthDef(\partConv_sample, {|targetBuf, irSpectrum, fftSize = 2048, playRate = 1, loop = 1, ampBus, ampLimit = 0.4, out|
+	var input, sig, currentAmp;
+	input = PlayBuf.ar(1, targetBuf, rate: playRate, loop: loop);
+	sig = PartConv.ar(input, fftsize: fftSize, irbufnum: irSpectrum);
+	sig = Limiter.ar(sig, level: -1.dbamp, dur: 0.01);
+	currentAmp = ampBus * ampLimit;
+	Out.ar(out, sig * currentAmp);
+	DetectSilence.ar(sig, amp: 0.0001, time: 0.2, doneAction: 2);
+}).add;
+
+SynthDef(\partConv_sampleLoop, {|targetBuf, irSpectrum, attTime = 4, susTime = 5, relTime = 6, fftSize = 2048, playRate = 1, ampBus, ampLimit = 0.4, out = 0|
+	var input, env, sig, currentAmp;
+	input = PlayBuf.ar(1, targetBuf, rate: playRate, loop: 1);
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, curve: \sine);
+	sig = PartConv.ar(input, fftsize: fftSize, irbufnum: irSpectrum);
+	sig = sig * EnvGen.ar(env, doneAction: 2);
+	sig = Limiter.ar(sig, level: -0.3.dbamp, dur: 0.01);
+	currentAmp = ampBus * ampLimit;
+	Out.ar(out, sig * currentAmp);
+}).add;
+
+SynthDef(\partConv_sampleLoop_pShift, {|targetBuf, irSpectrum, attTime = 4, susTime = 5, relTime = 6, fftSize = 2048, playRate = 1, pitch = 1, winSize = 0.1, pitchDisp = 0, timeDisp = 0.003, pShiftMix = 1, ampBus, ampLimit = 0.4, out = 0|
+	var sig1, sig2, env, sigOut, currentAmp;
+	sig1 = PlayBuf.ar(1, targetBuf, rate: playRate, loop: 1);
+	sig2 = PitchShift.ar(sig1, windowSize: winSize, pitchRatio: pitch, pitchDispersion: pitchDisp, timeDispersion: timeDisp);
+	sigOut = SelectX.ar(pShiftMix, [sig1, sig2]);
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, curve: \sine);
+	sigOut = PartConv.ar(sigOut, fftsize: fftSize, irbufnum: irSpectrum);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	sigOut = Limiter.ar(sigOut, level: -0.3.dbamp, dur: 0.01);
+	currentAmp = ampBus * ampLimit;
+	Out.ar(out, sigOut * currentAmp);
 }).add;
 
 );

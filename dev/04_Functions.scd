@@ -1465,6 +1465,38 @@
 	~button_autoRecPlay.valueAction = 1;
 });
 
+~initSMpreset_2 = Routine({ //auto-startup routine for RPI <===UPDATE BEFORE NEXT PUSH TO RPI
+	"...starting...".postln;
+	2.yield;
+	"...test tone...".postln;
+	Synth(\sineBeats_rand, [\freqMin, 200, \freqMax, 450, \beatHzMin, 8, \beatHzMax, 20, \attTimeMin, 1, \attTimeMax, 3, \susTimeMin, 3, \susTimeMax, 4, \relTimeMin, 2, \relTimeMax, 3, \amp, (-6).dbamp, \limitThresh, (-0.3).dbamp, \out, 0]); //play binaural beat startup tone: freq, beats, envelope randomized
+	10.yield;
+	//SET LEVELS
+	"...set levels...".postln;
+	~inputStreamLevelBus.set((-6).dbamp); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~slider_inFlow1_level.value = 0.75; //<---FIX W/ PROPER MAPPING.....
+	~numBox_inFlow1_level.value = -6; //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+
+	~fileOutputLevelBus.set(1); //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~slider_sampOut_level.value = 1; //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	~numBox_sampOut_level.value =  0; //<===UPDATE BEFORE NEXT PUSH TO RPI (convert to db...)
+	0.5.yield;
+	~button_recBuf.valueAction = 1;
+	"START STREAMING TO BUF0...".postln;
+	"...buffering audio for 4 more seconds...".postln;
+	4.yield;
+	"START BUF0 PLAYBACK".postln;
+	~button_playBuf.valueAction = 1;
+	"...waiting a couple more seconds...".postln;
+	2.yield;
+	"STARTING RT proc behaviors...".postln;
+	~button_Behavior1.valueAction = 1;
+	"...waiting a few more seconds...".postln;
+	3.yield;
+	"STARTING AUTO-REC-PLAY behavior...".postln;
+	~button_autoRecPlay.valueAction = 1;
+});
+
 //--------- BUS GET / GUI UPDATE ROUTINES ---------
 ~getBus_updateGUI_playPhase = Routine({
 	~phaseBusMonPly.get({|val|
