@@ -2228,31 +2228,30 @@ if (~plotterEnabled == true, {
 		{
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
 			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 1, freq1: 400, freq2: 3000, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
-			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, impPostDel: 0, timeStretch: true, timeStretchRate: 0.67, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, impPostDel: 0, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
 
 			//~autoConvolve1A.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 606, attTime: 0.5, susTime: 2.5, relTime: 2, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---FOR VOXELS
 
 			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 7, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 606, attTime: 0.5, susTime: 3.5, relTime: 2.5, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---FOR VOXELS _ 0
 			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 8, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 2, freq1: 100, freq2: 20000, susTime: 0.5, impPostDel: 0, timeStretch: true, timeStretchRate: 0.6, post: 1); //<---FOR VOXELS _ 1
 
-			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, re peatLimit: 4, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1.1, freq1: 250, freq2: 1000, attTime: 1.67, susTime: 2.24, relTime: 3.87, impPostDel: 0, timeStretch: true, timeStretchRate: 0.6, post: 1); //<---FOR VOXELS _ 2
+			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 4, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1.1, freq1: 250, freq2: 1000, attTime: 1.67, susTime: 2.24, relTime: 3.87, impPostDel: 0, timeStretch: true, timeStretchRate: 0.6, post: 1); //<---FOR VOXELS _ 2
 
 			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 7, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1.2, freq1: 180, freq2: 850,/* attTime: 1.67, susTime: 3.59, relTime: 3.87,*/ impPostDel: 0, timeStretch: true, timeStretchRate: 0.6, post: 1); //<---FOR VOXELS _ 3
 
 			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 0.2, impulse: 3, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---piezo live sound settings
 			//~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 3, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, attTime: 0.5, susTime: 3.5, relTime: 2.5, impPostDel: 0.2, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---FOR VOXELS _ 0
-			//~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 3, selfTerminate: false, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1.1, freq1: 300, freq2: 850, impPostDel: 0, timeStretch: true, timeStretchRate: 0.65, post: 1);
 
-			//~autoConvolveSequence_voxelBot1.(1, initFlag: \autoConvSeqInit, impulseFlag: \autoConvSeqImpulse, routine: \autoConvSeqRout, post: 1);
+			~autoConvolveSequence_voxelBot1.(1, initFlag: \autoConvSeqInit, impulseFlag: \autoConvSeqImpulse, routine: \autoConvSeqRout, post: 1);
 		},
 		{ //when button disabled
 			~listen_sound.value(active: 0, outBus: \busSum_lop, sumSynth: \sumSyn_1);
-			~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1); //this will throw error if envName isn't provided for rout1 arg......
+			//~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1); //this will throw error if envName isn't provided for rout1 arg......
 
 			//~autoConvolve2_repLim_voxels.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1);
 			//~autoConvolve2_repLim_selfTerminate.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1);
 
-			//~autoConvolveSequence_voxelBot1.(0, routine: \autoConvSeqRout, post: 1);
+			~autoConvolveSequence_voxelBot1.(0, routine: \autoConvSeqRout, post: 1);
 		}
 	);
 } )

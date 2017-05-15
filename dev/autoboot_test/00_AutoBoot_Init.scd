@@ -12,7 +12,8 @@ s.waitForBoot({
 		0.25.yield;
 		(~dir ++ "/autoboot_test/01_AutoBoot_Launch.scd").load;
 		0.25.yield;
-		AppClock.play(~initSMpreset_2); //these presets live in "04_Functions.scd" now
+		//AppClock.play(~initSMpreset_2); //these presets live in "04_Functions.scd" now
+		AppClock.play(~initSMpreset_voxelBot1);
 	});
 
 	AppClock.play(~startup);

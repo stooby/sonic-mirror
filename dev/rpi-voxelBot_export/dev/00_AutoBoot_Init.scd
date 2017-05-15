@@ -9,9 +9,9 @@ s.waitForBoot({
 		0.25.yield;
 		(~dir ++ "04_Functions.scd").load;// Functions and Routines
 		0.25.yield;
-		(~dir ++ "01_AutoBoot_Launch.scd").load;
+		(~dir ++ "01_AutoBoot_Launch.scd").load; //initialize env variables, GUI, and all the rest...
 		0.25.yield;
-		AppClock.play(~initSMpreset_2);
+		AppClock.play(~initSMpreset_voxelBot1); //initiate autoConvolution processes.....
 	});
 	AppClock.play(~startup);
 });
