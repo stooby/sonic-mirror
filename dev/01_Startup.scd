@@ -2,7 +2,6 @@
 
 //== Server Options and Hardware I/O Setup ==
 
-
 //ServerOptions.devices; //uncomment and evaluate this to see what audio input/output devices are available (if you want to customize your audio I/O configuration)
 (
 o = Server.local.options;
@@ -15,15 +14,15 @@ o.blockSize = 256; //SC default
 
 o.memSize = 16384;
 
-//o.inDevice = "Built-in Microph";
-//o.outDevice = "Built-in Output";
+o.inDevice = "Built-in Microph";
+o.outDevice = "Built-in Output";
 
 //o.inDevice = "Generic USB Audio Device";
 //o.inDevice = "USB Audio Device";
 //o.outDevice = "USB Audio Device";
 
-o.inDevice = "iConnectAudio4+";
-o.outDevice = "iConnectAudio4+"; //external audio interface
+//o.inDevice = "iConnectAudio4+";
+//o.outDevice = "iConnectAudio4+"; //external audio interface
 
 //o.inDevice = "USB PnP Sound Device";
 
