@@ -1,11 +1,13 @@
 # sonic-mirror
 ---
-super alpha!  (work in progress!)
+super alpha!
 
 ### what?
-* Sonic Mirror is an open-ended audio software (and hardware) instrument designed for autonomous embedded audio recording, generative sound, and musical performance.
+* Sonic Mirror is an open-ended audio software (and hardware) system designed for autonomous embedded audio recording, generative sound, music, and acoustic experimentation.
 
-* Programmed with the SuperCollider language.  Project details and documentation online:  http://scott-tooby.com/sonic-mirror.html
+* Programmed with the SuperCollider language.  Project details and documentation online:
+http://scott-tooby.com/sonic-mirror-instruments.html
+http://scott-tooby.com/sonic-mirror-room-installation.html
 
 ### what do I need?
 * At least a modern computer with a built-in soundcard, microphone, and speakers. (In practice, any computer with an audio interface and connected microphone and speaker system will do.)
@@ -22,15 +24,14 @@ super alpha!  (work in progress!)
 
 * Press the "REV" button to play audio in reverse
 
-* Enabling the "!", "!!", or "!!!" buttons will trigger various autonomous playback behaviors.  Parameters like: rate, pitch, pitch shift mix, output volume, reverse, and playhead position will be randomly modulated over time.
+* Enabling the "!", "!!", or "!!!" buttons will trigger various generative processing and playback modes.
 
-* Pro tip: arranging your microphone and speaker(s) so they feed back on themselves can create some fantastic sounds when the Sonic Mirror's autonomous behavior buttons are enabled, or during manual control of various playback parameters.  Watch out for runaway feedback!
+* Pro tip: arranging your microphone and speaker(s) so they feed back on themselves can create some fantastic sounds when the Sonic Mirror's mode buttons are enabled, or during manual control of various playback parameters.  Watch out for feedback!
 
 ---
-This is a work in progress...
 
-It has been tested only on Mac and Linux systems.  Can run 4+ hours w/out any hiccups on a Raspberry Pi 2!  
+It has been tested only on Mac and Linux systems.  Works great on Raspberry Pi 3 for hours and days on end!  
 
 Feel free to use, experiment, and contribute:  https://github.com/stooby/sonic-mirror
 
-st, 2016
+st, 2018
