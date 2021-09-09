@@ -6,11 +6,14 @@
 ~init_SonicMirror = {
 
 ////GLOBAL VARIABLES
-~fileAudio_writeIn_directory = "/Users/Scott/Music/SCrecs/SncMir/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH (this will be unique to your system.....defines audio file write path)
-~fileAudio_writeOut_directory = "/Users/Scott/Music/SCrecs/SncMir/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH (this will be unique to your system.....defines audio file write path)
+~fileAudio_writeIn_directory = "/Users/Scott/Music/SCrecs/VoxelExperiments/VoxelExperiment_2018-04-03/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH (this will be unique to your system.....defines audio file write path)
+~fileAudio_writeOut_directory = "/Users/Scott/Music/SCrecs/VoxelExperiments/VoxelExperiment_2018-04-03/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH
 
-~fileAudio_writeIn_fileName = "SncMir-In_"; //customize file name
-~fileAudio_writeOut_fileName = "SncMir-Out_";
+~fileAudio_writeIn_fileName = "audio-in_"; //customize file name
+//~fileAudio_writeIn_fileName = "Voxel-Experiment_2018-4-3_Rec_"; //<----customize file name
+~fileAudio_writeOut_fileName = "audio-out_";
+//~fileAudio_writeOut_fileName = "Voxel-Experiment_2018-4-3_BufSample_"; //<-----customize file name
+
 ~fileAudio_writeIn_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeOut_nameNum = 0; //counter for writing/reading audio file names
 ~fileAudio_writeIn_lastPath = (~fileAudio_writeIn_directory ++ ~fileAudio_writeIn_fileName).standardizePath;
@@ -23,8 +26,8 @@
 //~fileAudio_writeIn_lastFile = (~fileAudio_writeIn_lastPath ++ ~fileAudio_writeIn_nameNum ++ ".wav").standardizePath; //<--ORIG
 
 ~minNumFilesB4Playback = 1; // file # threshold before file playback routine commences
-~fileAudio_writeIn_maxNum = 60; //max # of audio samples written per session (wrap-around & overwrite limit - inclusive of 0)
-~fileAudio_writeOut_maxNum = 60;  //max # of audio out samples written per session (wrap-around & overwrite limit)
+~fileAudio_writeIn_maxNum = 60; //max # of audio samples written per session (wrap-around & overwrite limit)
+~fileAudio_writeOut_maxNum = 60;  //max # of audio out samples written per session (wrap-around & overwrite limit) <---only being used for 'recout' button. maybe not necessary???
 ~fileAudio_writeIn_maxNum_exceeded = false;
 
 ~sampBitDepth = "int24"; //alt = "int16"  (specify bit depth for all samples recorded)
@@ -34,7 +37,7 @@
 ~audioBuf0 = Buffer.alloc(s, s.sampleRate * ~audioBuf0_dur, 1);
 
 ~minRecDur = 1.0; //<-----min sec per recorded sample
-~maxRecDur = 90.0; //<----max sec per recorded sample (shorten or don't use w/ autoRec_random)
+~maxRecDur = 22.0; //<----max sec per recorded sample (shorten or don't use w/ autoRec_random)
 
 ~fileAudio_writeIn_lastFileDur; //<--------NEW (not currently being used)
 ~fileAudio_lastPlay; //<---NEW (not needed if using below array though)
@@ -1903,7 +1906,7 @@ if (~plotterEnabled == true, {
 				~phasor_rec = Synth(\phasor, [\out, ~phaseBusRec, \buf, ~audioBuf0, \rate, 1, \start, ~recInPosBus.asMap, \end, ~recOutPosBus.asMap] ).moveToHead;  //have phasor start at ~recInFrame
 			} );
 
-			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec); //<--don't fully understand why this allows me to monitor phasor value and why I can't do so by getting value of ~phaseBusRec (doing so always outputs 1)...
+			~a2k_rec = Synth(\a2k_patch, [\in, ~phaseBusRec, \out, ~phaseBusMonRec] ).moveAfter(~phasor_rec); //<--don't fully understand why this allows me to monitor phasor value and why I can't do so by .get-ting value of ~phaseBusRec (doing so always outputs 1)...
 
 			~bufRecorder = Synth(\bufRec, [\phaseBus, ~phaseBusRec, \buf, ~audioBuf0, \sendBus, ~inputSendBus, \loCut, ~loCutBus_in.asMap, \loCutQ, 2, \mul, ~inputLevelBus.asMap] ).moveAfter(~a2k_rec);
 
@@ -2209,15 +2212,33 @@ if (~plotterEnabled == true, {
 		{
 			~listen_sound.value(active: 1, input: ~inputSendBus, outBus: \busSum_lop, sumSynth: \sumSyn_1, post: 0); //START ~listen_sound ROUTINE <-----------------
 
-			//~autoConvolveSequence_voxelBot2.(1, initFlag: \autoConvSeqInit, impulseFlag: \autoConvSeqImpulse, routine: \autoConvSeqRout, post: 1);
+			~autoConvolveSequence_1.(1,
+					initFlag: \autoConvSeqInit,
+					impulseFlag: \autoConvSeqImpulse,
+					routine: \autoConvSeqRout,
+					impulseAmount: 1,
+					repeatLimit: 11,
+					impulse1: 0,
+					impulse2: 1,
+					impulse3: 0.1,
+					post: 1
+			);
 
-			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 1, freq1: 400, freq2: 3000, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
+			/*~autoConvolveSequence_voxelBot2.(1,
+					initFlag: \autoConvSeqInit,
+					impulseFlag: \autoConvSeqImpulse,
+					routine: \autoConvSeqRout,
+					post: 1
+			); */
 
-			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, impPostDel: 0, timeStretch: true, timeStretchRate: 0.67, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
+			~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.1, postRecPad: 0, impulse: 1, freq1: 400, freq2: 3000, attTime: 5, susTime: 3, relTime: 6, impPostDel: 0.5, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---solo laptop preset
+
+			//~autoConvolve1A.(1, featureBus: ~busSum_lop, outBus: ~outMainBus, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0.2, postRecPad: 1, impulse: 3, impPostDel: 0, timeStretch: true, timeStretchRate: 0.67, post: 1); //<---adjust pre and post pads to accommodate reverb tail of performance space and audio content (e.g. speech vs. claps, etc...) ---LIGHT LAB SETTINGS <-------
 
 			//~autoConvolve1A.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 606, attTime: 0.5, susTime: 2.5, relTime: 2, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---FOR VOXELS
 
 			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 7, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, freq1: 600, freq2: 606, attTime: 0.5, susTime: 3.5, relTime: 2.5, impPostDel: 0.4, timeStretch: true, timeStretchRate: 0.75, post: 1); //<---FOR VOXELS _ 0
+
 			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 8, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 2, freq1: 100, freq2: 20000, susTime: 0.5, impPostDel: 0, timeStretch: true, timeStretchRate: 0.6, post: 1); //<---FOR VOXELS _ 1
 
 			//~autoConvolve2_repLim_voxels.(1, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, re peatLimit: 4, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1.1, freq1: 250, freq2: 1000, attTime: 1.67, susTime: 2.24, relTime: 3.87, impPostDel: 0, timeStretch: true, timeStretchRate: 0.6, post: 1); //<---FOR VOXELS _ 2
@@ -2230,11 +2251,15 @@ if (~plotterEnabled == true, {
 		},
 		{ //when button disabled
 			~listen_sound.value(active: 0, outBus: \busSum_lop, sumSynth: \sumSyn_1);
-			~autoConvolveSequence_voxelBot2.(0, routine: \autoConvSeqRout, post: 1);
 
-			//~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1); //this will throw error if envName isn't provided for rout1 arg......
+			//~autoConvolveSequence_1.(0, routine: \autoConvSeqRout, post: 1);
+
+			//~autoConvolveSequence_voxelBot2.(0, routine: \autoConvSeqRout, post: 1);
+
+			~autoConvolve1A.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1); //this will throw error if envName isn't provided for rout1 arg......
 
 			//~autoConvolve2_repLim_voxels.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1);
+
 			//~autoConvolve2_repLim_selfTerminate.(0, rout1: \autoC1, rout2: \autoC2, synth1: \autoS1);
 		}
 	);

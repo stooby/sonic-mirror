@@ -1,10 +1,8 @@
 //Sonic Mirror - 04_Functions:
 
-// --> functions and routines
+//== Functions and Routines ==
 
-(
-
-//====== FUNCTIONS ========
+(//====== FUNCTIONS ========
 ~getRecPlayOffset = {|inSeconds = true, buffer|
 	var recPos, playPos, offset;
 	recPos = ~phaseBusMonRec.getSynchronous.round(1);
@@ -1132,13 +1130,13 @@
 							}
 						);
 					} ,
-					{//ELSE if ~recSamp_input == false ==========================<<<<<<<<<<<<<<<
+					{//ELSE if ~recSamp_input == false =====<<<<<<<<<<<<<<<
 						if (~listening == false,
 							{
 								"***Can't autoRec, ~listening = false***".postln;
 								1.yieldAndReset;
 							},
-							{//if ~listening == true... <==================
+							{//if ~listening == true... <========
 
 								//commenting out condition check for ~autoRecPlay_state that prevents simultaneous rec/play
 								//.............................//
@@ -1603,7 +1601,7 @@
 		{//else if active == 0 (disable)
 			rout1.envirGet.stop;
 			if (rout2 != nil, {rout2.envirGet.stop;});
-			if (synth1.envirGet.isRunning == true, {synth1.envirGet.free;}); //<---NEW
+			if (synth1.envirGet.isRunning == true, {synth1.envirGet.free;});
 			if (~recSamp_input == true, {
 				~recSamp_input = false;
 				{~button_recIn.value = 0;}.defer; //update GUI
@@ -1673,7 +1671,8 @@
 	);
 };
 
-~autoConvolveSequence_voxelBot2 = {|active = 1, initFlag, impulseFlag, routine, post = 0|
+//========================
+~autoConvolveSequence_1 = {|active = 1, initFlag, impulseFlag, routine, impulseAmount = 3, repeatLimit = 12, impulse1 = 0, impulse2 = 1, impulse3 = 0.1, post = 0|
 	if (active == 1,
 		{
 			var rout;
@@ -1686,9 +1685,9 @@
 					{
 						if (post == 1, {"[autoConvSeq] BEGIN -------------".postln;});
 						initFlag.envirPut(false);
-						impulseFlag.envirPut(0); //select first impulse response type
-						~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 15, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, attTime: 0.3, susTime: 3.5, relTime: 2.5, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post); //<---FOR VOXELS _ 0
-						15.yieldAndReset;
+						impulseFlag.envirPut(impulse1); //select first impulse response type
+						~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: repeatLimit, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: impulse1, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, freq1: 100, freq2: 1000, timeStretch: false, timeStretchRate: 0.75, post: post); //<---INCREASE SUS TIME FOR SINE WAVE SWEEP <----------
+						2.yieldAndReset;
 					},
 					{//else if initFlag == false
 						if (~autoConvActive == true, //check autoConvActive status
@@ -1697,21 +1696,48 @@
 								0.5.yieldAndReset;
 							},
 							{//else if ~autoConvActive == false
-								var impCase;
+								var impCase, prevImpulse; //<---
+								prevImpulse = impulseFlag.envirGet; //<---
+
 								impCase = case
-								{impulseFlag.envirGet == 0} {
-									var prevImpulse = 1.1, newImpulse = 2;
-									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
+								{prevImpulse == impulse1} {
+									var newImpulse;
+
+									if (impulseAmount > 1, {
+										newImpulse = impulse2;
+										~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: repeatLimit, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, freq1: 100, freq2: 1000, susTime: 9.0, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.6, post: post); //<---CHANGE FREQ AND SUS TIME FOR SINE SWEEP IF NEEDED..........
+									},
+									{
+										newImpulse = impulse1;
+										~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: repeatLimit, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: impulse1, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post);
+									});
+
 									impulseFlag.envirPut(newImpulse); //update impulse flag
-									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 15, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 2, freq1: 100, freq2: 20000, susTime: 0.5, impPostDel: 0.1, timeStretch: false, timeStretchRate: 0.6, post: post);
+									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
 									2.yieldAndReset;
 								}
-								{impulseFlag.envirGet == 2} {
-									var prevImpulse = 2, newImpulse = 0;
-									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
+								{prevImpulse == impulse2} {
+									var newImpulse;
+									if (impulseAmount > 2, {
+										newImpulse = impulse3;
+										~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: repeatLimit, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, timeStretch: false, post: post);
+									},
+									{
+										newImpulse = impulse1;
+										~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: repeatLimit, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: impulse1, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post);
+									});
+
 									impulseFlag.envirPut(newImpulse); //update impulse flag
-									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 15, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, attTime: 1.4, susTime: 3.5, relTime: 2.5, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post); //<---FOR VOXELS _ 0
-									6.yieldAndReset;
+									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
+									2.yieldAndReset;
+								}
+								{prevImpulse == impulse3} {
+									var newImpulse = impulse1;
+
+									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: repeatLimit, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post);
+									impulseFlag.envirPut(newImpulse); //update impulse flag
+									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
+									2.yieldAndReset;
 								};
 							}
 						);
@@ -1729,7 +1755,7 @@
 	);
 };
 
-/*~autoConvolveSequence_voxelBot1 = {|active = 1, initFlag, impulseFlag, routine, post = 0|
+~autoConvolveSequence_voxelBot2 = {|active = 1, initFlag, impulseFlag, routine, post = 0|
 	if (active == 1,
 		{
 			var rout;
@@ -1743,8 +1769,8 @@
 						if (post == 1, {"[autoConvSeq] BEGIN -------------".postln;});
 						initFlag.envirPut(false);
 						impulseFlag.envirPut(0); //select first impulse response type
-						~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 7, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, attTime: 1.4, susTime: 3.5, relTime: 2.5, impPostDel: 0.2, timeStretch: true, timeStretchRate: 0.75, post: post); //<---FOR VOXELS _ 0
-						15.yieldAndReset;
+						~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 12, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post); //<---FOR VOXELS _ 0
+						5.yieldAndReset;  //<-------------------15 second yield after first init
 					},
 					{//else if initFlag == false
 						if (~autoConvActive == true, //check autoConvActive status
@@ -1753,28 +1779,31 @@
 								0.5.yieldAndReset;
 							},
 							{//else if ~autoConvActive == false
-								var impCase;
+								var impCase, prevImpulse; //<---
+								prevImpulse = impulseFlag.envirGet; //<---
+
 								impCase = case
-								{impulseFlag.envirGet == 0} {//if previous autoConv impulse was 0 (sus white noise)
-									var prevImpulse = 0, newImpulse = 1.1;
+								{prevImpulse == 0} {
+									var newImpulse = 1;
 									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
 									impulseFlag.envirPut(newImpulse); //update impulse flag
-									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 3, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 1.1, freq1: 300, freq2: 850, impPostDel: 0, timeStretch: true, timeStretchRate: 0.7, post: post);
-									5.yieldAndReset;
-								}
-								{impulseFlag.envirGet == 1.1} {
-									var prevImpulse = 1.1, newImpulse = 2;
-									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
-									impulseFlag.envirPut(newImpulse); //update impulse flag
-									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 6, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 2, freq1: 100, freq2: 20000, susTime: 0.5, impPostDel: 0.1, timeStretch: true, timeStretchRate: 0.6, post: post);
+									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 12, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, freq1: 100, freq2: 20000, susTime: 2, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.6, post: post);
 									2.yieldAndReset;
 								}
-								{impulseFlag.envirGet == 2} {
-									var prevImpulse = 2, newImpulse = 0;
+								{prevImpulse == 1} { //<---
+									var newImpulse = 0.1; //<---
 									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
 									impulseFlag.envirPut(newImpulse); //update impulse flag
-									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 7, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: 0, attTime: 1.4, susTime: 3.5, relTime: 2.5, impPostDel: 0.2, timeStretch: true, timeStretchRate: 0.75, post: post); //<---FOR VOXELS _ 0
-									6.yieldAndReset;
+									/*~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 2, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post); */
+									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 15, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, timeStretch: false, post: post); //<---
+									2.yieldAndReset;
+								}
+								{prevImpulse == 0.1} {
+									var newImpulse = 0; //<---
+									if (post == 1, {("[autoConvSeq] ~autoConv_repLim_selfTerm COMPLETE | prev impulse =" + prevImpulse + "| new impulse =" + newImpulse).postln;});
+									impulseFlag.envirPut(newImpulse); //update impulse flag
+									~autoConvolve2_repLim_selfTerminate.(1, activeFlag: \autoConvActive, filePath: ~fileAudio_writeIn_lastFile, featureBus: ~busSum_lop, outBus: ~stream2sub, ampBus: ~fileOutputLevelBus.asMap, rout1: \autoC1, rout2: \autoC2, initFlag: \autoC1state, repeatCounter: \autoCnt1, repeatLimit: 12, selfTerminate: true, synth1: \autoS1, preRecPad: 0, postRecPad: 0, impulse: newImpulse, attTime: 0.3, susTime: 2.3, relTime: 0.7, impPostDel: 0.2, timeStretch: false, timeStretchRate: 0.75, post: post); //<---FOR VOXELS _ 0
+									2.yieldAndReset;
 								};
 							}
 						);
@@ -1790,8 +1819,9 @@
 			if (post == 1, {"[autoConvSeq] STOPPED -------------".postln;});
 		}
 	);
-}; */
+};
 
+//======================================
 ~autoConvolve2_repLim_selfTerminate = {|active, activeFlag, featureBus, outBus, ampBus, filePath, loudThresh = 5, pitchThresh = 0.55, rout1, rout2, synth1, initFlag, repeatCounter, repeatLimit = 8, selfTerminate = true, impulse = 0, freq1 = 100, freq2 = 2000, attTime = 5, susTime = 3, relTime = 6, impPostDel = 0, preRecPad = 0.03, postRecPad = 0.02, timeStretch = false, timeStretchRate = 0.9, rate = 0.1, post = 0|
 	if (active == 1,
 		{
@@ -1874,7 +1904,7 @@
 								{impulse == 3} {//CREATE IMPULSE FROM DETECTED LIVE SOUND INPUT
 									if (post == 1, {("TRIG: liveSound.....").postln;});
 									//START ~autoRec routine (and ~autoPlay?)<---------
-									rate.yieldAndReset;
+									rate.yieldAndReset;  //<----slight pause
 								};
 							},
 							{//else if (initFlag.envirGet == 0)
@@ -1951,7 +1981,8 @@
 													if (post == 1, {("-->slight yield after sampleWrite...").postln;});
 													0.2.yield; //<---- slight yield between sampleWrite and playback??
 													if (post == 1, {("-->yield complete...").postln;});
-													rate.yieldAndReset; //not sure how I feel about doing this w/out a check to confirm sound has stopped (as in orig ~autoRec_soundTrig routine), but this is simpler and may work for now
+
+													rate.yieldAndReset; //<-------SLIGHT PAUSE ---- not sure how I feel about doing this w/out a check to confirm sound has stopped (as in orig ~autoRec_soundTrig routine), but this is simpler and may work for now
 												}
 											);
 										},
@@ -1969,7 +2000,7 @@
 															initFlag.envirPut(1); //reset init state flag to trigger initialization side of routine...
 															repeatCounter.envirPut(0); //reset sample playback iteration counter
 															if (post == 1, {("[autoConv_voxels] initFlag state reset to 1 | repeatCounter reset to 0").postln;});
-															rate.yieldAndReset;
+															rate.yieldAndReset; //<----  SLIGHT PAUSE
 														},
 														{//else if selfTerminate == true
 															if (post == 1, {("[autoConv_voxels] -- selfTerminate == true | STOP process and cleanup...").postln;});

@@ -6,12 +6,12 @@
 
 ~dir = "/Users/Scott/Dropbox/DocSync/Project Docs/DigitalArt/SonicMirror/sonic-mirror_SC_git/dev/"; //input file path to SM code folder here
 
-(~dir ++ "01_Startup.scd").load;           // Server Options and Startup
-(~dir ++ "02_SynthDefs.scd").load;       // SynthDefs
-(~dir ++ "03_Busses.scd").load;            // Busses
-(~dir ++ "04_Functions.scd").load;        // Functions and Routines
-(~dir ++ "05_InitSM.scd").load;            // Main SM Initialization Code
-~init_SonicMirror.();                            //Launch
+(~dir ++ "01_Startup.scd").load;         // Server Options and Startup
+(~dir ++ "02_SynthDefs.scd").load;    // SynthDefs
+(~dir ++ "03_Busses.scd").load;        // Busses
+(~dir ++ "04_Functions.scd").load;   // Functions and Routines
+(~dir ++ "05_InitSM.scd").load;        // Main SM Initialization Code
+~init_SonicMirror.();                        //Launch
 
 //////////////////
 ~writeSampFromBuf_name.(buffer: ~audioBuf0, in: (~playInFrame/s.sampleRate), out: (~playOutFrame/s.sampleRate), filePath: ~fileAudio_writeOut_lastFile); //execute this line to sample audio file from main buffer based on playhead in/out positions
@@ -23,3 +23,8 @@ SystemClock.play(~audifyRout);
 ~audifyRout.stop;
 ~audifyRout.reset;
 ///////////////
+s.plotTree;
+x = Synth.new(\sinSweep1, [freq1: 270, freq2: 270, dur: 10, amp: 0.2, out: 1]);
+x = Out.ar(0, SinOsc.ar(2070, mul: 1));
+x = { SinOsc.ar(270, 0, 0.9) }.play;
+x.free;

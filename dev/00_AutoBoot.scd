@@ -4,6 +4,7 @@
 s.waitForBoot({
 
 	~startup = Routine({
+		//change the filepath below to match the folder where you've stored the Sonic Mirror code
 		~dir = "/Users/Scott/Dropbox/DocSync/Project Docs/DigitalArt/SonicMirror/sonic-mirror_SC_git/dev/";
 		0.25.yield;
 		(~dir ++ "02_SynthDefs.scd").load;       // SynthDefs

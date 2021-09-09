@@ -2,39 +2,31 @@
 
 //== Server Options and Hardware I/O Setup ==
 
-//ServerOptions.devices; //uncomment and evaluate this to see what audio input/output devices are available (if you want to customize your audio I/O configuration)
 (
 o = Server.local.options;
-//o.sampleRate = 44100;
+
 o.sampleRate = 48000; //use w/ external USB mic "MiC"
-//o.sampleRate = 96000;
-//o.blockSize = 512;
 o.blockSize = 256; //SC default
-//s.latency = 0.05; //0.2 is SC default
+//s.latency = 0.05; //uncomment to adjust latency 0.2 is SC default
 
-o.memSize = 16384;
+o.memSize = 16384;  // kilobytes of RAM allocated to the server
 
-o.inDevice = "Built-in Microph";
-o.outDevice = "Built-in Output";
+o.inDevice = nil; //select system default audio input
+o.outDevice = nil; //select system default audio output
 
-//o.inDevice = "Generic USB Audio Device";
-//o.inDevice = "USB Audio Device";
-//o.outDevice = "USB Audio Device";
+//o.inDevice = "Built-in Microph"; //built-in mic for MacBook
+//o.outDevice = "Built-in Output"; //built-in speaker for MacBook
 
-//o.inDevice = "iConnectAudio4+";
-//o.outDevice = "iConnectAudio4+"; //external audio interface
+//o.inDevice = "iConnectAudio4+"; //external audio interface
+//o.outDevice = "iConnectAudio4+";
 
-//o.inDevice = "USB PnP Sound Device";
-
-//o.inDevice = "MiC";  //external USB mic
-
-//o.inDevice = nil; //use system default audio input (change value to manually configure input)
-//o.outDevice = nil; //use system default audio output (change value to manually configure output)
+//o.inDevice = "USB Audio Device"; //configure Sabrent USB Soundcard as input
+//o.outDevice = "USB Audio Device"; //configure Sabrent USB Soundcard as output
 
 //o.inDevice = "C-Media USB Audio Device";
 //o.outDevice = "C-Media USB Audio Device";
-//o.inDevice = "C-Media USB Headphone Set";
-//o.outDevice = "C-Media USB Headphone Set";
 
 s.boot;
 );
+
+//ServerOptions.devices; //uncomment and evaluate this line to see what audio input/output devices are available to your computer (if you want to customize your audio I/O)

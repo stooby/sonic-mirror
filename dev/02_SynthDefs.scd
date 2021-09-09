@@ -1,21 +1,31 @@
 //Sonic Mirror - 02_SynthDefs:
 
 
+//== All SynthDefs ==
+
+
 //add Specs?
 
 (
-//Record audio input to buffer using audio-rate input Phasor to control position in buffer
-SynthDef(\bufRec, { //<---NEW -- Added Lo-cut
+//  AUDIO BUFFER RECORD / PLAYBACK ------
+
+SynthDef(\phasor, { // Phasor indexes through buffer at audio rate
+	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
+	arg out=0, buf, trig = 0, rate = 1, start = 0, end = 1, resetPos = 0; //<---don't remember why I used other lines....and why they worked...
+	//Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start * BufFrames.kr(buf), (end * BufFrames.kr(buf)) - 1, resetPos ) );
+	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
+}).add;
+
+SynthDef(\bufRec, { //record audio input to buffer using phasor
 	|phaseBus, buf, sendBus, loCut = 90, loCutQ = 1, /*peak = 120, peakQ = 1, peakGain = 0,*/ mul = 1|
-	//var sig = SoundIn.ar(bus: 0, mul: mul);
-	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: 1), loCut, rq: loCutQ, mul: mul); //pass SoundIn through HiPass
+	var sig = BHiPass4.ar(SoundIn.ar(bus: 0, mul: mul), loCut, rq: loCutQ, mul: 1); //SoundIn through HiPass
 	//sig = BPeakEQ.ar(sig, freq: peak, rq: peakQ, db: peakGain); //<----consider
 	BufWr.ar(sig, buf, InFeedback.ar(phaseBus) );
 	//OffsetOut.ar(sendBus, sig);  //would this provide better sample accurate scope plotting and recording?
 	Out.ar(sendBus, sig);
 } ).add;
 
-SynthDef.new(\bufRead_complex1, {
+SynthDef.new(\bufRead_complex1, { //read audio from buffer w/ independent playback rate and pitch
 	|buf, duration, amp=1, attack = 0.02, release = 0.02, rate = 1, pitch = 1, winSize = 0.1, timeDisp = 0.003, pShiftMix = 0, out = 0|
 	var sig1, sig2, sigOut, frames, dur, atRelDur, env, phasor;
 	frames = BufFrames.kr(buf);
@@ -33,7 +43,7 @@ SynthDef.new(\bufRead_complex1, {
 	Out.ar(out, sigOut * amp);
 } ).add;
 
-SynthDef.new(\bufRead_noise1, {
+SynthDef.new(\bufRead_noise1, { //read from an audio buffer using a noise generator for index position
 	//arg buf, duration, amp=1, freq = 1, out = 0;
 	arg buf, duration, amp=1, modFreq = 0.25, loFreq = 1, hiFreq = 3, out = 0;
 	var dur, frames, ptr, env, lfo, sig;
@@ -153,39 +163,57 @@ SynthDef.new(\bufRead_noLoop, {
 	Out.ar(out, sig * amp);
 } ).add;
 
-SynthDef.new(\bufRead, { //define synth to read from buffer w/ phasor...
+SynthDef.new(\bufRead, {
 	arg amp=1, out=0, phaseBus, buf;
 	var sig = BufRd.ar(1, buf, InFeedback.ar(phaseBus), interpolation: 4); //cubic interpolation (seems to help preserve detail at faster playback rates +24st)
 	sig = sig * amp;
 	Out.ar(out, sig);
 } ).add;
 
-// Phasor indexes through buffer at audio rate
-SynthDef(\phasor, {
-	//arg out=0, buf, trig = 0, rate = 1, start = 0, end = BufFrames.kr(buf) - 1, resetPos = 0;
-	arg out=0, buf, trig = 0, rate = 1, start = 0, end = 1, resetPos = 0; //<---don't remember why I used other lines....and why they worked...
-	//Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start * BufFrames.kr(buf), (end * BufFrames.kr(buf)) - 1, resetPos ) );
-	Out.ar(out, Phasor.ar(trig, BufRateScale.kr(buf) * rate, start, end, resetPos ) );
+//  >>>  HD r/w ----
+
+SynthDef(\write2Disk, {arg buf, inBus = 0; //record audio file to disk - mono
+	DiskOut.ar(buf, In.ar(inBus, 1));
+}).add;
+
+// play audio file from disk
+SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out;  //<----NOT USED IN '05_initSM.scd'
+	var env, envgen, sig;
+	env = Env.linen(attackTime: 0.02, sustainTime: (sampleDur - 0.04), releaseTime: 0.02, level: 1);
+	envgen = EnvGen.ar(env, doneAction: 2);
+	sig = (DiskIn.ar(1, buf) * envgen) * amp;
+	Out.ar(out, sig);
 }).add;
 
 
-SynthDef(\a2k_patch, {// Needed to monitor phasor val (don't fully understand why / how this works)
-  arg in, out;
-  Out.kr(out, A2K.kr(InFeedback.ar(in) ) ); //is InFeedback necessary?
-}).add;
+
+//  AUDIO FX ------
 
 SynthDef.new(\pitchShifter, {
 	//arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.002, amp = 1; //v1
 	arg inBus, outBus, windowSize = 0.1, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.003, amp = 1; //v1.1, FOR TIME STRETCH (larger time Dispers better for time stretching, but worse for preserving percussive transients)
 	//arg inBus, outBus, windowSize = 0.3, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.001, amp = 1; //v2, PRESERVE TRANSIENTS DURING FAST PLAYBACK - good settings for faster playback (+24 rate, -24 pitch)
-	//arg inBus, outBus, windowSize = 0.35, pitchRatio = 1, pitchDispers = 0, timeDispers = 0, amp = 1; //v2.1, FAST PLAYBACK (preserves transients better than v1.1 at fast playback rates) <-------------
+	//arg inBus, outBus, windowSize = 0.35, pitchRatio = 1, pitchDispers = 0, timeDispers = 0, amp = 1; //v2.1, FAST PLAYBACK (preserves transients better than v1.1 at fast playback rates) <-----
 	//arg inBus, outBus, windowSize = 0.01, pitchRatio = 1, pitchDispers = 0, timeDispers = 0.02, amp = 1; //vPiez_1, decent settings for time stretched piezo...
+
 	var sigIn, sigOut;
 	sigIn = In.ar(inBus, 1);
 	//sigIn = InFeedback.ar(inBus, 1);
 	sigOut = PitchShift.ar(sigIn, windowSize, pitchRatio, pitchDispers, timeDispers, amp);
 	Out.ar(outBus, sigOut);
 }).add;
+
+SynthDef(\comp1, {|bus, thresh = (-6.dbamp), ratio = 2, attack = 0.01, release = 0.25, amp = 1| //<----NEW
+	var sigIn, sigOut, ratioConv;
+	sigIn = In.ar(bus: bus, numChannels: 1);
+	ratioConv = ratio.reciprocal;
+	sigOut = Compander.ar(sigIn, sigIn, thresh: thresh, slopeAbove: ratioConv, clampTime: attack, relaxTime: release, mul: amp);
+	ReplaceOut.ar(bus, sigOut);
+}).add;
+
+
+
+//  AUDIO UTILITY ------
 
 SynthDef.new(\XFade, {
 	|in1, in2, out, amountControlBus, amp = 1|
@@ -197,48 +225,6 @@ SynthDef.new(\XFade, {
 	Out.ar(out, sig);
 } ).add;
 
-SynthDef(\LinInterp_pitch, {
-	arg startVal, stopVal, duration, out;
-	Out.kr(out, Line.kr(startVal, stopVal, duration, doneAction: 2).midiratio);
-} ).add;
-
-SynthDef(\LinInterp_rate, {
-	arg startVal, stopVal, duration, out, rateMod = 1;
-	var outputVal = rateMod * Line.kr(startVal, stopVal, duration, doneAction: 2).midiratio;
-	Out.kr(out, outputVal);
-} ).add;
-
-SynthDef(\LinInterp_num, {
-	arg startVal, stopVal, duration, mult = 1, out;
-	Out.kr(out, Line.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
-} ).add;
-
-SynthDef(\ExpInterp_num, {|startVal, stopVal, duration, mult = 1, out|
-	Out.kr(out, XLine.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
-} ).add;
-
-SynthDef(\asrEnvGen_trig, {|out, attTime = 0.01, susTime = 1, relTime = 2, level = 1, curve = \sine|
-	var env, envGen;
-	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: level, curve: curve);
-	envGen = EnvGen.kr(env, doneAction: 2);
-	Out.kr(out, envGen);
-}).add;
-
-SynthDef(\adsrEnvGen, {|out, gate = 1, attTime = 0.01, susTime = 1, relTime = 2, peakLevel = 1, susLevel = 1, curve = \sine|
-	var env, envGen;
-	env = Env.adsr(attackTime: attTime, decayTime: susTime, sustainLevel: susLevel, releaseTime: relTime, peakLevel: peakLevel, curve: curve);
-	envGen = EnvGen.kr(env, gate: gate, doneAction: 2);
-	Out.kr(out, envGen);
-}).add;
-
-SynthDef(\dEnvGen, {|out, gate = 1, startVal = 0, endVal = 0, peakVal = 1, susVal = 1, attTime = 1, decTime = 1, susTime = 1, relTime = 2, shape = 3, curve = 0, repeat = 1| //shape: 3 => S-curve | 5 => linear | curve vals only effective when shape = 5 | <------USE THIS W/ AUTO-LEVEL / ANTI-FEEDBACK ROUTINES.....
-	var levels, durations, env;
-	levels = Dseq([startVal, peakVal, susVal, susVal, endVal], repeats: repeat);
-	durations = Dseq([attTime, decTime, susTime, relTime], repeats: repeat);
-	env = DemandEnvGen.kr(level: levels, dur: durations, shape: shape, curve: curve, gate: gate, doneAction: 2); //if gate <=0, ugen's sampled and held, if gate >=1, it runs...
-	Out.kr(out, env);
-}).add;
-
 SynthDef.new(\subMix, {
 	|in, amp = 1, out|
 	var sig = In.ar(in) * amp;
@@ -246,14 +232,6 @@ SynthDef.new(\subMix, {
 	OffsetOut.ar(out, sig);
 	//Out.ar(out, sig);
 } ).add;
-
-SynthDef(\comp1, {|bus, thresh = (-6.dbamp), ratio = 2, attack = 0.01, release = 0.25, amp = 1| //<----NEW
-	var sigIn, sigOut, ratioConv;
-	sigIn = In.ar(bus: bus, numChannels: 1);
-	ratioConv = ratio.reciprocal;
-	sigOut = Compander.ar(sigIn, sigIn, thresh: thresh, slopeAbove: ratioConv, clampTime: attack, relaxTime: release, mul: amp);
-	ReplaceOut.ar(bus, sigOut);
-}).add;
 
 SynthDef.new(\mainOut, { //w/ Lo-cut and Peak EQ
 	|in, loCut = 90, loCutQ = 1, amp = 1, peak = 120, peakQ = 1, peakGain = 0|
@@ -277,7 +255,79 @@ SynthDef.new(\mainOut, { //w/ Lo-cut and Limiter
 	Out.ar([0, 1], sig);
 } ).add; */
 
-SynthDef.new(\scopeOut, { //<------NEW
+SynthDef.new(\monAudioInput, { //<--- not currently in use, but may need later...?
+	arg inChannel = 0, amp = 1, outBus;
+	var sig = SoundIn.ar(bus: inChannel, mul: amp); //defaults to first channel of system audio input
+	OffsetOut.ar(outBus, sig);
+}).add;
+
+
+
+//   CONTROL INTERPOLATION (PARAMETER AUTOMATION) ------
+
+SynthDef(\LinInterp_pitch, {
+	arg startVal, stopVal, duration, out;
+	Out.kr(out, Line.kr(startVal, stopVal, duration, doneAction: 2).midiratio);
+} ).add;
+
+SynthDef(\LinInterp_rate, {
+	arg startVal, stopVal, duration, out, rateMod = 1;
+	var outputVal = rateMod * Line.kr(startVal, stopVal, duration, doneAction: 2).midiratio;
+	Out.kr(out, outputVal);
+} ).add;
+
+SynthDef(\LinInterp_num, {
+	arg startVal, stopVal, duration, mult = 1, out;
+	Out.kr(out, Line.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
+} ).add;
+
+SynthDef(\ExpInterp_num, {|startVal, stopVal, duration, mult = 1, out|
+	Out.kr(out, XLine.kr(startVal, stopVal, duration, mul: mult, doneAction: 2));
+} ).add;
+
+//  >>> Envelope Generators ----
+
+SynthDef(\asrEnvGen_trig, {|out, attTime = 0.01, susTime = 1, relTime = 2, level = 1, curve = \sine|
+	var env, envGen;
+	env = Env.linen(attackTime: attTime, sustainTime: susTime, releaseTime: relTime, level: level, curve: curve);
+	envGen = EnvGen.kr(env, doneAction: 2);
+	Out.kr(out, envGen);
+}).add;
+
+SynthDef(\adsrEnvGen, {|out, gate = 1, attTime = 0.01, susTime = 1, relTime = 2, peakLevel = 1, susLevel = 1, curve = \sine|
+	var env, envGen;
+	env = Env.adsr(attackTime: attTime, decayTime: susTime, sustainLevel: susLevel, releaseTime: relTime, peakLevel: peakLevel, curve: curve);
+	envGen = EnvGen.kr(env, gate: gate, doneAction: 2);
+	Out.kr(out, envGen);
+}).add;
+
+SynthDef(\dEnvGen, {|out, gate = 1, startVal = 0, endVal = 0, peakVal = 1, susVal = 1, attTime = 1, decTime = 1, susTime = 1, relTime = 2, shape = 3, curve = 0, repeat = 1| //shape: 3 => S-curve | 5 => linear | curve vals only effective when shape = 5 | <------USE THIS W/ AUTO-LEVEL / ANTI-FEEDBACK ROUTINES.....
+	var levels, durations, env;
+	levels = Dseq([startVal, peakVal, susVal, susVal, endVal], repeats: repeat);
+	durations = Dseq([attTime, decTime, susTime, relTime], repeats: repeat);
+	env = DemandEnvGen.kr(level: levels, dur: durations, shape: shape, curve: curve, gate: gate, doneAction: 2); //if gate <=0, ugen's sampled and held, if gate >=1, it runs...
+	Out.kr(out, env);
+}).add;
+
+
+
+//  UTILITY ------
+
+SynthDef(\a2k_patch, {// needed to monitor phasor val at a control rate (used for GUI and other specific cases)
+  arg in, out;
+  Out.kr(out, A2K.kr(InFeedback.ar(in) ) ); //is InFeedback necessary?
+}).add;
+
+SynthDef(\avgKR, {
+	|input, output, avgDur = 1|
+	var sigIn, avg, numSamp;
+	sigIn = In.kr(input, 1);
+	numSamp = ControlRate.ir * avgDur;
+	avg = (RunningSum.kr(sigIn, numSamp)) * (numSamp.reciprocal);
+	Out.kr(output, avg);
+}).add;
+
+SynthDef.new(\scopeOut, {
 	//|inBus, buf, frames = 4096|
 	|inBus, buf|
 	var sig;
@@ -289,43 +339,9 @@ SynthDef.new(\scopeOut, { //<------NEW
 	//ScopeOut2.ar(sig, buf, frames);
 } ).add;
 
-SynthDef(\write2Disk, {arg buf, inBus = 0; //record audio file to disk - mono
-	DiskOut.ar(buf, In.ar(inBus, 1));
-}).add;
 
-// play audio file from disk w/ fade in-out
-SynthDef(\readDisk, { arg buf, sampleDur, amp = 1, out;
-	var env, envgen, sig;
-	env = Env.linen(attackTime: 0.02, sustainTime: (sampleDur - 0.04), releaseTime: 0.02, level: 1);
-	envgen = EnvGen.ar(env, doneAction: 2);
-	sig = (DiskIn.ar(1, buf) * envgen) * amp;
-	Out.ar(out, sig);
-}).add;
 
-SynthDef.new(\startupTone_1, {
-	var sig, amp, env;
-	env = EnvGen.kr(
-		Env.new( [0, 1, 0], [6, 4], [1, -1] ),
-		doneAction: 2
-	);
-	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1);
-	sig = SinOsc.ar( {ExpRand(300, 1200)} ! 3);
-	sig = sig * amp * env; //amp mod
-	sig = Mix.ar(sig) * 0.20;
-	Out.ar(0, sig);
-} ).add;
-
-//  UTILITY --------------
-SynthDef(\avgKR, {
-	|input, output, avgDur = 1|
-	var sigIn, avg, numSamp;
-	sigIn = In.kr(input, 1);
-	numSamp = ControlRate.ir * avgDur;
-	avg = (RunningSum.kr(sigIn, numSamp)) * (numSamp.reciprocal);
-	Out.kr(output, avg);
-}).add;
-
-//  FEATURE EXTRACTORS --------------
+//  AUDIO ANALYSIS ------
 
 SynthDef.new(\Loudness, {
 	//arg input, buffer, outBus;
@@ -424,16 +440,9 @@ SynthDef.new(\onsets, {
 	Out.kr(outBus, trigger);
 }).add;
 
-//------
-
-SynthDef.new(\monAudioInput, { //not sure if I need this currently.....
-	arg inChannel = 0, amp = 1, outBus;
-	var sig = SoundIn.ar(bus: inChannel, mul: amp); //defaults to first channel of system audio input
-	OffsetOut.ar(outBus, sig);
-}).add;
 
 
-//  IMPULSE SOURCES -------
+//  SYNTH IMPULSE SOURCES / TONES ------
 
 SynthDef(\susWhite1, {|attTime = 3, susTime = 3, relTime = 3, amp = 1, out|
 	var sig, env;
@@ -589,8 +598,24 @@ SynthDef(\sineBeats_rand, {
 	Out.ar(out, sigOut * amp);
 }).add;
 
-// OTHER EFFECTS PROCESSING ---
+SynthDef.new(\startupTone_1, {
+	var sig, amp, env;
+	env = EnvGen.kr(
+		Env.new( [0, 1, 0], [6, 4], [1, -1] ),
+		doneAction: 2
+	);
+	amp = SinOsc.kr( {ExpRand(0.2, 12)} ! 3).range(0.1);
+	sig = SinOsc.ar( {ExpRand(300, 1200)} ! 3);
+	sig = sig * amp * env; //amp mod
+	sig = Mix.ar(sig) * 0.20;
+	Out.ar(0, sig);
+} ).add;
 
+
+
+//  OTHER FX PROCESSING ------
+
+//  >>>  Audio Convolution ----
 SynthDef(\partConv_sample, {|targetBuf, irSpectrum, fftSize = 2048, playRate = 1, loop = 1, ampBus, ampLimit = 0.4, out|
 	var input, sig, currentAmp;
 	input = PlayBuf.ar(1, targetBuf, rate: playRate, loop: loop);
