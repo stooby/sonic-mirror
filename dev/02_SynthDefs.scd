@@ -598,6 +598,21 @@ SynthDef(\sineBeats_rand, {
 	Out.ar(out, sigOut * amp);
 }).add;
 
+SynthDef(\sineBeats_rand_stereo, {
+	|freqMin = 100, freqMax = 500, beatHzMin = 8, beatHzMax = 20, attTimeMin = 3, attTimeMax = 7, susTimeMin = 3, susTimeMax = 5, relTimeMin = 2.1, relTimeMax = 4, amp = 0.5, limitThresh = 0.9, out = 0|
+	var beatHz, freq1, freq2, env, sig1, sig2, sigOut;
+	env = Env.linen(attackTime: rrand(attTimeMin, attTimeMax).round(0.01), sustainTime: rrand(susTimeMin, susTimeMax).round(0.01), releaseTime: rrand(relTimeMin, relTimeMax).round(0.01), curve: \sine);
+	beatHz = IRand(beatHzMin, beatHzMax);
+	freq1 = Rand(freqMin, freqMax);
+	freq2 = freq1 + beatHz; //<---beating frequency always higher than selected freq
+	sig1 = SinOsc.ar(freq1);
+	sig2 = SinOsc.ar(freq2);
+	sigOut = Mix.ar([sig1, sig2]);
+	sigOut = sigOut * EnvGen.ar(env, doneAction: 2);
+	sigOut = Limiter.ar(in: sigOut, level: (limitThresh), dur: 0.01);
+	Out.ar(out, [sigOut * amp, sigOut * amp]);
+}).add;
+
 SynthDef.new(\startupTone_1, {
 	var sig, amp, env;
 	env = EnvGen.kr(

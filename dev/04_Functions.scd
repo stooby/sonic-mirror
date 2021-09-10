@@ -2273,7 +2273,15 @@
 	~button_autoRecPlay.valueAction = 1;
 });
 
-~initSMpreset_voxelBot1 = Routine({ //auto-startup routine for RPI <===UPDATE BEFORE NEXT PUSH TO RPI
+~initSMpreset_test = Routine({ //auto-startup routine for basic audio output testing
+	//"...starting...".postln;
+	//2.yield;
+	"...test tone...".postln;
+	Synth(\sineBeats_rand_stereo, [\freqMin, 200, \freqMax, 450, \beatHzMin, 8, \beatHzMax, 20, \attTimeMin, 1, \attTimeMax, 3, \susTimeMin, 3, \susTimeMax, 4, \relTimeMin, 2, \relTimeMax, 3, \amp, (-6).dbamp, \limitThresh, (-0.3).dbamp, \out, 0]); //play binaural beat startup tone: freq, beats, envelope randomized
+	10.yieldAndReset;
+});
+
+~initSMpreset_voxelBot1 = Routine({
 	"...starting...".postln;
 	~button_recBuf.valueAction = 1;
 	"START STREAMING TO BUF0...".postln;

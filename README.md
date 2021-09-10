@@ -17,7 +17,7 @@ super alpha!
 
 2. If you’d like to configure your audio hardware settings, open “01_Startup.scd” and make the changes here.  Otherwise, if you’re just running this off your laptop, leave as is (unless you want to change the sampling rate). Save this file if you’ve made any changes.
 
-3. Open “00_AutoBoot.scd” and replace the directory at the top of the document with the file path to wherever you’ve installed the Sonic Mirror project folder on your computer. Save this file after making your changes.
+3. Open “00_AutoBoot.scd” and replace the directory at the top of the document with the file path to wherever you’ve installed the Sonic Mirror project folder on your computer. Save this file after making your changes. (If you want to configure a simple output test only, set “~outputTest = true”).
 
 4. Click anywhere within the main brackets and evaluate the entire block of code to startup the SuperCollider server and launch the Sonic Mirror program.
 

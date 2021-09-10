@@ -6,8 +6,8 @@
 ~init_SonicMirror = {
 
 ////GLOBAL VARIABLES
-~fileAudio_writeIn_directory = "/Users/Scott/Music/SCrecs/VoxelExperiments/VoxelExperiment_2018-04-03/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH (this will be unique to your system.....defines audio file write path)
-~fileAudio_writeOut_directory = "/Users/Scott/Music/SCrecs/VoxelExperiments/VoxelExperiment_2018-04-03/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH
+~fileAudio_writeIn_directory = "/Users/Scott/Music/SCrecs/Test/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH (this will be unique to your system.....defines audio file write path)
+~fileAudio_writeOut_directory = "/Users/Scott/Music/SCrecs/Test/";  //<---CONFIGURE AUDIO SAMPLE FILEPATH
 
 ~fileAudio_writeIn_fileName = "audio-in_"; //customize file name
 //~fileAudio_writeIn_fileName = "Voxel-Experiment_2018-4-3_Rec_"; //<----customize file name
