@@ -1,11 +1,13 @@
 # sonic-mirror
 ---
-super alpha!
 
 ### what?
 * Sonic Mirror is an open-ended audio software (and hardware) system designed for autonomous embedded audio recording, analysis, and synthesis.
 
-* Programmed with the SuperCollider language.  Project details and documentation online:  http://scott-tooby.com/sonic-mirror.html
+* Programmed with the SuperCollider language.  Project details and documentation online:  http://scott-tooby.com/sonic-mirror-instruments.html
+
+* See the Instructable here if you want to build your own Sonic Mirror hardware instrument:
+https://www.instructables.com/Sonic-Mirror-Audio-Reactive-Instruments/
 
 ### what do I need?
 * At least a modern computer with a built-in soundcard, microphone, and speakers.
