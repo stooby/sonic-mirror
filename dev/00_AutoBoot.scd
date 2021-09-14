@@ -6,7 +6,7 @@ s.waitForBoot({
 	~startup = Routine({
 		//change the filepath below to match the enclosing directory on your system of this Sonic Mirror repo
 		~dir = "/Users/Scott/Dropbox/DocSync/Project Docs/DigitalArt/SonicMirror/sonic-mirror_SC_git/dev/";
-		~outputTest = false; //set this to 'true' to perform a simple looping output test
+		~outputTest = true; //set this to 'true' to perform a simple looping output test
 		0.25.yield;
 		(~dir ++ "02_SynthDefs.scd").load;       // SynthDefs
 		0.25.yield;
